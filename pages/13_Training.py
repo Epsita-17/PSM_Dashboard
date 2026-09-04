@@ -3,8 +3,6 @@ import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 import re
-
-
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -15,7 +13,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
 
 # =========================================================
 # GOOGLE SHEET
@@ -1218,37 +1215,28 @@ div[data-baseweb="select"] svg {
 
 
 # =========================================================
-# HEADER
+# DARK INDUSTRIAL 3D HEADER
 # =========================================================
 
 header_html = """
 <!DOCTYPE html>
-
 <html>
-
 <head>
-
 <meta charset="UTF-8">
 
 <style>
 
 * {
-    box-sizing:border-box;
+    box-sizing: border-box;
 }
-
 
 html,
 body {
-
-    margin:0;
-
-    padding:0;
-
-    width:100%;
-
-    height:100%;
-
-    overflow:hidden;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
 
     font-family:
         Arial,
@@ -1256,322 +1244,889 @@ body {
         sans-serif;
 }
 
-
 body {
-
-    background:#f4f9fc;
+    background: #06111f;
 }
 
 
+/* =====================================================
+   MAIN HEADER FRAME
+   ===================================================== */
+
 .header {
 
-    position:relative;
+    position: relative;
 
-    width:100%;
+    width: 100%;
+    height: 100px;
 
-    height:72px;
-
-    overflow:hidden;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
+    overflow: hidden;
 
     background:
 
         radial-gradient(
             ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
-
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
+            rgba(15,91,150,.32) 0%,
+            rgba(5,29,52,.96) 48%,
+            #020b16 100%
         );
 
-    border-top:2px solid #0b91d1;
+    border-top:
+        1px solid #238ed8;
 
-    border-bottom:3px solid #1487c2;
+    border-bottom:
+        2px solid #0a83d0;
 
     box-shadow:
-        0 4px 12px
-        rgba(21,92,130,.18);
+
+        0 0 0 1px rgba(0,153,255,.18),
+
+        0 5px 18px
+        rgba(0,0,0,.42),
+
+        inset 0 1px 0
+        rgba(255,255,255,.08);
 }
 
+
+/* =====================================================
+   SUBTLE TECH GRID
+   ===================================================== */
 
 .header::before {
 
-    content:"";
+    content: "";
 
-    position:absolute;
+    position: absolute;
 
-    inset:0;
+    inset: 0;
 
-    background-image:
+    background:
 
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17)
-            1.2px,
-            transparent 1.5px
+        linear-gradient(
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
+        ),
+
+        linear-gradient(
+            90deg,
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
         );
 
-    background-size:15px 15px;
+    background-size: 26px 26px;
 
-    opacity:.65;
+    opacity: .75;
 }
 
 
-.content {
+/* =====================================================
+   BLUE SIDE LIGHT
+   ===================================================== */
 
-    position:relative;
+.header::after {
 
-    z-index:8;
+    content: "";
 
-    width:100%;
+    position: absolute;
 
-    height:100%;
+    inset: 0;
 
-    display:flex;
+    background:
 
-    align-items:center;
+        linear-gradient(
+            90deg,
+            rgba(0,137,255,.20),
+            transparent 14%,
+            transparent 86%,
+            rgba(0,137,255,.20)
+        );
 
-    justify-content:center;
+    pointer-events: none;
 }
 
 
-.pillar {
+/* =====================================================
+   INDUSTRIAL BACKGROUND
+   ===================================================== */
 
-    position:relative;
+.industrial {
 
-    width:560px;
+    position: absolute;
 
-    height:48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
 
-    display:flex;
+    width: 100%;
+    height: 100px;
 
-    align-items:center;
+    z-index: 1;
 
-    justify-content:center;
+    opacity: .72;
+}
+
+.industrial .steel {
+
+    fill: #102b43;
+
+    stroke: #2675a8;
+
+    stroke-width: 1.3;
+}
+
+.industrial .highlight {
+
+    fill: none;
+
+    stroke: #49b8ff;
+
+    stroke-width: 1.15;
+
+    opacity: .65;
+}
+
+.industrial .warm {
+
+    fill: #e9a63a;
+
+    opacity: .82;
+}
+
+.industrial .glass {
+
+    fill: #0b5c91;
+
+    stroke: #4cbcff;
+
+    stroke-width: .7;
+
+    opacity: .55;
+}
+
+.tech {
+
+    fill: none;
+
+    stroke: #238bd0;
+
+    stroke-width: 1;
+
+    opacity: .25;
+}
+
+
+/* =====================================================
+   SIDE FADE
+   ===================================================== */
+
+.side-fade {
+
+    position: absolute;
+
+    z-index: 3;
+
+    top: 0;
+    bottom: 0;
+
+    width: 24%;
+
+    pointer-events: none;
+}
+
+.side-fade.left {
+
+    left: 0;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
+}
+
+.side-fade.right {
+
+    right: 0;
+
+    background:
+        linear-gradient(
+            270deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
+}
+
+
+/* =====================================================
+   CENTRAL 3D TITLE PLATE
+   ===================================================== */
+
+.title-plate {
+
+    position: absolute;
+
+    z-index: 10;
+
+    left: 50%;
+    top: 50%;
+
+    transform:
+        translate(-50%, -50%);
+
+    width:
+        min(75%, 1000px);
+
+    height:
+        72px;
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
 
     background:
 
         linear-gradient(
             180deg,
-            #197fbd 0%,
-            #07538d 48%,
-            #032f5b 100%
+            #124e80 0%,
+            #07345f 45%,
+            #031e3d 100%
         );
 
-    border:1px solid #0877ba;
+    border:
+        2px solid #78cfff;
 
-    border-radius:14px;
-
-    color:#ffd21a;
-
-    font-size:32px;
-
-    font-weight:950;
-
-    letter-spacing:1px;
+    border-radius:
+        15px;
 
     box-shadow:
 
-        0 7px 16px
-        rgba(11,83,130,.30),
+        0 0 0 3px rgba(6,36,65,.92),
 
-        inset 0 1px 0
-        rgba(255,255,255,.32),
+        0 0 0 5px rgba(105,183,229,.55),
 
-        inset 0 -5px 12px
-        rgba(0,35,75,.18);
+        0 8px 20px
+        rgba(0,0,0,.52),
+
+        0 0 22px
+        rgba(0,139,255,.42),
+
+        inset 0 2px 0
+        rgba(255,255,255,.28),
+
+        inset 0 -8px 15px
+        rgba(0,0,0,.24);
 }
 
 
-.pillar::before,
-.pillar::after {
+/* =====================================================
+   METALLIC BEVEL
+   ===================================================== */
 
-    position:absolute;
+.title-plate::before {
 
-    top:50%;
+    content: "";
+
+    position: absolute;
+
+    inset: -10px;
+
+    z-index: -1;
+
+    border-radius:
+        20px;
+
+    border:
+        5px solid transparent;
+
+    background:
+
+        linear-gradient(
+            145deg,
+            #f5fbff 0%,
+            #7d9bad 16%,
+            #e7f0f5 28%,
+            #536d7e 48%,
+            #d8e7ef 68%,
+            #668092 82%,
+            #f5fbff 100%
+        ) border-box;
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+
+    -webkit-mask-composite:
+        xor;
+
+    mask-composite:
+        exclude;
+
+    box-shadow:
+        0 0 10px rgba(112,199,255,.35);
+}
+
+
+/* =====================================================
+   BLUE INNER LIGHT
+   ===================================================== */
+
+.title-plate::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 13px;
+    right: 13px;
+    top: 6px;
+
+    height: 2px;
+
+    border-radius: 10px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            transparent,
+            #50c8ff 18%,
+            #d8f5ff 50%,
+            #50c8ff 82%,
+            transparent
+        );
+
+    box-shadow:
+        0 0 8px
+        rgba(55,190,255,.72);
+}
+
+
+/* =====================================================
+   TITLE
+   ===================================================== */
+
+.title-text {
+
+    position: relative;
+
+    z-index: 12;
+
+    color:
+        #ffc400;
+
+    font-size:
+        clamp(30px, 3.2vw, 54px);
+
+    font-weight:
+        950;
+
+    letter-spacing:
+        1px;
+
+    line-height:
+        1;
+
+    text-align:
+        center;
+
+    text-shadow:
+
+        0 2px 0 #8c5f00,
+
+        0 3px 5px
+        rgba(0,0,0,.65),
+
+        0 0 12px
+        rgba(255,194,0,.22);
+}
+
+
+/* =====================================================
+   NAVIGATION ARROWS
+   ===================================================== */
+
+.nav-arrow {
+
+    position:
+        absolute;
+
+    z-index:
+        13;
+
+    top:
+        50%;
 
     transform:
         translateY(-50%);
 
-    color:#51c5ff;
+    color:
+        #54c9ff;
 
-    font-size:20px;
+    font-size:
+        32px;
 
-    font-weight:950;
+    line-height:
+        1;
 
-    letter-spacing:-5px;
+    font-weight:
+        950;
+
+    text-shadow:
+
+        0 0 7px
+        rgba(40,187,255,.9),
+
+        0 2px 2px
+        rgba(0,0,0,.65);
+}
+
+.nav-left {
+    left: 28px;
+}
+
+.nav-right {
+    right: 28px;
 }
 
 
-.pillar::before {
+/* =====================================================
+   CORNER ARMOUR
+   ===================================================== */
 
-    content:"◀◀";
+.corner {
 
-    left:17px;
+    position:
+        absolute;
+
+    z-index:
+        9;
+
+    width:
+        180px;
+
+    height:
+        35px;
+
+    border:
+        2px solid #168bd4;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(11,82,135,.85),
+            rgba(4,27,49,.2)
+        );
+
+    box-shadow:
+        0 0 12px
+        rgba(0,133,255,.24),
+
+        inset 0 1px 0
+        rgba(255,255,255,.16);
+}
+
+.corner.left {
+
+    left:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(-38deg);
+}
+
+.corner.right {
+
+    right:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(38deg);
 }
 
 
-.pillar::after {
+/* =====================================================
+   TOP METAL RAIL
+   ===================================================== */
 
-    content:"▶▶";
+.top-rail {
 
-    right:17px;
-}
+    position:
+        absolute;
 
+    z-index:
+        11;
 
-.top-line {
+    left:
+        31%;
 
-    position:absolute;
+    right:
+        31%;
 
-    top:0;
+    top:
+        3px;
 
-    left:24%;
+    height:
+        5px;
 
-    width:52%;
-
-    height:3px;
+    border-radius:
+        10px;
 
     background:
 
         linear-gradient(
             90deg,
             transparent,
-            #00a9ff 18%,
+            #7594a7 10%,
+            #eef8ff 35%,
+            #4c728b 50%,
+            #eef8ff 65%,
+            #7594a7 90%,
+            transparent
+        );
+
+    box-shadow:
+        0 0 9px
+        rgba(52,164,230,.55);
+}
+
+
+/* =====================================================
+   BOTTOM BLUE ENERGY LINE
+   ===================================================== */
+
+.energy-line {
+
+    position:
+        absolute;
+
+    z-index:
+        15;
+
+    left:
+        0;
+
+    bottom:
+        0;
+
+    width:
+        100%;
+
+    height:
+        3px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            #07548d 0%,
+            #0ca6ff 25%,
             #ffffff 50%,
-            #00a9ff 82%,
-            transparent
-        );
-}
-
-
-.scan {
-
-    position:absolute;
-
-    z-index:12;
-
-    bottom:0;
-
-    left:-16%;
-
-    width:16%;
-
-    height:4px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00b5ff,
-            #ffffff,
-            #00b5ff,
-            transparent
+            #0ca6ff 75%,
+            #07548d 100%
         );
 
-    animation:
-        scanline 3s linear infinite;
-}
+    box-shadow:
 
+        0 0 7px
+        #008dff,
 
-@keyframes scanline {
-
-    0% {
-        left:-16%;
-    }
-
-    100% {
-        left:100%;
-    }
-
-}
-
-
-.corner-light {
-
-    position:absolute;
-
-    z-index:10;
-
-    width:110px;
-
-    height:3px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00baff,
-            transparent
-        );
-}
-
-
-.corner-left {
-
-    left:7%;
-
-    top:7px;
-}
-
-
-.corner-right {
-
-    right:7%;
-
-    top:7px;
+        0 0 18px
+        rgba(0,141,255,.75);
 }
 
 </style>
-
 </head>
 
 <body>
 
 <div class="header">
 
-    <div class="top-line"></div>
+    <div class="corner left"></div>
+    <div class="corner right"></div>
 
-    <div class="corner-light corner-left"></div>
+    <div class="top-rail"></div>
 
-    <div class="corner-light corner-right"></div>
 
-    <div class="content">
+    <svg
+        class="industrial"
+        viewBox="0 0 1672 145"
+        preserveAspectRatio="none"
+        aria-hidden="true">
 
-        <div class="pillar">
-            PILLAR: TRAINING
+        <!-- LEFT INDUSTRIAL PLANT -->
+
+        <g>
+
+            <rect class="steel"
+                  x="48" y="58"
+                  width="22" height="82"
+                  rx="3"/>
+
+            <rect class="steel"
+                  x="82" y="40"
+                  width="34" height="100"
+                  rx="5"/>
+
+            <rect class="steel"
+                  x="88" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="93" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="99" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M99 10 V140
+                    M84 62 H114
+                    M84 86 H114
+                    M84 110 H114
+                  "/>
+
+            <rect class="steel"
+                  x="137" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M137 91 H189
+                    M137 114 H189
+                  "/>
+
+            <circle class="glass"
+                    cx="163" cy="102" r="5"/>
+
+        </g>
+
+
+        <!-- LEFT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M0 121
+                H310
+                V92
+                H395
+            "/>
+
+            <path d="
+                M35 132
+                H270
+                V108
+                H420
+            "/>
+
+            <path d="
+                M170 77
+                H285
+                V52
+                H380
+            "/>
+
+            <path d="
+                M247 140
+                V70
+                H335
+            "/>
+
+        </g>
+
+
+        <!-- RIGHT INDUSTRIAL PLANT -->
+
+        <g>
+
+            <rect class="steel"
+                  x="1430" y="57"
+                  width="22" height="83"
+                  rx="3"/>
+
+            <rect class="steel"
+                  x="1470" y="40"
+                  width="34" height="100"
+                  rx="5"/>
+
+            <rect class="steel"
+                  x="1476" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="1481" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="1487" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M1487 10 V140
+                    M1472 62 H1502
+                    M1472 86 H1502
+                    M1472 110 H1502
+                  "/>
+
+            <rect class="steel"
+                  x="1533" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M1533 91 H1585
+                    M1533 114 H1585
+                  "/>
+
+            <circle class="glass"
+                    cx="1559" cy="102" r="5"/>
+
+        </g>
+
+
+        <!-- RIGHT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M1672 121
+                H1362
+                V92
+                H1277
+            "/>
+
+            <path d="
+                M1637 132
+                H1402
+                V108
+                H1252
+            "/>
+
+            <path d="
+                M1502 77
+                H1387
+                V52
+                H1292
+            "/>
+
+            <path d="
+                M1425 140
+                V70
+                H1337
+            "/>
+
+        </g>
+
+
+        <!-- TECHNICAL HEXAGONS -->
+
+        <g class="tech">
+
+            <path d="
+                M270 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
+
+            <path d="
+                M309 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
+
+            <path d="
+                M1366 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
+
+            <path d="
+                M1405 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
+
+        </g>
+
+    </svg>
+
+
+    <div class="side-fade left"></div>
+    <div class="side-fade right"></div>
+
+
+    <!-- CENTRAL 3D TITLE -->
+
+    <div class="title-plate">
+
+        <div class="nav-arrow nav-left">
+            ◀◀
+        </div>
+
+        <div class="title-text">
+            Training Module (Training)
+        </div>
+
+        <div class="nav-arrow nav-right">
+            ▶▶
         </div>
 
     </div>
 
-    <div class="scan"></div>
+
+    <div class="energy-line"></div>
 
 </div>
 
 </body>
-
 </html>
 """
 
-
 components.html(
     header_html,
-    height=78,
+    height=100,
     scrolling=False
 )
-
-
 # =========================================================
 # FILTERS
 # =========================================================

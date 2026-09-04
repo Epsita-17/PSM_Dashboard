@@ -139,6 +139,28 @@ div[data-testid="stMetricLabel"] p {
         margin-bottom:6px;
     }
 
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
+
+    /* FORCE clickable module headings to exactly match normal headings */
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a span,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
+
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover span {
+        color:#073f78 !important;
+        text-decoration:none !important;
+    }
+
     .section-bar {
         background:#07518b;
         color:#ffffff;
@@ -666,7 +688,54 @@ def load_module(name):
     return filter_CSP(raw)
 
 
-def status_counts(df):
+def find_status_col(df, candidates=None):
+    """Find the REAL status column without accidentally selecting a
+    description or overdue/pending/completion field."""
+    if df is None or df.empty:
+        return None
+
+    normalized = {norm(c): c for c in df.columns}
+
+    priority = [
+        "Status (Open/Close)",
+        "Status (Open / Close)",
+        "Status",
+        "Current Status",
+        "Action Status",
+        "Completion Status",
+        "Investigation Status",
+        "Recommendation Status",
+    ]
+
+    if candidates:
+        priority = list(candidates) + priority
+
+    seen = set()
+    for candidate in priority:
+        key = norm(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if key in normalized:
+            return normalized[key]
+
+    status_keywords = [
+        "status",
+        "actionstatus",
+        "completionstatus",
+        "investigationstatus",
+        "recommendationstatus",
+    ]
+
+    for column in df.columns:
+        key = norm(column)
+        if any(keyword in key for keyword in status_keywords):
+            return column
+
+    return None
+
+
+def status_counts(df, status_candidates=None):
     result = {
         "total": 0,
         "completed": 0,
@@ -682,17 +751,7 @@ def status_counts(df):
 
     result["total"] = len(df)
 
-    status_col = find_col(
-        df,
-        [
-            "Status",
-            "Current Status",
-            "Action Status",
-            "Completion Status",
-            "Investigation Status",
-            "Recommendation Status",
-        ],
-    )
+    status_col = find_status_col(df, status_candidates)
 
     if status_col is None:
         return result
@@ -708,29 +767,23 @@ def status_counts(df):
     result["completed"] = int(
         s.str.contains(r"\bcompleted?\b|\bcomplete\b", regex=True).sum()
     )
-
     result["ongoing"] = int(
         s.str.contains(r"ongoing|in progress|in-progress", regex=True).sum()
     )
-
     result["pending"] = int(
         s.str.contains(r"pending", regex=True).sum()
     )
-
     result["overdue"] = int(
         s.str.contains(r"overdue", regex=True).sum()
     )
-
     result["open"] = int(
         s.str.fullmatch(r"open", case=False, na=False).sum()
     )
-
     result["closed"] = int(
         s.str.fullmatch(r"closed", case=False, na=False).sum()
     )
 
     return result
-
 
 def make_register(df, id_names, description_names, status_names):
     if df is None or df.empty:
@@ -738,7 +791,7 @@ def make_register(df, id_names, description_names, status_names):
 
     id_col = find_col(df, id_names)
     desc_col = find_col(df, description_names)
-    status_col = find_col(df, status_names)
+    status_col = find_status_col(df, status_names)
 
     result = pd.DataFrame(index=df.index)
 
@@ -847,11 +900,29 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+    "TRAINING": "pages/13_Training.py",
+}
+
 def show_module_title(number, icon, title):
-    st.markdown(
-        f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-        unsafe_allow_html=True,
-    )
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title" style="color:#073f78 !important; font-size:12px !important; font-weight:900 !important;">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def show_metric_row(items):
@@ -1016,7 +1087,16 @@ with c:
             "PHA RECOMMENDATION"
         )
 
-        x = status_counts(rec)
+        x = status_counts(
+            rec,
+            [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
+                "Status",
+                "Action Status",
+                "Recommendation Status",
+            ],
+        )
 
         show_metric_row([
             (
@@ -1049,6 +1129,8 @@ with c:
                 "Description"
             ],
             [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
                 "Status",
                 "Action Status",
                 "Recommendation Status"

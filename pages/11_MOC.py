@@ -1,1025 +1,85 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-import plotly.graph_objects as go
+import os
 import html
+from streamlit_autorefresh import st_autorefresh
 
-# ============================================================
+
+# =========================================================
 # PAGE CONFIG
-# ============================================================
+# =========================================================
 
 st.set_page_config(
-    page_title="Management of Change (MOC) Dashboard",
-    page_icon="📋",
+    page_title="PSM Dashboard - MOC",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ============================================================
-# GOOGLE SHEET CONFIGURATION
-# ============================================================
+
+# =========================================================
+# SESSION STATE
+# =========================================================
+
+if "status_filter" not in st.session_state:
+    st.session_state.status_filter = "All"
+
+if "page_number" not in st.session_state:
+    st.session_state.page_number = 1
+
+if "department_selector" not in st.session_state:
+    st.session_state.department_selector = "All Departments"
+
+if "month_selector" not in st.session_state:
+    st.session_state.month_selector = "All Months"
+
+
+# =========================================================
+# AUTO REFRESH
+# =========================================================
+
+st_autorefresh(
+    interval=100000,
+    key="moc_auto_refresh"
+)
+
+
+# =========================================================
+# GOOGLE SHEET - MOC
+# =========================================================
 
 SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
 
-SHEET_NAME = "MOC"
-
-GOOGLE_SHEET_URL = (
+MOC_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/"
-    f"{SPREADSHEET_ID}/gviz/tq"
-    f"?tqx=out:csv&sheet={SHEET_NAME}"
+    f"{SPREADSHEET_ID}"
+    f"/gviz/tq?tqx=out:csv&sheet=MOC"
 )
 
-# ============================================================
-# COMPLETE CSS
-# ============================================================
-
-st.html(
-    """
-<style>
-
-/* ============================================================
-   LIGHT PREMIUM / 3D GLASS THEME
-   ONLY THEME MODIFIED — FUNCTIONALITY UNCHANGED
-   ============================================================ */
-
-:root {
-    --navy: #18284F;
-    --blue: #287BE0;
-    --purple: #7659E8;
-    --green: #32B878;
-    --red: #E83D68;
-    --orange: #F29A2E;
-    --cyan: #20B9BD;
-    --text: #172B4D;
-    --muted: #667085;
-    --border: #E7EAF2;
-    --surface: #FFFFFF;
-    --background: #F5F7FB;
-}
-
-/* ---------- Overall Background ---------- */
-
-html,
-body,
-.stApp {
-    margin: 0 !important;
-    padding: 0 !important;
-
-    background:
-        radial-gradient(
-            circle at 12% 4%,
-            rgba(54, 129, 255, 0.24),
-            transparent 28%
-        ),
-        radial-gradient(
-            circle at 88% 12%,
-            rgba(106, 74, 226, 0.20),
-            transparent 30%
-        ),
-        linear-gradient(
-            135deg,
-            #071C4F 0%,
-            #0A2D70 45%,
-            #152E76 72%,
-            #211C68 100%
-        ) !important;
-
-    color: #172B4D;
-}
-
-/* ---------- Hide Streamlit UI ---------- */
-
-[data-testid="stHeader"],
-[data-testid="stToolbar"],
-header,
-footer,
-#MainMenu {
-    display: none !important;
-}
-
-[data-testid="stAppViewContainer"] {
-    background: transparent !important;
-}
-
-[data-testid="stAppViewContainer"] > .main {
-    padding-top: 0 !important;
-    background: transparent !important;
-}
-
-.block-container {
-    max-width: 100% !important;
-    width: 100% !important;
-    padding: 0px 0px 0px 0px !important;
-    margin: 0 !important;
-}
-
-/* ---------- Streamlit Spacing ---------- */
-
-[data-testid="stVerticalBlock"] {
-    gap: 0.38rem !important;
-}
-
-[data-testid="stHorizontalBlock"] {
-    gap: 10px !important;
-}
-
-/* ============================================================
-   HEADER
-   ============================================================ */
-
-.dashboard-header {
-    width: 100%;
-    height: 70px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 17px;
-    box-sizing: border-box;
-
-    background:
-        linear-gradient(
-            135deg,
-            rgba(255,255,255,0.98),
-            rgba(249,250,255,0.96)
-        );
-
-    border: 1px solid rgba(220,225,238,0.95);
-
-    border-radius: 15px;
-
-    box-shadow:
-        0 10px 28px rgba(2, 18, 55, 0.15),
-        0 2px 5px rgba(56, 72, 120, 0.04);
-
-    position: relative;
-    overflow: hidden;
-}
-
-.dashboard-header::after {
-    content: "";
-    position: absolute;
-
-    width: 220px;
-    height: 120px;
-
-    right: 12%;
-    top: -95px;
-
-    background:
-        radial-gradient(
-            circle,
-            rgba(102,133,255,0.12),
-            transparent 70%
-        );
-
-    pointer-events: none;
-}
-
-.dashboard-logo {
-    width: 46px;
-    height: 46px;
-
-    border-radius: 12px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    margin-right: 13px;
-
-    color: #FFFFFF;
-    font-size: 24px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #4E9AFF 0%,
-            #287BE0 48%,
-            #7659E8 100%
-        );
-
-    box-shadow:
-        0 8px 16px rgba(55,111,225,0.24),
-        inset 1px 1px 2px rgba(255,255,255,0.55),
-        inset -2px -2px 4px rgba(48,79,170,0.20);
-}
-
-.dashboard-title {
-    color: var(--navy);
-
-    font-size: 25px;
-    font-weight: 750;
-
-    letter-spacing: -0.45px;
-}
-
-/* ============================================================
-   KPI CARDS
-   SAME CARD PATTERN AS LOWER CHART / REGISTER CARDS
-   ============================================================ */
-
-.kpi-card {
-    height: 145px;
-
-    position: relative;
-
-    padding: 17px 20px;
-
-    box-sizing: border-box;
-
-    overflow: hidden;
-
-    border-radius: 15px;
-
-    background:
-        linear-gradient(
-            145deg,
-            rgba(255,255,255,0.99),
-            rgba(247,250,255,0.98)
-        );
-
-    border: 1px solid #DCE4EF;
-
-    box-shadow:
-        0 10px 28px rgba(2, 18, 55, 0.16),
-        0 2px 7px rgba(2, 18, 55, 0.08);
-
-    backdrop-filter: blur(8px);
-
-    transition:
-        transform 0.18s ease,
-        box-shadow 0.18s ease;
-}
-
-.kpi-card:hover {
-    transform: translateY(-2px);
-
-    box-shadow:
-        0 14px 32px rgba(2, 18, 55, 0.20),
-        0 3px 8px rgba(2, 18, 55, 0.10);
-}
-
-/* Same subtle top/right glow used by the chart cards */
-.kpi-card::before {
-    content: "";
-
-    position: absolute;
-
-    width: 180px;
-    height: 140px;
-
-    right: -58px;
-    top: -64px;
-
-    border-radius: 50%;
-
-    pointer-events: none;
-}
-
-.kpi-blue::before {
-    background:
-        radial-gradient(
-            circle,
-            rgba(40,123,224,0.14),
-            transparent 68%
-        );
-}
-
-.kpi-green::before {
-    background:
-        radial-gradient(
-            circle,
-            rgba(50,184,120,0.14),
-            transparent 68%
-        );
-}
-
-.kpi-red::before {
-    background:
-        radial-gradient(
-            circle,
-            rgba(232,61,104,0.13),
-            transparent 68%
-        );
-}
-
-.kpi-orange::before {
-    background:
-        radial-gradient(
-            circle,
-            rgba(242,154,46,0.15),
-            transparent 68%
-        );
-}
-
-.kpi-title {
-    color: #233A61;
-
-    font-size: 15px;
-    font-weight: 700;
-
-    position: relative;
-    z-index: 2;
-}
-
-.kpi-number {
-    margin-top: 9px;
-
-    font-size: 34px;
-    line-height: 1;
-
-    font-weight: 800;
-
-    letter-spacing: -0.7px;
-
-    position: relative;
-    z-index: 2;
-}
-
-.kpi-blue .kpi-number {
-    color: #287BE0;
-}
-
-.kpi-green .kpi-number {
-    color: #18A968;
-}
-
-.kpi-red .kpi-number {
-    color: #E83D68;
-}
-
-.kpi-orange .kpi-number {
-    color: #EA841A;
-}
-
-/* Glossy icon matching the lower-card action icon style */
-.kpi-icon {
-    position: absolute;
-
-    right: 19px;
-    top: 18px;
-
-    width: 62px;
-    height: 62px;
-
-    border-radius: 18px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    font-size: 28px;
-
-    z-index: 2;
-
-    box-shadow:
-        0 10px 20px rgba(28,52,100,0.13),
-        inset 2px 2px 4px rgba(255,255,255,0.80),
-        inset -2px -2px 5px rgba(40,70,120,0.08);
-}
-
-.kpi-blue .kpi-icon {
-    color: #287BE0;
-    background:
-        linear-gradient(
-            145deg,
-            #EEF6FF,
-            #D5E8FF
-        );
-}
-
-.kpi-green .kpi-icon {
-    color: #18A968;
-    background:
-        linear-gradient(
-            145deg,
-            #EEFFF5,
-            #D8F5E5
-        );
-}
-
-.kpi-red .kpi-icon {
-    color: #E83D68;
-    background:
-        linear-gradient(
-            145deg,
-            #FFF1F5,
-            #FFE0E9
-        );
-}
-
-.kpi-orange .kpi-icon {
-    color: #EA841A;
-    background:
-        linear-gradient(
-            145deg,
-            #FFF8EA,
-            #FFEBCB
-        );
-}
-
-/* Bottom progress line = same visual language as the reference */
-.kpi-line {
-    position: absolute;
-
-    left: 20px;
-    right: 20px;
-    bottom: 16px;
-
-    width: auto;
-    height: 6px;
-
-    border-radius: 10px;
-
-    z-index: 2;
-}
-
-.kpi-blue .kpi-line {
-    background:
-        linear-gradient(
-            90deg,
-            #287BE0 0%,
-            #287BE0 72%,
-            #DCE8F7 72%,
-            #DCE8F7 100%
-        );
-}
-
-.kpi-green .kpi-line {
-    background:
-        linear-gradient(
-            90deg,
-            #32B878 0%,
-            #32B878 48%,
-            #DDEEE5 48%,
-            #DDEEE5 100%
-        );
-}
-
-.kpi-red .kpi-line {
-    background:
-        linear-gradient(
-            90deg,
-            #E83D68 0%,
-            #E83D68 48%,
-            #F2DDE4 48%,
-            #F2DDE4 100%
-        );
-}
-
-.kpi-orange .kpi-line {
-    background:
-        linear-gradient(
-            90deg,
-            #F29A2E 0%,
-            #F29A2E 35%,
-            #F2E2C7 35%,
-            #F2E2C7 100%
-        );
-}
-
-/* ============================================================
-   CHART CARDS
-   ============================================================ */
-
-.chart-card {
-    background:
-        linear-gradient(
-            145deg,
-            rgba(255,255,255,0.99),
-            rgba(247,250,255,0.98)
-        );
-
-    border: 1px solid #DCE4EF;
-
-    border-radius: 15px;
-
-    overflow: hidden;
-
-    box-shadow:
-        0 10px 28px rgba(2, 18, 55, 0.16),
-        0 2px 7px rgba(2, 18, 55, 0.08);
-}
-
-.chart-title {
-    height: 43px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 14px;
-
-    color: #1C3155;
-
-    font-size: 14px;
-    font-weight: 700;
-
-    letter-spacing: -0.1px;
-}
-
-.chart-icon {
-    color: #287BE0;
-    margin-right: 7px;
-}
-
-/* ============================================================
-   MOC REGISTER
-   ============================================================ */
-
-.register-card {
-    background:
-        linear-gradient(
-            145deg,
-            rgba(255,255,255,0.99),
-            rgba(247,250,255,0.98)
-        );
-
-    border: 1px solid #DCE4EF;
-
-    border-radius: 15px;
-
-    overflow: hidden;
-
-    margin-top: 5px;
-
-    box-shadow:
-        0 10px 28px rgba(2, 18, 55, 0.16),
-        0 2px 7px rgba(2, 18, 55, 0.08);
-}
-
-.register-header {
-    height: 48px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 15px;
-
-    color: #1C3155;
-
-    font-size: 17px;
-    font-weight: 750;
-
-    border-bottom: 1px solid #E6EAF1;
-}
-
-.register-icon {
-    color: #287BE0;
-    margin-right: 8px;
-}
-
-/* ============================================================
-   INPUTS
-   ============================================================ */
-
-div[data-testid="stTextInput"] {
-    margin: 0 !important;
-}
-
-div[data-testid="stTextInput"] input {
-    height: 37px !important;
-    min-height: 37px !important;
-
-    border-radius: 9px !important;
-
-    border: 1px solid #DDE3ED !important;
-
-    background: rgba(255,255,255,0.96) !important;
-
-    color: #344054 !important;
-
-    font-size: 11px !important;
-
-    box-shadow:
-        inset 0 1px 2px rgba(25,40,75,0.025),
-        0 2px 5px rgba(25,40,75,0.025);
-}
-
-div[data-testid="stTextInput"] input:focus {
-    border-color: #8CB7F4 !important;
-
-    box-shadow:
-        0 0 0 3px rgba(40,123,224,0.08) !important;
-}
-
-div[data-testid="stTextInput"] input::placeholder {
-    color: #98A2B3 !important;
-}
-
-/* ============================================================
-   SELECTBOX
-   ============================================================ */
-
-div[data-testid="stSelectbox"] {
-    margin: 0 !important;
-}
-
-div[data-testid="stSelectbox"] > div > div {
-    min-height: 37px !important;
-    height: 37px !important;
-
-    border-radius: 9px !important;
-
-    border: 1px solid #DDE3ED !important;
-
-    background: rgba(255,255,255,0.96) !important;
-
-    box-shadow:
-        0 2px 5px rgba(25,40,75,0.025);
-}
-
-div[data-testid="stSelectbox"] * {
-    font-size: 11px !important;
-}
-
-/* ============================================================
-   BUTTONS
-   ============================================================ */
-
-.stButton {
-    margin: 0 !important;
-}
-
-.stButton > button {
-    height: 37px !important;
-    min-height: 37px !important;
-
-    border-radius: 9px !important;
-
-    border: 1px solid #DDE3ED !important;
-
-    background:
-        linear-gradient(
-            145deg,
-            #FFFFFF,
-            #F7F9FD
-        ) !important;
-
-    color: #344054 !important;
-
-    font-size: 11px !important;
-    font-weight: 650 !important;
-
-    box-shadow:
-        0 3px 8px rgba(45,62,110,0.055),
-        inset 1px 1px 1px rgba(255,255,255,0.8);
-
-    transition: all 0.18s ease;
-}
-
-.stButton > button:hover {
-    border-color: #9CBDF0 !important;
-
-    color: #287BE0 !important;
-
-    background:
-        linear-gradient(
-            145deg,
-            #FFFFFF,
-            #F0F6FF
-        ) !important;
-
-    transform: translateY(-1px);
-}
-
-/* ============================================================
-   TABLE
-   ============================================================ */
-
-.moc-table {
-    width: 100%;
-
-    border-collapse: collapse;
-
-    table-layout: fixed;
-
-    background: #FFFFFF;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
-
-    box-shadow:
-        0 3px 12px rgba(45,62,110,0.025);
-}
-
-.moc-table th {
-    background:
-        linear-gradient(
-            180deg,
-            #F3F7FD,
-            #EDF3FB
-        );
-
-    color: #29415F;
-
-    padding: 9px 6px;
-
-    border: 1px solid #DEE5EF;
-
-    font-size: 10px;
-
-    font-weight: 700;
-
-    text-align: center;
-}
-
-.moc-table td {
-    background: #FFFFFF;
-
-    color: #344054;
-
-    padding: 8px 6px;
-
-    border: 1px solid #E7EBF1;
-
-    font-size: 10px;
-
-    text-align: center;
-
-    vertical-align: middle;
-
-    height: 37px;
-}
-
-.moc-table tr:nth-child(even) td {
-    background: #FBFCFF;
-}
-
-.moc-table tr:hover td {
-    background: #F6F9FF;
-}
-
-.moc-table td.left {
-    text-align: left;
-}
-
-.moc-table td.description {
-    text-align: left;
-    line-height: 1.25;
-}
-
-/* ============================================================
-   STATUS PILLS
-   ============================================================ */
-
-.status-pill {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-width: 62px;
-
-    padding: 4px 10px;
-
-    border-radius: 15px;
-
-    font-size: 9px;
-    font-weight: 650;
-
-    box-shadow:
-        inset 0 1px 1px rgba(255,255,255,0.65);
-}
-
-.status-open {
-    color: #D97706;
-    background: #FFF3E2;
-}
-
-.status-closed {
-    color: #16834A;
-    background: #EAF8EF;
-}
-
-.status-other {
-    color: #667085;
-    background: #F2F4F7;
-}
-
-/* ============================================================
-   TYPE PILLS
-   ============================================================ */
-
-.type-pill {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-width: 72px;
-
-    padding: 4px 8px;
-
-    border-radius: 15px;
-
-    font-size: 9px;
-    font-weight: 650;
-
-    box-shadow:
-        inset 0 1px 1px rgba(255,255,255,0.7);
-}
-
-.type-permanent {
-    color: #16834A;
-    background: #EAF8EF;
-}
-
-.type-temporary {
-    color: #D97706;
-    background: #FFF2DF;
-}
-
-.type-emergency {
-    color: #D93657;
-    background: #FDECEF;
-}
-
-.type-other {
-    color: #287BE0;
-    background: #EDF5FF;
-}
-
-/* ============================================================
-   CATEGORY PILLS
-   ============================================================ */
-
-.category-pill {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-width: 70px;
-
-    padding: 4px 8px;
-
-    border-radius: 15px;
-
-    font-size: 9px;
-    font-weight: 650;
-
-    box-shadow:
-        inset 0 1px 1px rgba(255,255,255,0.7);
-}
-
-.cat-technology {
-    color: #287BE0;
-    background: #EDF5FF;
-}
-
-.cat-personnel {
-    color: #7254C9;
-    background: #F1EDFF;
-}
-
-.cat-facility {
-    color: #159A9C;
-    background: #E9F9FA;
-}
-
-.cat-other {
-    color: #667085;
-    background: #F2F4F7;
-}
-
-/* ============================================================
-   VIEW BUTTON
-   ============================================================ */
-
-.view-link {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-width: 58px;
-
-    padding: 4px 8px;
-
-    border: 1px solid #DCE4EE;
-
-    border-radius: 7px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #FFFFFF,
-            #F5F8FD
-        );
-
-    color: #287BE0 !important;
-
-    text-decoration: none !important;
-
-    font-size: 9px;
-    font-weight: 650;
-
-    box-shadow:
-        0 2px 5px rgba(45,62,110,0.04);
-}
-
-.view-link:hover {
-    background: #F0F6FF;
-
-    border-color: #9BBFF0;
-}
-
-/* ============================================================
-   PAGE INFO
-   ============================================================ */
-
-.page-info {
-    color: #667085;
-
-    font-size: 10px;
-
-    padding-top: 7px;
-}
-
-/* ============================================================
-   HIDE LABELS
-   ============================================================ */
-
-label[data-testid="stWidgetLabel"] {
-    display: none !important;
-}
-
-
-/* ============================================================
-   STREAMLIT CHART CARD SURFACE
-   ============================================================ */
-
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background:
-        linear-gradient(
-            145deg,
-            #FFFFFF,
-            #F7FAFF
-        ) !important;
-
-    border: 1px solid #DCE4EF !important;
-
-    border-radius: 15px !important;
-
-    box-shadow:
-        0 10px 28px rgba(2,18,55,0.15),
-        0 2px 7px rgba(2,18,55,0.07) !important;
-
-    overflow: hidden !important;
-}
-
-div[data-testid="stVerticalBlockBorderWrapper"]
-div[data-testid="stPlotlyChart"] {
-    background: #FFFFFF !important;
-}
-
-</style>
-"""
-)
-# ============================================================
-# LOAD GOOGLE SHEET
-# ============================================================
 
 @st.cache_data(ttl=60)
-def load_moc_data():
+def get_moc_data():
 
     try:
 
-        data = pd.read_csv(
-            GOOGLE_SHEET_URL
-        )
+        data = pd.read_csv(MOC_CSV_URL)
 
-        # ----------------------------------------------------
-        # CLEAN HEADERS
-        # ----------------------------------------------------
+        # -------------------------------------------------
+        # CLEAN COLUMN NAMES
+        # -------------------------------------------------
 
         data.columns = (
             data.columns
             .astype(str)
-            .str.replace(
-                "\xa0",
-                " ",
-                regex=False
-            )
-            .str.replace(
-                "\n",
-                " ",
-                regex=False
-            )
-            .str.replace(
-                r"\s+",
-                " ",
-                regex=True
-            )
+            .str.replace("\xa0", " ", regex=False)
+            .str.replace("\n", " ", regex=False)
             .str.strip()
         )
 
-        # ----------------------------------------------------
-        # CLEAN CELL VALUES
-        # ----------------------------------------------------
+        # -------------------------------------------------
+        # CLEAN TEXT DATA
+        # -------------------------------------------------
 
         for col in data.columns:
 
@@ -1027,239 +87,826 @@ def load_moc_data():
 
                 data[col] = (
                     data[col]
-                    .fillna("")
                     .astype(str)
-                    .str.replace(
-                        "\xa0",
-                        " ",
-                        regex=False
-                    )
+                    .str.replace("\xa0", " ", regex=False)
                     .str.strip()
                 )
 
-        return data
-
-    except Exception as e:
-
-        st.error(
-            "Unable to load MOC data from Google Sheet."
+        data = data.replace(
+            {
+                "nan": "",
+                "NaN": "",
+                "NAN": ""
+            }
         )
 
-        st.code(
-            str(e)
+        return data
+
+    except Exception as exc:
+
+        st.error(
+            f"Unable to load Google Sheet MOC: {exc}"
         )
 
         return pd.DataFrame()
 
 
-df = load_moc_data()
+df = get_moc_data()
 
 
-# ============================================================
+# =========================================================
+# DOCUMENT STORAGE
+# =========================================================
+
+DOCUMENT_FOLDER = "moc_documents"
+
+os.makedirs(
+    DOCUMENT_FOLDER,
+    exist_ok=True
+)
+
+
+# =========================================================
 # REQUIRED MOC COLUMNS
-# ============================================================
-
+# =========================================================
 required_columns = [
-
-    "Sr No",
-
     "MOC No",
-
     "Request Date",
-
     "Department",
-
     "Section",
-
     "Requestor Name",
-
     "Description of Change",
-
     "Change Type (Permanent/Temporary/Emergency)",
-
     "Category of changes (Technology/Personnel/Facility)",
-
     "Risk Level",
-
     "Approval Status",
-
     "Approved By",
-
     "Implementation Date",
-
     "Review Date",
-
-    "SOP/SMP Revision (YES/NO)",
-
-    "Training After SOP/SMP Revision (YES/NO)",
-
-    "PSSR (YES/NO)",
-
+    "SOP/SMP Revision  (YES/NO)",
+    "Training After SOP/SMP Revision  (YES/NO)",
+    "PSSR  (YES/NO)",
     "Document Location",
-
     "Status",
-
     "Attach MOC Softcopy Link",
-
     "Remarks"
 ]
 
-
-# ============================================================
-# DATA CHECK
-# ============================================================
+STATUS_COLUMN = "Status"
+# =========================================================
+# CHECK DATA
+# =========================================================
 
 if df.empty:
 
     st.error(
-        "No records found in Google Sheet → MOC."
+        "No data found in Google Sheet: MOC."
     )
 
     st.stop()
 
 
 missing_columns = [
-    col
-    for col in required_columns
-    if col not in df.columns
-]
 
+    column
+    for column in required_columns
+    if column not in df.columns
+
+]
 
 if missing_columns:
 
     st.error(
-        "Some MOC columns are missing."
+        "Some required columns are missing from Google Sheet: MOC."
     )
 
-    st.write(
-        "Missing columns:"
-    )
+    st.write("Missing columns:")
+    st.write(missing_columns)
 
-    for col in missing_columns:
-
-        st.write(
-            f"• {col}"
-        )
-
-    st.write(
-        "Columns received from Google Sheet:"
-    )
-
-    st.write(
-        df.columns.tolist()
-    )
+    st.write("Columns found in MOC:")
+    st.write(df.columns.tolist())
 
     st.stop()
 
 
-# ============================================================
-# DATE CONVERSION
-# ============================================================
+# =========================================================
+# GLOBAL CSS
+# =========================================================
 
-df["Request Date"] = pd.to_datetime(
-    df["Request Date"],
-    errors="coerce",
-    dayfirst=True
+st.markdown(
+    """
+<style>
+
+/* =====================================================
+   GLOBAL
+   ===================================================== */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"] > .main {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+#MainMenu,
+header,
+footer,
+[data-testid="stHeader"],
+[data-testid="stToolbar"] {
+    display: none !important;
+}
+
+[data-testid="stMainBlockContainer"],
+[data-testid="stAppViewBlockContainer"],
+.block-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 6px !important;
+}
+
+[data-testid="stAppViewContainer"] > .main > div {
+    padding: 0 !important;
+}
+
+iframe {
+    display: block !important;
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+
+/* =====================================================
+   BACKGROUND
+   ===================================================== */
+
+.stApp {
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #f7faff 55%,
+            #eef4fa 100%
+        ) !important;
+
+    color: #092d5c !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+}
+
+.stApp * {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+}
+
+
+/* =====================================================
+   SPACING
+   ===================================================== */
+
+[data-testid="stVerticalBlock"] {
+    gap: 0rem !important;
+}
+
+[data-testid="stHorizontalBlock"] {
+    gap: 8px !important;
+}
+
+
+/* =====================================================
+   SELECT LABEL
+   ===================================================== */
+
+[data-testid="stSelectbox"] label {
+
+    color: #092d5c !important;
+
+    font-size: 12px !important;
+
+    font-weight: 900 !important;
+
+    letter-spacing: .35px !important;
+
+    margin-bottom: 3px !important;
+
+    padding-left: 4px !important;
+}
+
+
+/* =====================================================
+   SELECT BOX
+   ===================================================== */
+
+div[data-baseweb="select"] > div {
+
+    height: 38px !important;
+
+    min-height: 38px !important;
+
+    border-radius: 6px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1.5px solid #a9bfd8 !important;
+
+    box-shadow:
+        0 2px 5px rgba(8,45,92,.10),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
+}
+
+div[data-baseweb="select"]:hover > div {
+
+    border-color: #176fc1 !important;
+
+    box-shadow:
+        0 3px 8px rgba(8,76,135,.16) !important;
+}
+
+div[data-baseweb="select"] * {
+
+    color: #092d5c !important;
+
+    font-size: 12px !important;
+
+    font-weight: 700 !important;
+}
+
+div[data-baseweb="select"] svg {
+
+    fill: #0a4e91 !important;
+}
+
+
+/* =====================================================
+   MONTH + DEPARTMENT POSITION
+   ===================================================== */
+
+div[data-testid="stColumn"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"] {
+
+    transform:
+        translateY(-3px) !important;
+}
+
+div[data-testid="stColumn"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"] {
+
+    transform:
+        translateY(-3px) !important;
+}
+
+
+/* =====================================================
+   TEXT INPUT
+   ===================================================== */
+
+div[data-testid="stTextInput"] input {
+
+    height: 40px !important;
+
+    min-height: 40px !important;
+
+    border-radius: 6px !important;
+
+    background: #ffffff !important;
+
+    border:
+        1.5px solid #a9bfd8 !important;
+
+    color: #092d5c !important;
+
+    font-size: 12px !important;
+
+    font-weight: 600 !important;
+
+    box-shadow:
+        0 2px 5px rgba(8,45,92,.09),
+        inset 0 1px 2px rgba(0,0,0,.025) !important;
+}
+
+div[data-testid="stTextInput"] input:focus {
+
+    border-color: #126bc0 !important;
+
+    box-shadow:
+        0 0 0 1px #126bc0,
+        0 3px 9px rgba(18,107,192,.15) !important;
+}
+
+div[data-testid="stTextInput"] input::placeholder {
+
+    color: #657990 !important;
+
+    opacity: 1 !important;
+}
+
+
+/* =====================================================
+   BUTTONS
+   ===================================================== */
+
+div.stButton > button {
+
+    height: 36px !important;
+
+    min-height: 36px !important;
+
+    border-radius: 6px !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #e8f0f8 100%
+        ) !important;
+
+    border:
+        1.5px solid #9db7d2 !important;
+
+    color: #07366d !important;
+
+    font-size: 12px !important;
+
+    font-weight: 900 !important;
+
+    box-shadow:
+        0 3px 0 #7897b6,
+        0 5px 9px rgba(6,48,91,.13),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
+
+    transition:
+        transform .12s ease,
+        box-shadow .12s ease,
+        background .12s ease !important;
+}
+
+div.stButton > button:hover {
+
+    border-color: #126bc0 !important;
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #1685db 0%,
+            #075ca8 100%
+        ) !important;
+
+    transform:
+        translateY(-1px) !important;
+
+    box-shadow:
+        0 4px 0 #06477f,
+        0 7px 13px rgba(4,74,135,.24),
+        inset 0 1px 0 rgba(255,255,255,.28) !important;
+}
+
+
+/* =====================================================
+   KPI CARDS
+   ===================================================== */
+
+.kpi-card {
+
+    position: relative;
+
+    height: 105px;
+
+    overflow: hidden;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
+        );
+
+    border:
+        1.5px solid #c2d3e4;
+
+    border-top:
+        4px solid #176fc1;
+
+    border-radius: 8px;
+
+    padding: 15px 10px;
+
+    box-shadow:
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98);
+}
+
+.kpi-card.completed {
+    border-top-color: #19a657;
+}
+
+.kpi-card.ongoing {
+    border-top-color: #f18d05;
+}
+
+.kpi-card.closure {
+    border-top-color: #176fc1;
+}
+
+
+/* =====================================================
+   KPI CONTENT
+   ===================================================== */
+
+.kpi-content {
+
+    width: 100% !important;
+
+    height: 100% !important;
+
+    display: flex !important;
+
+    flex-direction: column !important;
+
+    align-items: center !important;
+
+    justify-content: center !important;
+
+    text-align: center !important;
+}
+
+.kpi-label {
+
+    color: #092d5c;
+
+    font-size: 14px;
+
+    font-weight: 900;
+
+    letter-spacing: .15px;
+
+    text-align: center;
+}
+
+.kpi-card.completed .kpi-label {
+    color: #08783c;
+}
+
+.kpi-card.ongoing .kpi-label {
+    color: #b96700;
+}
+
+.kpi-card.closure .kpi-label {
+    color: #092d5c;
+}
+
+.kpi-value {
+
+    font-size: 38px;
+
+    line-height: 1;
+
+    font-weight: 900;
+
+    margin-top: 5px;
+
+    color: #0a4e91;
+
+    text-align: center;
+}
+
+.kpi-value.green {
+    color: #159447 !important;
+}
+
+.kpi-value.orange {
+    color: #f0a000 !important;
+}
+
+.kpi-value.blue {
+    color: #0a4e91 !important;
+}
+
+.kpi-description {
+
+    color: #304d6d;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    margin-top: 5px;
+
+    text-align: center;
+}
+
+
+/* =====================================================
+   REGISTER
+   ===================================================== */
+
+.register-wrap {
+
+    background: #ffffff;
+
+    border:
+        1.5px solid #b7cce1;
+
+    border-radius:
+        7px 7px 0 0;
+
+    overflow: hidden;
+
+    box-shadow:
+        0 4px 10px rgba(7,45,82,.12);
+}
+
+.register-title {
+
+    height: 40px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 0 17px;
+
+    color: #ffffff;
+
+    font-size: 18px;
+
+    font-weight: 900;
+
+    letter-spacing: .25px;
+
+    background:
+        linear-gradient(
+            180deg,
+            #0a4f91 0%,
+            #063b70 100%
+        );
+
+    border-bottom:
+        2px solid #176fc1;
+}
+
+.register-icon {
+
+    margin-right: 9px;
+
+    color: #ffffff;
+}
+
+
+/* =====================================================
+   MOC TABLE
+   ===================================================== */
+
+.pt-table {
+
+    width: 100%;
+
+    overflow: hidden;
+
+    border:
+        1px solid #d5e0ea;
+
+    background: #ffffff;
+}
+
+.pt-row {
+
+    display: grid;
+
+    grid-template-columns:
+        0.80fr
+        1.15fr
+        0.95fr
+        1.20fr
+        3.00fr
+        0.85fr
+        1.00fr;
+}
+
+.pt-header {
+
+    min-height: 52px;
+
+    background:
+        linear-gradient(
+            180deg,
+            #205796 0%,
+            #174b87 100%
+        );
+}
+
+.pt-cell {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 7px 8px;
+
+    border-right:
+        1px solid #d5e0ea;
+
+    border-bottom:
+        1px solid #d5e0ea;
+
+    color: #243b57;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+    text-align: center;
+
+    line-height: 1.2;
+
+    word-break: break-word;
+}
+
+.pt-header .pt-cell {
+
+    color: #ffffff;
+
+    font-weight: 900;
+
+    font-size: 11px;
+}
+
+.pt-left {
+
+    justify-content: flex-start;
+
+    text-align: left;
+}
+
+.pt-alt .pt-cell {
+
+    background: #f5f8fb;
+}
+
+
+/* =====================================================
+   STATUS
+   ===================================================== */
+
+.status-completed {
+
+    color: #198754;
+
+    font-weight: 900;
+}
+
+.status-ongoing {
+
+    color: #e08a00;
+
+    font-weight: 900;
+}
+
+.status-normal {
+
+    color: #243b57;
+
+    font-weight: 900;
+}
+
+
+/* =====================================================
+   DOCUMENT LINK
+   ===================================================== */
+
+.action-view {
+
+    color: #174b87;
+
+    font-weight: 900;
+
+    text-decoration: none;
+
+    cursor: pointer;
+}
+
+.action-view:hover {
+
+    color: #0b6f9f;
+
+    text-decoration: underline;
+}
+
+
+/* =====================================================
+   RECORD BAR
+   ===================================================== */
+
+.record-text {
+
+    height: 38px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding-left: 12px;
+
+    color: #5d7085;
+
+    font-size: 11px;
+
+    font-weight: 600;
+}
+
+
+/* =====================================================
+   PAGINATION CURRENT PAGE
+   ===================================================== */
+
+.current-page {
+
+    height: 36px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background: #174b87;
+
+    color: #ffffff;
+
+    border-radius: 6px;
+
+    font-size: 12px;
+
+    font-weight: 900;
+}
+
+
+/* =====================================================
+   FOOTER
+   ===================================================== */
+
+.footer {
+
+    height: 34px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            180deg,
+            #0a4f91 0%,
+            #063563 100%
+        );
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    border-top:
+        2px solid #176fc1;
+}
+
+</style>
+""",
+    unsafe_allow_html=True
 )
 
-df["Implementation Date"] = pd.to_datetime(
-    df["Implementation Date"],
-    errors="coerce",
-    dayfirst=True
-)
 
-df["Review Date"] = pd.to_datetime(
-    df["Review Date"],
-    errors="coerce",
-    dayfirst=True
-)
-
-
-# ============================================================
-# NORMALIZE STATUS
-# ============================================================
-
-def normalize_status(value):
-
-    text = str(value).strip().lower()
-
-    # Open / active MOC
-    if text in [
-        "open",
-        "ongoing",
-        "on going",
-        "in progress",
-        "in execution",
-        "execution",
-        "active"
-    ]:
-        return "Open"
-
-    # Closed / completed MOC
-    if text in [
-        "closed",
-        "complete",
-        "completed",
-        "closed moc",
-        "implemented",
-        "done"
-    ]:
-        return "Closed"
-
-    # Other/blank values are not counted in Open or Closed
-    return "Pending"
-
-
-df["Status Display"] = (
-    df["Status"]
-    .apply(normalize_status)
-)
-
-
-# ============================================================
-# NORMALIZE TYPE
-# ============================================================
-
-df["Type Display"] = (
-    df[
-        "Change Type (Permanent/Temporary/Emergency)"
-    ]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-    .str.title()
-)
-
-
-# ============================================================
-# NORMALIZE CATEGORY
-# ============================================================
-
-df["Category Display"] = (
-    df[
-        "Category of changes (Technology/Personnel/Facility)"
-    ]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-    .str.title()
-)
-
-
-# ============================================================
-# YEAR
-# ============================================================
-
-df["Year"] = (
-    df["Request Date"]
-    .dt.year
-)
-
-
-# ============================================================
-# INDUSTRIAL PSM HEADER
-# HEADER TAKEN FROM THE SECOND PHA CODE
-# ============================================================
+# =========================================================
+# DARK INDUSTRIAL 3D HEADER
+# =========================================================
 
 header_html = """
 <!DOCTYPE html>
@@ -1288,8 +935,13 @@ body {
 }
 
 body {
-    background: #D0DBE3;
+    background: #06111f;
 }
+
+
+/* =====================================================
+   MAIN HEADER FRAME
+   ===================================================== */
 
 .header {
 
@@ -1300,36 +952,36 @@ body {
 
     overflow: hidden;
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
     background:
+
         radial-gradient(
             ellipse at center,
-            rgba(55, 99, 130, .28) 0%,
-            rgba(232, 240, 246, .68) 45%,
-            rgba(248, 251, 253, .90) 100%
-        ),
-
-        linear-gradient(
-            180deg,
-            #E7EEF3 0%,
-            #D2DEE7 100%
+            rgba(15,91,150,.32) 0%,
+            rgba(5,29,52,.96) 48%,
+            #020b16 100%
         );
 
     border-top:
-        2px solid #557A95;
+        1px solid #238ed8;
 
     border-bottom:
-        3px solid #476A84;
+        2px solid #0a83d0;
 
     box-shadow:
-        0 0 18px rgba(36, 91, 130, .16);
+
+        0 0 0 1px rgba(0,153,255,.18),
+
+        0 5px 18px
+        rgba(0,0,0,.42),
+
+        inset 0 1px 0
+        rgba(255,255,255,.08);
 }
 
 
-/* TECH DOTS */
+/* =====================================================
+   SUBTLE TECH GRID
+   ===================================================== */
 
 .header::before {
 
@@ -1339,21 +991,28 @@ body {
 
     inset: 0;
 
-    background-image:
-        radial-gradient(
-            circle,
-            rgba(36, 91, 130, .14) 1.3px,
-            transparent 1.5px
+    background:
+
+        linear-gradient(
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
+        ),
+
+        linear-gradient(
+            90deg,
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
         );
 
-    background-size:
-        15px 15px;
+    background-size: 26px 26px;
 
-    opacity: .55;
+    opacity: .75;
 }
 
 
-/* SIDE INDUSTRIAL BLUE ANGLES */
+/* =====================================================
+   BLUE SIDE LIGHT
+   ===================================================== */
 
 .header::after {
 
@@ -1366,26 +1025,20 @@ body {
     background:
 
         linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(36, 91, 130, .11) 7% 8%,
-            transparent 8% 11%,
-            rgba(36, 91, 130, .07) 11% 12%,
-            transparent 12%
-        ),
-
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(36, 91, 130, .11) 7% 8%,
-            transparent 8% 11%,
-            rgba(36, 91, 130, .07) 11% 12%,
-            transparent 12%
+            90deg,
+            rgba(0,137,255,.20),
+            transparent 14%,
+            transparent 86%,
+            rgba(0,137,255,.20)
         );
+
+    pointer-events: none;
 }
 
 
-/* INDUSTRIAL SVG BACKGROUND */
+/* =====================================================
+   INDUSTRIAL BACKGROUND
+   ===================================================== */
 
 .industrial {
 
@@ -1393,320 +1046,495 @@ body {
 
     left: 0;
     right: 0;
-
     bottom: 0;
 
     width: 100%;
-    height: 145px;
-
-    opacity: .75;
+    height: 100px;
 
     z-index: 1;
+
+    opacity: .72;
 }
 
 .industrial .steel {
-    fill: #8295A4;
-    stroke: #5D7385;
-    stroke-width: 1.5;
+
+    fill: #102b43;
+
+    stroke: #2675a8;
+
+    stroke-width: 1.3;
 }
 
-.industrial .light {
+.industrial .highlight {
+
     fill: none;
-    stroke: #5E829D;
-    stroke-width: 1.2;
+
+    stroke: #49b8ff;
+
+    stroke-width: 1.15;
+
     opacity: .65;
 }
 
-.industrial .window {
-    fill: #7198B2;
-    opacity: .75;
+.industrial .warm {
+
+    fill: #e9a63a;
+
+    opacity: .82;
 }
 
-.hex {
+.industrial .glass {
+
+    fill: #0b5c91;
+
+    stroke: #4cbcff;
+
+    stroke-width: .7;
+
+    opacity: .55;
+}
+
+.tech {
+
     fill: none;
-    stroke: #7C9CAF;
+
+    stroke: #238bd0;
+
     stroke-width: 1;
-    opacity: .35;
+
+    opacity: .25;
 }
 
 
-/* CONTENT */
+/* =====================================================
+   SIDE FADE
+   ===================================================== */
 
-.content {
-
-    position: relative;
-
-    z-index: 8;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    text-align: center;
-}
-
-
-/* PSM DASHBOARD */
-
-.title {
-
-    color: #163A52;
-
-    font-size: 24px;
-
-    font-weight: 950;
-
-    letter-spacing: 5px;
-
-    line-height: 1;
-
-    margin-bottom: 5px;
-
-    text-shadow:
-        0 2px 7px rgba(0,0,0,.65);
-}
-
-
-/* PILLAR PHA */
-
-.pillar {
-
-    position: relative;
-
-    width: 560px;
-
-    height: 66px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #F5F8FA 0%,
-            #E1EAF0 100%
-        );
-
-    border:
-        1px solid #A8BDCC;
-
-    border-radius:
-        14px;
-
-    color: #245B82;
-
-    font-size: 42px;
-
-    font-weight: 950;
-
-    letter-spacing: 1px;
-
-    box-shadow:
-
-        0 0 18px
-        rgba(36, 91, 130, .13),
-
-        inset 0 0 20px
-        rgba(89, 124, 94, .08);
-}
-
-.pillar::before,
-.pillar::after {
+.side-fade {
 
     position: absolute;
 
-    top: 50%;
-
-    transform:
-        translateY(-50%);
-
-    color: #245B82;
-
-    font-size: 21px;
-
-    font-weight: 950;
-
-    letter-spacing: -5px;
-
-    text-shadow:
-        0 0 8px rgba(36,140,210,.45);
-}
-
-.pillar::before {
-
-    content: "◀◀";
-
-    left: 17px;
-}
-
-.pillar::after {
-
-    content: "▶▶";
-
-    right: 17px;
-}
-
-
-/* SUBTITLE */
-
-.subtitle {
-
-    margin-top: 7px;
-
-    height: 25px;
-
-    min-width: 700px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    padding: 4px 30px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #245B82,
-            #557B96,
-            #245B82
-        );
-
-    border:
-        1px solid #A8BDCC;
-
-    border-radius:
-        7px;
-
-    color: #FFFFFF;
-
-    font-size: 10px;
-
-    font-weight: 900;
-
-    letter-spacing: 1.8px;
-
-    box-shadow:
-        0 0 8px rgba(36, 91, 130, .10);
-}
-
-
-/* TOP BLUE ENERGY LINE */
-
-.top-line {
-
-    position: absolute;
+    z-index: 3;
 
     top: 0;
-
-    left: 24%;
-
-    width: 52%;
-
-    height: 3px;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #6C91AB 18%,
-            #FFFFFF 50%,
-            #6C91AB 82%,
-            transparent
-        );
-
-    box-shadow:
-        0 0 10px #6C91AB,
-        0 0 22px rgba(36,140,210,.55);
-}
-
-
-/* ANIMATED BOTTOM SCAN */
-
-.scan {
-
-    position: absolute;
-
-    z-index: 12;
-
     bottom: 0;
 
-    left: -16%;
+    width: 24%;
 
-    width: 16%;
+    pointer-events: none;
+}
 
-    height: 4px;
+.side-fade.left {
+
+    left: 0;
 
     background:
         linear-gradient(
             90deg,
-            transparent,
-            #6C91AB,
-            #FFFFFF,
-            #6C91AB,
+            rgba(1,8,18,.74),
             transparent
         );
-
-    box-shadow:
-        0 0 10px #6C91AB,
-        0 0 24px rgba(36,140,210,.55);
-
-    animation:
-        scanline 3s linear infinite;
 }
 
-@keyframes scanline {
+.side-fade.right {
 
-    0% {
-        left: -16%;
-    }
+    right: 0;
 
-    100% {
-        left: 100%;
-    }
+    background:
+        linear-gradient(
+            270deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
 }
 
 
-/* CORNER BLUE LIGHTS */
+/* =====================================================
+   CENTRAL 3D TITLE PLATE
+   ===================================================== */
 
-.corner-light {
+.title-plate {
 
     position: absolute;
 
     z-index: 10;
 
-    width: 110px;
+    left: 50%;
+    top: 50%;
 
-    height: 3px;
+    transform:
+        translate(-50%, -50%);
+
+    width:
+        min(75%, 1000px);
+
+    height:
+        72px;
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
 
     background:
+
+        linear-gradient(
+            180deg,
+            #124e80 0%,
+            #07345f 45%,
+            #031e3d 100%
+        );
+
+    border:
+        2px solid #78cfff;
+
+    border-radius:
+        15px;
+
+    box-shadow:
+
+        0 0 0 3px rgba(6,36,65,.92),
+
+        0 0 0 5px rgba(105,183,229,.55),
+
+        0 8px 20px
+        rgba(0,0,0,.52),
+
+        0 0 22px
+        rgba(0,139,255,.42),
+
+        inset 0 2px 0
+        rgba(255,255,255,.28),
+
+        inset 0 -8px 15px
+        rgba(0,0,0,.24);
+}
+
+
+/* =====================================================
+   METALLIC BEVEL
+   ===================================================== */
+
+.title-plate::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: -10px;
+
+    z-index: -1;
+
+    border-radius:
+        20px;
+
+    border:
+        5px solid transparent;
+
+    background:
+
+        linear-gradient(
+            145deg,
+            #f5fbff 0%,
+            #7d9bad 16%,
+            #e7f0f5 28%,
+            #536d7e 48%,
+            #d8e7ef 68%,
+            #668092 82%,
+            #f5fbff 100%
+        ) border-box;
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+
+    -webkit-mask-composite:
+        xor;
+
+    mask-composite:
+        exclude;
+
+    box-shadow:
+        0 0 10px rgba(112,199,255,.35);
+}
+
+
+/* =====================================================
+   BLUE INNER LIGHT
+   ===================================================== */
+
+.title-plate::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 13px;
+    right: 13px;
+    top: 6px;
+
+    height: 2px;
+
+    border-radius: 10px;
+
+    background:
+
         linear-gradient(
             90deg,
             transparent,
-            #6C91AB,
+            #50c8ff 18%,
+            #d8f5ff 50%,
+            #50c8ff 82%,
             transparent
         );
 
     box-shadow:
-        0 0 10px #6C91AB;
+        0 0 8px
+        rgba(55,190,255,.72);
 }
 
-.corner-left {
-    left: 7%;
-    top: 7px;
+
+/* =====================================================
+   TITLE
+   ===================================================== */
+
+.title-text {
+
+    position: relative;
+
+    z-index: 12;
+
+    color:
+        #ffc400;
+
+    font-size:
+        clamp(30px, 3.2vw, 54px);
+
+    font-weight:
+        950;
+
+    letter-spacing:
+        1px;
+
+    line-height:
+        1;
+
+    text-align:
+        center;
+
+    text-shadow:
+
+        0 2px 0 #8c5f00,
+
+        0 3px 5px
+        rgba(0,0,0,.65),
+
+        0 0 12px
+        rgba(255,194,0,.22);
 }
 
-.corner-right {
-    right: 7%;
-    top: 7px;
+
+/* =====================================================
+   NAVIGATION ARROWS
+   ===================================================== */
+
+.nav-arrow {
+
+    position:
+        absolute;
+
+    z-index:
+        13;
+
+    top:
+        50%;
+
+    transform:
+        translateY(-50%);
+
+    color:
+        #54c9ff;
+
+    font-size:
+        32px;
+
+    line-height:
+        1;
+
+    font-weight:
+        950;
+
+    text-shadow:
+
+        0 0 7px
+        rgba(40,187,255,.9),
+
+        0 2px 2px
+        rgba(0,0,0,.65);
+}
+
+.nav-left {
+    left: 28px;
+}
+
+.nav-right {
+    right: 28px;
+}
+
+
+/* =====================================================
+   CORNER ARMOUR
+   ===================================================== */
+
+.corner {
+
+    position:
+        absolute;
+
+    z-index:
+        9;
+
+    width:
+        180px;
+
+    height:
+        35px;
+
+    border:
+        2px solid #168bd4;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(11,82,135,.85),
+            rgba(4,27,49,.2)
+        );
+
+    box-shadow:
+        0 0 12px
+        rgba(0,133,255,.24),
+
+        inset 0 1px 0
+        rgba(255,255,255,.16);
+}
+
+.corner.left {
+
+    left:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(-38deg);
+}
+
+.corner.right {
+
+    right:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(38deg);
+}
+
+
+/* =====================================================
+   TOP METAL RAIL
+   ===================================================== */
+
+.top-rail {
+
+    position:
+        absolute;
+
+    z-index:
+        11;
+
+    left:
+        31%;
+
+    right:
+        31%;
+
+    top:
+        3px;
+
+    height:
+        5px;
+
+    border-radius:
+        10px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            transparent,
+            #7594a7 10%,
+            #eef8ff 35%,
+            #4c728b 50%,
+            #eef8ff 65%,
+            #7594a7 90%,
+            transparent
+        );
+
+    box-shadow:
+        0 0 9px
+        rgba(52,164,230,.55);
+}
+
+
+/* =====================================================
+   BOTTOM BLUE ENERGY LINE
+   ===================================================== */
+
+.energy-line {
+
+    position:
+        absolute;
+
+    z-index:
+        15;
+
+    left:
+        0;
+
+    bottom:
+        0;
+
+    width:
+        100%;
+
+    height:
+        3px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            #07548d 0%,
+            #0ca6ff 25%,
+            #ffffff 50%,
+            #0ca6ff 75%,
+            #07548d 100%
+        );
+
+    box-shadow:
+
+        0 0 7px
+        #008dff,
+
+        0 0 18px
+        rgba(0,141,255,.75);
 }
 
 </style>
@@ -1716,181 +1544,267 @@ body {
 
 <div class="header">
 
-    <div class="top-line"></div>
+    <div class="corner left"></div>
+    <div class="corner right"></div>
 
-    <div class="corner-light corner-left"></div>
-    <div class="corner-light corner-right"></div>
+    <div class="top-rail"></div>
 
-    <svg class="industrial"
-         viewBox="0 0 1672 145"
-         preserveAspectRatio="none"
-         aria-hidden="true">
 
-        <!-- LEFT TOWER -->
+    <svg
+        class="industrial"
+        viewBox="0 0 1672 145"
+        preserveAspectRatio="none"
+        aria-hidden="true">
+
+        <!-- LEFT INDUSTRIAL PLANT -->
+
         <g>
-            <rect class="steel"
-                  x="85" y="24"
-                  width="34" height="116"
-                  rx="4"/>
 
             <rect class="steel"
-                  x="91" y="9"
-                  width="22" height="18"/>
+                  x="48" y="58"
+                  width="22" height="82"
+                  rx="3"/>
 
             <rect class="steel"
-                  x="96" y="0"
-                  width="12" height="12"/>
+                  x="82" y="40"
+                  width="34" height="100"
+                  rx="5"/>
 
-            <path class="light"
-                  d="M102 0 L102 140
-                     M87 55 L117 55
-                     M87 78 L117 78
-                     M87 103 L117 103"/>
+            <rect class="steel"
+                  x="88" y="23"
+                  width="22" height="19"/>
 
-            <circle class="window"
-                    cx="102" cy="43" r="3"/>
-            <circle class="window"
-                    cx="102" cy="67" r="3"/>
-            <circle class="window"
-                    cx="102" cy="91" r="3"/>
+            <rect class="steel"
+                  x="93" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="99" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M99 10 V140
+                    M84 62 H114
+                    M84 86 H114
+                    M84 110 H114
+                  "/>
+
+            <rect class="steel"
+                  x="137" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M137 91 H189
+                    M137 114 H189
+                  "/>
+
+            <circle class="glass"
+                    cx="163" cy="102" r="5"/>
+
         </g>
 
-        <!-- LEFT STACK -->
+
+        <!-- LEFT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M0 121
+                H310
+                V92
+                H395
+            "/>
+
+            <path d="
+                M35 132
+                H270
+                V108
+                H420
+            "/>
+
+            <path d="
+                M170 77
+                H285
+                V52
+                H380
+            "/>
+
+            <path d="
+                M247 140
+                V70
+                H335
+            "/>
+
+        </g>
+
+
+        <!-- RIGHT INDUSTRIAL PLANT -->
+
         <g>
-            <rect class="steel"
-                  x="150" y="52"
-                  width="17" height="88"/>
 
             <rect class="steel"
-                  x="146" y="48"
-                  width="25" height="8"/>
+                  x="1430" y="57"
+                  width="22" height="83"
+                  rx="3"/>
 
-            <path class="light"
-                  d="M158 52 L158 140"/>
+            <rect class="steel"
+                  x="1470" y="40"
+                  width="34" height="100"
+                  rx="5"/>
+
+            <rect class="steel"
+                  x="1476" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="1481" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="1487" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M1487 10 V140
+                    M1472 62 H1502
+                    M1472 86 H1502
+                    M1472 110 H1502
+                  "/>
+
+            <rect class="steel"
+                  x="1533" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M1533 91 H1585
+                    M1533 114 H1585
+                  "/>
+
+            <circle class="glass"
+                    cx="1559" cy="102" r="5"/>
+
         </g>
 
-        <!-- LEFT PIPE NETWORK -->
-        <g class="light">
-            <path d="M55 113 H245 V85 H320"/>
-            <path d="M120 125 H260 V105 H355"/>
-            <path d="M180 96 H285 V65 H340"/>
-            <path d="M215 130 V70 H280"/>
+
+        <!-- RIGHT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M1672 121
+                H1362
+                V92
+                H1277
+            "/>
+
+            <path d="
+                M1637 132
+                H1402
+                V108
+                H1252
+            "/>
+
+            <path d="
+                M1502 77
+                H1387
+                V52
+                H1292
+            "/>
+
+            <path d="
+                M1425 140
+                V70
+                H1337
+            "/>
+
         </g>
 
-        <!-- LEFT VESSEL -->
-        <g>
-            <rect class="steel"
-                  x="260" y="64"
-                  width="58" height="76"
-                  rx="26"/>
 
-            <path class="light"
-                  d="M260 82 H318
-                     M260 107 H318"/>
+        <!-- TECHNICAL HEXAGONS -->
 
-            <circle class="window"
-                    cx="289" cy="95" r="4"/>
-        </g>
+        <g class="tech">
 
-        <!-- RIGHT TOWER -->
-        <g>
-            <rect class="steel"
-                  x="1512" y="25"
-                  width="36" height="115"
-                  rx="4"/>
+            <path d="
+                M270 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <rect class="steel"
-                  x="1518" y="9"
-                  width="24" height="18"/>
+            <path d="
+                M309 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <rect class="steel"
-                  x="1523" y="0"
-                  width="14" height="12"/>
+            <path d="
+                M1366 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <path class="light"
-                  d="M1530 0 L1530 140
-                     M1514 54 L1546 54
-                     M1514 79 L1546 79
-                     M1514 103 L1546 103"/>
-
-            <circle class="window"
-                    cx="1530" cy="42" r="3"/>
-            <circle class="window"
-                    cx="1530" cy="66" r="3"/>
-            <circle class="window"
-                    cx="1530" cy="90" r="3"/>
-        </g>
-
-        <!-- RIGHT STACK -->
-        <g>
-            <rect class="steel"
-                  x="1450" y="54"
-                  width="18" height="86"/>
-
-            <rect class="steel"
-                  x="1446" y="49"
-                  width="26" height="8"/>
-
-            <path class="light"
-                  d="M1459 54 L1459 140"/>
-        </g>
-
-        <!-- RIGHT PIPE NETWORK -->
-        <g class="light">
-            <path d="M1620 112 H1425 V85 H1350"/>
-            <path d="M1575 125 H1410 V104 H1330"/>
-            <path d="M1500 95 H1390 V65 H1335"/>
-            <path d="M1465 130 V70 H1390"/>
-        </g>
-
-        <!-- RIGHT VESSEL -->
-        <g>
-            <rect class="steel"
-                  x="1350" y="64"
-                  width="58" height="76"
-                  rx="26"/>
-
-            <path class="light"
-                  d="M1350 82 H1408
-                     M1350 107 H1408"/>
-
-            <circle class="window"
-                    cx="1379" cy="95" r="4"/>
-        </g>
-
-        <!-- CENTRAL LOW PIPE -->
-        <g class="light">
-            <path d="M0 137 H1672"/>
-            <path d="M0 126 H420 V116 H650"/>
-            <path d="M1672 126 H1250 V116 H1020"/>
-        </g>
-
-        <!-- HEXAGONAL TECHNICAL MOTIFS -->
-        <g class="hex">
-
-            <path d="M250 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M282 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M1335 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M1370 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
+            <path d="
+                M1405 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
         </g>
 
     </svg>
 
 
-    <div class="content">
+    <div class="side-fade left"></div>
+    <div class="side-fade right"></div>
 
-        <div class="title">
 
+    <!-- CENTRAL 3D TITLE -->
+
+    <div class="title-plate">
+
+        <div class="nav-arrow nav-left">
+            ◀◀
         </div>
 
-        <div class="pillar">
-            PILLAR: MOC
+        <div class="title-text">
+            Management of Change (MOC)
+        </div>
+
+        <div class="nav-arrow nav-right">
+            ▶▶
         </div>
 
     </div>
 
-    <div class="scan"></div>
+
+    <div class="energy-line"></div>
 
 </div>
 
@@ -1903,106 +1817,160 @@ components.html(
     height=100,
     scrolling=False
 )
+# =========================================================
+# RESET FILTER CALLBACK
+# =========================================================
+
+def reset_moc_filters():
+
+    st.session_state.status_filter = "All"
+
+    st.session_state.page_number = 1
+
+    st.session_state.department_selector = "All Departments"
+
+    st.session_state.month_selector = "All Months"
 
 
-# ============================================================
-# YEAR / MONTH / DEPARTMENT CONTROLS
-# REFRESH BOX REMOVED
-# ============================================================
-header_month, header_department = st.columns(
-    [1.0, 1.0],
+# =========================================================
+# FILTER SECTION
+# =========================================================
+
+filter_month, filter_department, filter_reset = st.columns(
+    [1.0, 1.0, 0.34],
     gap="small"
 )
 
 
-# ============================================================
-# YEAR
-# ============================================================
-
-# ============================================================
+# =========================================================
 # MONTH
-# ============================================================
+# =========================================================
 
-with header_month:
+with filter_month:
+
+    st.markdown(
+        "<div class='month-filter-anchor' style='height:22px;'></div>",
+        unsafe_allow_html=True
+    )
+
+    request_dates_all = pd.to_datetime(
+        df["Request Date"],
+        errors="coerce"
+    )
+
+    month_periods = sorted(
+        request_dates_all
+        .dropna()
+        .dt.to_period("M")
+        .unique(),
+        reverse=True
+    )
 
     month_options = [
-        "All Months",
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December"
+        "All Months"
+    ]
+
+    month_options += [
+        period.strftime("%B %Y")
+        for period in month_periods
     ]
 
     selected_month = st.selectbox(
         "Month",
         month_options,
-        index=0,
-        label_visibility="collapsed"
+        key="month_selector"
     )
 
 
-# ============================================================
+# =========================================================
 # DEPARTMENT
-# ============================================================
+# =========================================================
 
-with header_department:
+with filter_department:
 
-    department_options = sorted(
+    st.markdown(
+        "<div class='department-filter-anchor' style='height:22px;'></div>",
+        unsafe_allow_html=True
+    )
+
+    department_values = (
         df["Department"]
         .fillna("")
         .astype(str)
         .str.strip()
-        .loc[
-            lambda s: s != ""
-        ]
-        .unique()
-        .tolist()
     )
+
+    department_values = department_values[
+        (department_values != "")
+        &
+        (department_values.str.lower() != "nan")
+    ]
 
     department_options = [
         "All Departments"
-    ] + department_options
+    ] + sorted(
+        department_values.unique().tolist(),
+        key=lambda x: x.lower()
+    )
 
     selected_department = st.selectbox(
         "Department",
         department_options,
-        index=0,
-        label_visibility="collapsed"
+        key="department_selector"
     )
 
 
-# ============================================================
-# FILTER BY YEAR / MONTH / DEPARTMENT
-# ============================================================
+# =========================================================
+# RESET FILTER
+# =========================================================
 
-view_df = df.copy()
+with filter_reset:
 
+    st.markdown(
+        "<div style='height:46px;'></div>",
+        unsafe_allow_html=True
+    )
+
+    st.button(
+        "↻ Reset Filters",
+        use_container_width=True,
+        key="reset_moc_filters_button",
+        on_click=reset_moc_filters
+    )
+
+
+# =========================================================
+# FILTER DATA
+# =========================================================
+
+filtered_df = df.copy()
+
+
+# ---------------------------------------------------------
+# MONTH FILTER
+# ---------------------------------------------------------
 
 if selected_month != "All Months":
 
-    selected_month_number = month_options.index(
-        selected_month
+    request_dates = pd.to_datetime(
+        filtered_df["Request Date"],
+        errors="coerce"
     )
 
-    view_df = view_df[
-        view_df["Request Date"].dt.month
-        ==
-        selected_month_number
+    filtered_df = filtered_df[
+        request_dates.dt.strftime("%B %Y")
+        == selected_month
     ]
 
 
+# ---------------------------------------------------------
+# DEPARTMENT FILTER
+# ---------------------------------------------------------
+
 if selected_department != "All Departments":
 
-    view_df = view_df[
-        view_df["Department"]
+    filtered_df = filtered_df[
+        filtered_df["Department"]
         .fillna("")
         .astype(str)
         .str.strip()
@@ -2011,35 +1979,69 @@ if selected_department != "All Departments":
     ]
 
 
-# ============================================================
-# KPI CALCULATIONS
-# ============================================================
+# ---------------------------------------------------------
+# STATUS CLEANING
+# ---------------------------------------------------------
 
-# LIVE KPI CALCULATION FROM GOOGLE SHEET STATUS
-# Change the Status in Google Sheet and click Refresh.
-total_moc = int(len(view_df))
+filtered_df[STATUS_COLUMN] = (
+
+    filtered_df[STATUS_COLUMN]
+    .fillna("")
+    .astype(str)
+    .str.strip()
+    .str.lower()
+
+)
+
+
+# =========================================================
+# KPI CALCULATION
+# =========================================================
+
+total_moc = len(filtered_df)
+
 
 open_moc = int(
-    (view_df["Status Display"] == "Open").sum()
+    (
+        filtered_df[STATUS_COLUMN]
+        .isin(
+            [
+                "open",
+                "ongoing",
+                "in progress"
+            ]
+        )
+    ).sum()
 )
+
 
 closed_moc = int(
-    (view_df["Status Display"] == "Closed").sum()
+    (
+        filtered_df[STATUS_COLUMN]
+        .isin(
+            [
+                "closed",
+                "completed"
+            ]
+        )
+    ).sum()
 )
 
-closure_percentage = (
-    round(
-        (closed_moc / total_moc) * 100,
-        2
-    )
-    if total_moc > 0
+
+moc_closure_percentage = (
+
+    closed_moc / total_moc * 100
+
+    if total_moc
+
     else 0
+
 )
 
 
-# ============================================================
-# KPI ROW
-# ============================================================
+# =========================================================
+# KPI CARDS
+# =========================================================
 
 k1, k2, k3, k4 = st.columns(
     4,
@@ -2047,268 +2049,113 @@ k1, k2, k3, k4 = st.columns(
 )
 
 
-# ============================================================
-# TOTAL
-# ============================================================
+cards = [
 
-with k1:
+    (
+        "TOTAL MOC",
+        total_moc,
+        "",
+        "blue",
+        "total"
+    ),
 
-    st.html(
-        f"""
-<div class="kpi-card kpi-blue">
+    (
+        "OPEN MOC",
+        open_moc,
+        "",
+        "orange",
+        "ongoing"
+    ),
 
-    <div class="kpi-title">
-        Total MOC
-    </div>
+    (
+        "CLOSED MOC",
+        closed_moc,
+        "",
+        "green",
+        "completed"
+    ),
 
-    <div class="kpi-number">
-        {total_moc:,}
-    </div>
+    (
+        "MOC CLOSURE %",
+        f"{moc_closure_percentage:.1f}%",
+        "",
+        "green",
+        "closure"
+    )
 
-    <div style="
-        position:relative;
-        z-index:2;
-        margin-top:6px;
-        color:#667085;
-        font-size:10px;
-    ">
-        Total Changes
-    </div>
-
-    <div class="kpi-icon">
-        📄
-    </div>
-
-    <div class="kpi-line"></div>
-
-</div>
-        """
-)
-
-
-# ============================================================
-# OPEN
-# ============================================================
-
-with k2:
-
-    st.html(
-        f"""
-<div class="kpi-card kpi-green">
-
-    <div class="kpi-title">
-        Open MOC
-    </div>
-
-    <div class="kpi-number">
-        {open_moc:,}
-    </div>
-
-    <div style="
-        position:relative;
-        z-index:2;
-        margin-top:6px;
-        color:#667085;
-        font-size:10px;
-    ">
-        In Progress
-    </div>
-
-    <div class="kpi-icon">
-        📁
-    </div>
-
-    <div class="kpi-line"></div>
-
-</div>
-        """
-)
-
-
-# ============================================================
-# CLOSED
-# ============================================================
-
-with k3:
-
-    st.html(
-        f"""
-<div class="kpi-card kpi-red">
-
-    <div class="kpi-title">
-        Closed MOC
-    </div>
-
-    <div class="kpi-number">
-        {closed_moc:,}
-    </div>
-
-    <div style="
-        position:relative;
-        z-index:2;
-        margin-top:6px;
-        color:#667085;
-        font-size:10px;
-    ">
-        Completed
-    </div>
-
-    <div class="kpi-icon">
-        ✓
-    </div>
-
-    <div class="kpi-line"></div>
-
-</div>
-        """
-)
-
-
-# ============================================================
-# CLOSURE
-# ============================================================
-
-with k4:
-
-    st.html(
-        f"""
-<div class="kpi-card kpi-orange">
-
-    <div class="kpi-title">
-        MOC Closure %
-    </div>
-
-    <div class="kpi-number">
-        {closure_percentage:.2f}%
-    </div>
-
-    <div style="
-        position:relative;
-        z-index:2;
-        margin-top:6px;
-        color:#667085;
-        font-size:10px;
-    ">
-        Overall Closure
-    </div>
-
-    <div class="kpi-icon">
-        ◔
-    </div>
-
-    <div class="kpi-line"></div>
-
-</div>
-        """
-)
-
-
-# ============================================================
-# MONTH-WISE DATA
-# ============================================================
-
-months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec"
 ]
 
 
-monthly_counts = (
-    view_df
-    .dropna(
-        subset=["Request Date"]
-    )
-    .groupby(
-        view_df[
-            "Request Date"
-        ].dt.month
-    )
-    .size()
-)
+for column, card in zip(
+    [k1, k2, k3, k4],
+    cards
+):
 
+    label, value, description, color, extra = card
 
-monthly_values = [
+    with column:
 
-    int(
-        monthly_counts.get(
-            month,
-            0
+        st.html(
+            f"""
+<div class="kpi-card {extra}">
+
+    <div class="kpi-content">
+
+        <div class="kpi-label">
+            {label}
+        </div>
+
+        <div class="kpi-value {color}">
+            {value}
+        </div>
+
+        <div class="kpi-description">
+            {description}
+        </div>
+
+    </div>
+
+</div>
+"""
         )
-    )
-
-    for month in range(
-        1,
-        13
-    )
-]
 
 
-# ============================================================
-# DEPARTMENT DATA
-# ============================================================
-
-department_data = (
-    view_df
-    .groupby(
-        "Department"
-    )
-    .size()
-    .reset_index(
-        name="Count"
-    )
-    .sort_values(
-        "Count",
-        ascending=False
-    )
-)
-
-
-# ============================================================
-# MOC REGISTER HEADER
-# ============================================================
+# =========================================================
+# MOC REGISTER TITLE
+# =========================================================
 
 st.html(
     """
-<div class="register-card">
+<div class="register-wrap">
 
-    <div class="register-header">
+    <div class="register-title">
 
         <span class="register-icon">
             ▣
         </span>
 
-        MOC Register
+        MOC REGISTER
 
     </div>
 
 </div>
-    """
+"""
 )
 
 
-# ============================================================
-# REGISTER FILTERS
-# ============================================================
+# =========================================================
+# MOC REGISTER TOOLBAR
+# =========================================================
 
-search_col, status_col, type_col, category_col, new_col = st.columns(
-    [2.4, 0.9, 1.05, 1.05, 0.9],
+search_col, all_col, closed_col, open_col, refresh_col = st.columns(
+    [2.8, 0.55, 0.85, 0.75, 1.05],
     gap="small"
 )
 
 
-# ============================================================
+# =========================================================
 # SEARCH
-# ============================================================
+# =========================================================
 
 with search_col:
 
@@ -2316,746 +2163,640 @@ with search_col:
 
         "Search",
 
-        placeholder="Search MOC...",
+        placeholder=(
+            "Search MOC No., Department, "
+            "Section, Requestor, Description..."
+        ),
 
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+
+        key="moc_search"
+
     )
 
 
-# ============================================================
-# STATUS FILTER
-# ============================================================
+# =========================================================
+# ALL
+# =========================================================
 
-with status_col:
+with all_col:
 
-    status_filter = st.selectbox(
+    if st.button(
+        "All",
+        use_container_width=True,
+        key="moc_all"
+    ):
 
-        "Status",
+        st.session_state.status_filter = "All"
 
-        [
-            "All",
-            "Open",
-            "Closed"
-        ],
+        st.session_state.page_number = 1
 
-        label_visibility="collapsed"
-    )
-
-
-# ============================================================
-# TYPE FILTER
-# ============================================================
-
-with type_col:
-
-    type_options = [
-        "All"
-    ] + sorted(
-
-        view_df[
-            "Type Display"
-        ]
-        .dropna()
-        .unique()
-        .tolist()
-    )
+        st.rerun()
 
 
-    type_filter = st.selectbox(
+# =========================================================
+# CLOSED
+# =========================================================
 
-        "Type",
+with closed_col:
 
-        type_options,
+    if st.button(
+        "Closed",
+        use_container_width=True,
+        key="moc_closed"
+    ):
 
-        label_visibility="collapsed"
-    )
+        st.session_state.status_filter = "Closed"
 
+        st.session_state.page_number = 1
 
-# ============================================================
-# CATEGORY FILTER
-# ============================================================
-
-with category_col:
-
-    category_options = [
-        "All"
-    ] + sorted(
-
-        view_df[
-            "Category Display"
-        ]
-        .dropna()
-        .unique()
-        .tolist()
-    )
+        st.rerun()
 
 
-    category_filter = st.selectbox(
+# =========================================================
+# OPEN
+# =========================================================
 
-        "Category",
+with open_col:
 
-        category_options,
+    if st.button(
+        "Open",
+        use_container_width=True,
+        key="moc_open"
+    ):
 
-        label_visibility="collapsed"
-    )
+        st.session_state.status_filter = "Open"
 
+        st.session_state.page_number = 1
 
-# ============================================================
-# NEW MOC
-# ============================================================
-
-with new_col:
-
-    st.button(
-        "＋ New MOC",
-        use_container_width=True
-    )
+        st.rerun()
 
 
-# ============================================================
-# REGISTER FILTERING
-# ============================================================
+# =========================================================
+# REFRESH
+# =========================================================
 
-register_df = view_df.copy()
+with refresh_col:
 
+    if st.button(
+        "↻ Refresh Data",
+        use_container_width=True,
+        key="moc_refresh"
+    ):
 
-if status_filter != "All":
+        st.cache_data.clear()
 
-    register_df = register_df[
-        register_df[
-            "Status Display"
-        ]
-        ==
-        status_filter
-    ]
-
-
-if type_filter != "All":
-
-    register_df = register_df[
-        register_df[
-            "Type Display"
-        ]
-        ==
-        type_filter
-    ]
+        st.rerun()
 
 
-if category_filter != "All":
+# =========================================================
+# SEARCH + STATUS FILTER
+# =========================================================
 
-    register_df = register_df[
-        register_df[
-            "Category Display"
-        ]
-        ==
-        category_filter
-    ]
+display_df = filtered_df.copy()
 
 
-# ============================================================
+# ---------------------------------------------------------
 # SEARCH
-# ============================================================
+# ---------------------------------------------------------
 
-if search_text:
+if search_text.strip():
 
-    query = (
-        search_text
-        .strip()
-        .lower()
-    )
+    q = search_text.strip().lower()
 
+    search_mask = (
 
-    searchable_columns = [
-
-        "MOC No",
-
-        "Department",
-
-        "Section",
-
-        "Requestor Name",
-
-        "Description of Change",
-
-        "Risk Level",
-
-        "Approval Status",
-
-        "Approved By",
-
-        "Status"
-
-    ]
-
-
-    mask = pd.Series(
-        False,
-        index=register_df.index
-    )
-
-
-    for column in searchable_columns:
-
-        mask |= (
-
-            register_df[
-                column
-            ]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(
-                query,
-                na=False
-            )
+        display_df["MOC No"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
         )
 
+        |
 
-    register_df = register_df[
-        mask
-    ]
+        display_df["Department"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
+        )
+
+        |
+
+        display_df["Section"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
+        )
+
+        |
+
+        display_df["Requestor Name"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
+        )
+
+        |
+
+        display_df["Description of Change"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
+        )
+
+        |
+
+        display_df["Status"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(
+            q,
+            regex=False
+        )
+
+    )
+
+    display_df = display_df[search_mask]
 
 
-# ============================================================
+# ---------------------------------------------------------
+# STATUS FILTER
+# ---------------------------------------------------------
+
+if st.session_state.status_filter != "All":
+
+    if st.session_state.status_filter == "Open":
+
+        display_df = display_df[
+            display_df[STATUS_COLUMN]
+            .isin(
+                [
+                    "open",
+                    "ongoing",
+                    "in progress"
+                ]
+            )
+        ]
+
+    elif st.session_state.status_filter == "Closed":
+
+        display_df = display_df[
+            display_df[STATUS_COLUMN]
+            .isin(
+                [
+                    "closed",
+                    "completed"
+                ]
+            )
+        ]
+
+
+# =========================================================
 # PAGINATION
-# ============================================================
+# =========================================================
 
-PAGE_SIZE = 5
+ROWS_PER_PAGE = 5
 
-
-total_records = len(
-    register_df
-)
-
+total_entries = len(display_df)
 
 total_pages = max(
-
     1,
-
     (
-        total_records
-        +
-        PAGE_SIZE
-        -
-        1
+        total_entries
+        + ROWS_PER_PAGE
+        - 1
     )
     //
-    PAGE_SIZE
+    ROWS_PER_PAGE
 )
 
 
-if "moc_page" not in st.session_state:
+if st.session_state.page_number > total_pages:
 
-    st.session_state.moc_page = 1
-
-
-if (
-    st.session_state.moc_page
-    >
-    total_pages
-):
-
-    st.session_state.moc_page = (
-        total_pages
-    )
+    st.session_state.page_number = total_pages
 
 
-page = st.session_state.moc_page
-
+page_number = st.session_state.page_number
 
 start_index = (
-    page - 1
-) * PAGE_SIZE
-
+    page_number - 1
+) * ROWS_PER_PAGE
 
 end_index = (
     start_index
-    +
-    PAGE_SIZE
+    + ROWS_PER_PAGE
 )
 
-
-page_df = register_df.iloc[
+page_df = display_df.iloc[
     start_index:end_index
-]
+].copy()
 
 
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
+# =========================================================
+# MOC TABLE HTML
+# =========================================================
 
-def safe_text(value):
+rows_html = """
 
-    if pd.isna(value):
+<div class="pt-table">
 
-        return ""
+    <div class="pt-row pt-header">
 
-    return html.escape(
-        str(value)
-    )
+        <div class="pt-cell">
+            MOC No.
+        </div>
 
+        <div class="pt-cell">
+            Department
+        </div>
 
-def type_pill(value):
+        <div class="pt-cell">
+            Section
+        </div>
 
-    text = safe_text(
-        value
-    )
+        <div class="pt-cell">
+            Requestor Name
+        </div>
 
-    lower = text.lower()
+        <div class="pt-cell">
+            Description of Change
+        </div>
 
+        <div class="pt-cell">
+            Status
+        </div>
 
-    if "permanent" in lower:
+        <div class="pt-cell">
+            MOC Document
+        </div>
 
-        css = "type-permanent"
+    </div>
 
-    elif "temporary" in lower:
-
-        css = "type-temporary"
-
-    elif "emergency" in lower:
-
-        css = "type-emergency"
-
-    else:
-
-        css = "type-other"
-
-
-    return (
-        f'<span class="type-pill {css}">'
-        f'{text}'
-        f'</span>'
-    )
-
-
-def category_pill(value):
-
-    text = safe_text(
-        value
-    )
-
-    lower = text.lower()
-
-
-    if "technology" in lower:
-
-        css = "cat-technology"
-
-    elif "personnel" in lower:
-
-        css = "cat-personnel"
-
-    elif "facility" in lower:
-
-        css = "cat-facility"
-
-    else:
-
-        css = "cat-other"
-
-
-    return (
-        f'<span class="category-pill {css}">'
-        f'{text}'
-        f'</span>'
-    )
-
-
-def status_pill(value):
-
-    text = safe_text(
-        value
-    )
-
-    lower = text.lower()
-
-
-    if lower == "open":
-
-        css = "status-open"
-
-    elif lower == "closed":
-
-        css = "status-closed"
-
-    else:
-
-        css = "status-other"
-
-
-    return (
-        f'<span class="status-pill {css}">'
-        f'{text}'
-        f'</span>'
-    )
-
-
-# ============================================================
-# BUILD REGISTER TABLE
-# ============================================================
-
-table_html = """
-
-<table class="moc-table">
-
-<colgroup>
-
-    <col style="width:12%">
-
-    <col style="width:12%">
-
-    <col style="width:24%">
-
-    <col style="width:11%">
-
-    <col style="width:11%">
-
-    <col style="width:9%">
-
-    <col style="width:10%">
-
-    <col style="width:11%">
-
-</colgroup>
-
-
-<thead>
-
-<tr>
-
-    <th>
-        Department
-    </th>
-
-    <th>
-        MOC No.
-    </th>
-
-    <th>
-        Description of Change
-    </th>
-
-    <th>
-        Type of MOC
-    </th>
-
-    <th>
-        Category
-    </th>
-
-    <th>
-        Status
-    </th>
-
-    <th>
-        MOC Document
-    </th>
-
-    <th>
-        Request Date
-    </th>
-
-</tr>
-
-</thead>
-
-
-<tbody>
 """
 
 
-# ============================================================
-# TABLE ROWS
-# ============================================================
+# =========================================================
+# BUILD TABLE ROWS
+# =========================================================
 
-for _, row in page_df.iterrows():
+for row_no, (_, row) in enumerate(
+    page_df.iterrows()
+):
 
-    link = str(
-        row[
-            "Attach MOC Softcopy Link"
-        ]
+    alt = (
+        " pt-alt"
+        if row_no % 2
+        else ""
+    )
+
+
+    moc_no = html.escape(
+        str(row["MOC No"]).strip()
+    )
+
+
+    department = html.escape(
+        str(row["Department"]).strip()
+    )
+
+
+    section = html.escape(
+        str(row["Section"]).strip()
+    )
+
+
+    requestor = html.escape(
+        str(row["Requestor Name"]).strip()
+    )
+
+
+    description = html.escape(
+        str(row["Description of Change"]).strip()
+    )
+
+
+    status = str(
+        row["Status"]
     ).strip()
 
 
-    # --------------------------------------------------------
-    # DOCUMENT
-    # --------------------------------------------------------
+    # -----------------------------------------------------
+    # STATUS
+    # -----------------------------------------------------
 
-    if link.lower() in [
-        "",
-        "nan",
-        "none"
+    if status.lower() in [
+        "closed",
+        "completed"
     ]:
 
-        document_html = (
-            '<span style="color:#98a2b3;">'
-            'No Link'
+        status_html = (
+            '<span class="status-completed">'
+            'CLOSED'
+            '</span>'
+        )
+
+    elif status.lower() in [
+        "open",
+        "ongoing",
+        "in progress"
+    ]:
+
+        status_html = (
+            '<span class="status-ongoing">'
+            'OPEN'
             '</span>'
         )
 
     else:
 
-        document_html = (
-
-            f'<a '
-
-            f'class="view-link" '
-
-            f'href="{safe_text(link)}" '
-
-            f'target="_blank">'
-
-            f'◉ View'
-
-            f'</a>'
+        status_html = (
+            '<span class="status-normal">'
+            +
+            html.escape(
+                status or "—"
+            )
+            +
+            '</span>'
         )
 
 
-    # --------------------------------------------------------
-    # REQUEST DATE
-    # --------------------------------------------------------
+    # -----------------------------------------------------
+    # DOCUMENT LINK
+    # -----------------------------------------------------
 
-    request_date = row[
-        "Request Date"
-    ]
+    document_link = str(
+        row["Attach MOC Softcopy Link"]
+    ).strip()
 
 
-    if pd.notna(
-        request_date
+    if (
+
+        document_link
+
+        and
+
+        document_link.lower()
+        not in [
+            "nan",
+            "none",
+            ""
+        ]
+
     ):
 
-        request_date_text = (
-            request_date
-            .strftime(
-                "%d-%m-%Y"
-            )
+        safe_link = html.escape(
+            document_link,
+            quote=True
         )
+
+        document_html = f"""
+
+        <a
+            href="{safe_link}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="action-view"
+        >
+            ◉ View
+        </a>
+
+        """
 
     else:
 
-        request_date_text = ""
+        document_html = """
+
+        <span style="
+            color:#9aa8b5;
+            font-weight:700;
+        ">
+            —
+        </span>
+
+        """
 
 
-    # --------------------------------------------------------
-    # TABLE ROW
-    # --------------------------------------------------------
+    # -----------------------------------------------------
+    # ROW
+    # -----------------------------------------------------
 
-    table_html += f"""
+    rows_html += f"""
 
-<tr>
+    <div class="pt-row{alt}">
 
-    <td>
-        {safe_text(row["Department"])}
-    </td>
+        <div class="pt-cell pt-left">
+            {moc_no}
+        </div>
 
+        <div class="pt-cell pt-left">
+            {department}
+        </div>
 
-    <td>
+        <div class="pt-cell pt-left">
+            {section}
+        </div>
 
-        <strong
-            style="color:#20365c;"
-        >
-            {safe_text(row["MOC No"])}
-        </strong>
+        <div class="pt-cell pt-left">
+            {requestor}
+        </div>
 
-    </td>
+        <div class="pt-cell pt-left">
+            {description}
+        </div>
 
+        <div class="pt-cell">
+            {status_html}
+        </div>
 
-    <td class="description">
+        <div class="pt-cell">
+            {document_html}
+        </div>
 
-        {safe_text(
-            row["Description of Change"]
-        )}
+    </div>
 
-    </td>
-
-
-    <td>
-
-        {type_pill(
-            row["Type Display"]
-        )}
-
-    </td>
-
-
-    <td>
-
-        {category_pill(
-            row["Category Display"]
-        )}
-
-    </td>
+    """
 
 
-    <td>
+rows_html += """
 
-        {status_pill(
-            row["Status Display"]
-        )}
-
-    </td>
-
-
-    <td>
-
-        {document_html}
-
-    </td>
-
-
-    <td>
-
-        {safe_text(
-            request_date_text
-        )}
-
-    </td>
-
-</tr>
+</div>
 
 """
 
 
-table_html += """
-
-</tbody>
-
-</table>
-
-"""
-
-
-# ============================================================
+# =========================================================
 # DISPLAY TABLE
-# ============================================================
+# =========================================================
 
 st.html(
-    table_html
+    f"""
+{rows_html}
+"""
 )
 
+# =========================================================
+# RECORD BAR + PAGINATION
+# FIXED HORIZONTAL LAYOUT
+# =========================================================
 
-# ============================================================
-# PAGINATION
-# ============================================================
+shown_from = start_index + 1 if total_entries else 0
+shown_to = min(end_index, total_entries)
 
-page_left, page_first, page_prev, page_next, page_right = st.columns(
-    [3.8, 0.45, 0.45, 0.45, 1.0],
+
+# ---------------------------------------------------------
+# MAIN PAGINATION ROW
+# ---------------------------------------------------------
+
+record_col, pagination_col = st.columns(
+    [4.8, 3.2],
     gap="small"
 )
 
 
-# ============================================================
-# PAGE INFO
-# ============================================================
+# =========================================================
+# RECORD COUNT - LEFT SIDE
+# =========================================================
 
-with page_left:
+with record_col:
 
-    first_record = (
-
-        start_index + 1
-
-        if total_records > 0
-
-        else 0
+    st.markdown(
+        f"""
+        <div class="record-count-box">
+            Showing {shown_from} to {shown_to} of {total_entries} entries
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
 
-    last_record = min(
-        end_index,
-        total_records
+# =========================================================
+# PAGINATION - RIGHT SIDE
+# =========================================================
+
+with pagination_col:
+
+    pg1, pg2, pg3, pg4, pg5, pg6, pg7 = st.columns(
+        [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
+        gap="small"
     )
 
 
-    st.html(
-        f"""
-        <div class="page-info">
+    # -----------------------------------------------------
+    # FIRST PAGE
+    # -----------------------------------------------------
 
-            Showing {first_record}
-            to {last_record}
-            of {total_records} entries
+    with pg1:
 
-        </div>
-        """
-)
+        if st.button(
+            "«",
+            key="page_first",
+            use_container_width=True
+        ):
 
+            st.session_state.page_number = 1
 
-# ============================================================
-# FIRST PAGE
-# ============================================================
-
-with page_first:
-
-    if st.button(
-        "«",
-        disabled=(
-            page <= 1
-        ),
-        key="moc_first"
-    ):
-
-        st.session_state.moc_page = 1
-
-        st.rerun()
+            st.rerun()
 
 
-# ============================================================
-# PREVIOUS
-# ============================================================
+    # -----------------------------------------------------
+    # PREVIOUS PAGE
+    # -----------------------------------------------------
 
-with page_prev:
+    with pg2:
 
-    if st.button(
-        "‹",
-        disabled=(
-            page <= 1
-        ),
-        key="moc_previous"
-    ):
+        if st.button(
+            "‹",
+            key="page_prev",
+            use_container_width=True
+        ):
 
-        st.session_state.moc_page -= 1
+            st.session_state.page_number = max(
+                1,
+                page_number - 1
+            )
 
-        st.rerun()
-
-
-# ============================================================
-# NEXT
-# ============================================================
-
-with page_next:
-
-    if st.button(
-        "›",
-        disabled=(
-            page >= total_pages
-        ),
-        key="moc_next"
-    ):
-
-        st.session_state.moc_page += 1
-
-        st.rerun()
+            st.rerun()
 
 
-# ============================================================
-# PAGE NUMBER
-# ============================================================
+    # -----------------------------------------------------
+    # CURRENT PAGE
+    # -----------------------------------------------------
 
-with page_right:
+    with pg3:
 
-    st.html(
-        f"""
-        <div
-            style="
-                text-align:right;
-                color:#667085;
-                font-size:10px;
-                padding-top:7px;
-            "
-        >
-            Page {page}
-            of
-            {total_pages}
-        </div>
-        """
+        st.markdown(
+            f"""
+            <div class="current-page">
+                {page_number}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+    # -----------------------------------------------------
+    # NEXT PAGE
+    # -----------------------------------------------------
+
+    with pg4:
+
+        if st.button(
+            "›",
+            key="page_next",
+            use_container_width=True
+        ):
+
+            st.session_state.page_number = min(
+                total_pages,
+                page_number + 1
+            )
+
+            st.rerun()
+
+
+    # -----------------------------------------------------
+    # LAST PAGE
+    # -----------------------------------------------------
+
+    with pg5:
+
+        if st.button(
+            "»",
+            key="page_last",
+            use_container_width=True
+        ):
+
+            st.session_state.page_number = total_pages
+
+            st.rerun()
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.markdown(
+    """
+    <div class="footer">
+        PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL
+        &nbsp; | &nbsp;
+        MANAGEMENT OF CHANGE
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 

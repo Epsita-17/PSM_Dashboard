@@ -139,6 +139,31 @@ div[data-testid="stMetricLabel"] p {
         margin-bottom:6px;
     }
 
+
+    /* MATCH CLICKABLE MODULE HEADINGS WITH NORMAL MODULE HEADING */
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
+
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
+
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover * {
+        color:#073f78 !important;
+        text-decoration:none !important;
+    }
+
+
     .section-bar {
         background:#07518b;
         color:#ffffff;
@@ -847,11 +872,34 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
+# ============================================================
+# MODULE PAGE LINKS — SAME AS BLAST FURNACE
+# ============================================================
+
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+    "TRAINING": "pages/13_Training.py",
+}
+
+
 def show_module_title(number, icon, title):
-    st.markdown(
-        f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-        unsafe_allow_html=True,
-    )
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def show_metric_row(items):
@@ -896,6 +944,44 @@ training = loaded["Training"]
 soc = loaded["SOC-SOL"]
 incident = loaded["PS Incident"]
 audit = loaded["Barrier Audit"]
+
+
+# ============================================================
+# PHA RECOMMENDATION — CORRECT STATUS COLUMN ONLY
+# ============================================================
+# Only this module is normalized so the existing status functions
+# use the actual Open/Close status field.
+rec_status_col = find_col(
+    rec,
+    [
+        "Status (Open/Close)",
+        "Status (Open / Close)",
+        "Status",
+        "Action Status",
+        "Recommendation Status",
+    ],
+)
+
+if rec_status_col:
+    rec_status_fixed = rec.copy()
+
+    # Remove competing status columns only inside PHA Recommendation.
+    for _col in [
+        "Status",
+        "Status (Open/Close)",
+        "Status (Open / Close)",
+        "Action Status",
+        "Recommendation Status",
+    ]:
+        if _col in rec_status_fixed.columns and _col != rec_status_col:
+            rec_status_fixed = rec_status_fixed.drop(columns=[_col])
+
+    if rec_status_col != "Status":
+        rec_status_fixed = rec_status_fixed.rename(
+            columns={rec_status_col: "Status"}
+        )
+
+    rec = rec_status_fixed
 
 
 # ============================================================
@@ -2995,3 +3081,4 @@ with b:
                     "Upload the Audit Compliance PDF "
                     "to enable the View option."
                 )
+

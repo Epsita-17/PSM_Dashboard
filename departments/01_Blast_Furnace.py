@@ -133,10 +133,25 @@ div[data-testid="stMetricLabel"] p {
     }
 
     .module-title {
-        color:#073f78;
-        font-size:12px;
-        font-weight:900;
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
         margin-bottom:6px;
+    }
+
+    /* Make clickable module headings match normal module headings */
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
+
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
     }
 
     .section-bar {
@@ -666,6 +681,62 @@ def load_module(name):
     return filter_blast_furnace(raw)
 
 
+def find_status_col(df, candidates=None):
+    """Find the REAL status column without accidentally selecting a
+    description or overdue/pending/completion field.
+
+    Priority is given to explicit status columns such as
+    "Status (Open/Close)" and exact "Status".
+    """
+    if df is None or df.empty:
+        return None
+
+    # First: exact matches from the caller, but always prioritize
+    # explicit status columns that contain the word Status.
+    normalized = {norm(c): c for c in df.columns}
+
+    priority = [
+        "Status (Open/Close)",
+        "Status (Open / Close)",
+        "Status",
+        "Current Status",
+        "Action Status",
+        "Completion Status",
+        "Investigation Status",
+        "Recommendation Status",
+    ]
+
+    if candidates:
+        priority = list(candidates) + priority
+
+    seen = set()
+    for candidate in priority:
+        key = norm(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if key in normalized:
+            return normalized[key]
+
+    # Second: choose a column whose header clearly represents status.
+    # This prevents columns such as "Overdue/Pending/Completion" from
+    # being selected merely because the word "Completion" is present.
+    status_keywords = [
+        "status",
+        "actionstatus",
+        "completionstatus",
+        "investigationstatus",
+        "recommendationstatus",
+    ]
+
+    for column in df.columns:
+        key = norm(column)
+        if any(keyword in key for keyword in status_keywords):
+            return column
+
+    return None
+
+
 def status_counts(df):
     result = {
         "total": 0,
@@ -682,9 +753,10 @@ def status_counts(df):
 
     result["total"] = len(df)
 
-    status_col = find_col(
+    status_col = find_status_col(
         df,
         [
+            "Status (Open/Close)",
             "Status",
             "Current Status",
             "Action Status",
@@ -738,7 +810,7 @@ def make_register(df, id_names, description_names, status_names):
 
     id_col = find_col(df, id_names)
     desc_col = find_col(df, description_names)
-    status_col = find_col(df, status_names)
+    status_col = find_status_col(df, status_names)
 
     result = pd.DataFrame(index=df.index)
 
@@ -847,11 +919,33 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
+# ============================================================
+# MODULE PAGE LINKS
+# ============================================================
+
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+    "TRAINING": "pages/13_Training.py",
+}
+
 def show_module_title(number, icon, title):
-    st.markdown(
-        f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-        unsafe_allow_html=True,
-    )
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def show_metric_row(items):

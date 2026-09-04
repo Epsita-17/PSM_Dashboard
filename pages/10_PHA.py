@@ -25,6 +25,12 @@ if "status_filter" not in st.session_state:
 if "page_number" not in st.session_state:
     st.session_state.page_number = 1
 
+if "recommendation_page_number" not in st.session_state:
+    st.session_state.recommendation_page_number = 1
+
+if "department_selector" not in st.session_state:
+    st.session_state.department_selector = "All Departments"
+
 if "upload_pha_no" not in st.session_state:
     st.session_state.upload_pha_no = ""
 
@@ -228,17 +234,13 @@ if missing_columns:
 st.markdown(
     """
 <style>
-
 /* =====================================================
-   FULL SCREEN / NO TOP GAP
+   REFERENCE-STYLE WHITE / NAVY INDUSTRIAL THEME
+   VISUAL ONLY — NO DATA / LOGIC CHANGES
    ===================================================== */
 
-#MainMenu,
-header,
-footer,
-[data-testid="stHeader"],
-[data-testid="stToolbar"] {
-    display: none !important;
+* {
+    box-sizing: border-box;
 }
 
 html,
@@ -248,6 +250,17 @@ body,
 [data-testid="stAppViewContainer"] > .main {
     margin: 0 !important;
     padding: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+#MainMenu,
+header,
+footer,
+[data-testid="stHeader"],
+[data-testid="stToolbar"] {
+    display: none !important;
 }
 
 [data-testid="stMainBlockContainer"],
@@ -256,7 +269,7 @@ body,
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 0 6px !important;
 }
 
 [data-testid="stAppViewContainer"] > .main > div {
@@ -272,51 +285,36 @@ iframe {
 
 
 /* =====================================================
-   STEEL BLUE INDUSTRIAL BACKGROUND
+   MAIN BACKGROUND
    ===================================================== */
 
 .stApp {
     background:
-        radial-gradient(
-            circle at 50% 0%,
-            #dfe8df 0%,
-            #e7eee7 25%,
-            #d5e0d5 55%,
-            #cbd8cb 100%
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #f7faff 55%,
+            #eef4fa 100%
         ) !important;
 
-    color: #24332b !important;
+    color: #092d5c !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+}
+
+.stApp * {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 }
 
 
 /* =====================================================
-   SUBTLE INDUSTRIAL GRID
-   ===================================================== */
-
-.stApp::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-
-    background-image:
-        linear-gradient(
-            rgba(70, 105, 78, 0.045) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(70, 105, 78, 0.045) 1px,
-            transparent 1px
-        );
-
-    background-size: 32px 32px;
-}
-
-
-/* =====================================================
-   COMPACT SPACING
+   SPACING
    ===================================================== */
 
 [data-testid="stVerticalBlock"] {
@@ -324,22 +322,27 @@ iframe {
 }
 
 [data-testid="stHorizontalBlock"] {
-    gap: 10px !important;
+    gap: 8px !important;
 }
 
 
 /* =====================================================
-   FILTERS
+   FILTER LABELS
    ===================================================== */
 
 [data-testid="stSelectbox"] label {
-    color: #56665b !important;
+    color: #092d5c !important;
     font-size: 12px !important;
     font-weight: 900 !important;
-    letter-spacing: .5px !important;
-    margin-bottom: 2px !important;
-    padding-left: 8px !important;
+    letter-spacing: .35px !important;
+    margin-bottom: 3px !important;
+    padding-left: 4px !important;
 }
+
+
+/* =====================================================
+   SELECT BOX
+   ===================================================== */
 
 div[data-baseweb="select"] > div {
     height: 38px !important;
@@ -347,26 +350,65 @@ div[data-baseweb="select"] > div {
     border-radius: 6px !important;
 
     background:
-        linear-gradient(
-            180deg,
-            #fbfcf8,
-            #eef3eb
-        ) !important;
+        #ffffff !important;
 
-    border: 1px solid #aebfac !important;
+    border:
+        1.5px solid #a9bfd8 !important;
 
     box-shadow:
-        inset 0 0 8px rgba(0,130,190,.10) !important;
+        0 2px 5px rgba(8,45,92,.10),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
+}
+
+div[data-baseweb="select"]:hover > div {
+    border-color: #176fc1 !important;
+    box-shadow:
+        0 3px 8px rgba(8,76,135,.16) !important;
 }
 
 div[data-baseweb="select"] * {
-    color: #26362c !important;
-    font-size: 11px !important;
+    color: #092d5c !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
 }
 
 div[data-baseweb="select"] svg {
-    fill: #52665a !important;
+    fill: #0a4e91 !important;
 }
+
+
+/* =====================================================
+   MONTH + DEPARTMENT — ALIGN WITH RESET FILTERS
+   ===================================================== */
+
+/*
+   IMPORTANT:
+   Move only the two selectbox widgets.
+   The 22px spacers and the Reset Filters 46px spacer
+   remain unchanged, so the Reset Filters position is
+   not affected.
+*/
+
+/* Month */
+div[data-testid="stColumn"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"] {
+    transform: translateY(-5px) !important;
+}
+
+/* Department */
+div[data-testid="stColumn"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"] {
+    transform: translateY(-5px) !important;
+}
+
+
+/* =====================================================
+   TEXT INPUT
+   ===================================================== */
 
 div[data-testid="stTextInput"] input {
     height: 40px !important;
@@ -374,24 +416,37 @@ div[data-testid="stTextInput"] input {
     border-radius: 6px !important;
 
     background:
-        linear-gradient(
-            180deg,
-            #fbfcf8,
-            #eef3eb
-        ) !important;
+        #ffffff !important;
 
-    border: 1px solid #aabbaa !important;
-    color: #24332b !important;
-    font-size: 11px !important;
+    border:
+        1.5px solid #a9bfd8 !important;
+
+    color: #092d5c !important;
+
+    font-size: 12px !important;
+    font-weight: 600 !important;
+
+    box-shadow:
+        0 2px 5px rgba(8,45,92,.09),
+        inset 0 1px 2px rgba(0,0,0,.025) !important;
+}
+
+div[data-testid="stTextInput"] input:focus {
+    border-color: #126bc0 !important;
+
+    box-shadow:
+        0 0 0 1px #126bc0,
+        0 3px 9px rgba(18,107,192,.15) !important;
 }
 
 div[data-testid="stTextInput"] input::placeholder {
-    color: #7a897f !important;
+    color: #657990 !important;
+    opacity: 1 !important;
 }
 
 
 /* =====================================================
-   BUTTONS
+   3D INDUSTRIAL BUTTONS
    ===================================================== */
 
 div.stButton > button {
@@ -403,36 +458,148 @@ div.stButton > button {
     background:
         linear-gradient(
             180deg,
-            #ffffff,
-            #edf2ea
+            #ffffff 0%,
+            #e8f0f8 100%
         ) !important;
 
-    border: 1px solid #9daf9f !important;
+    border:
+        1.5px solid #9db7d2 !important;
 
-    color: #52665a !important;
+    color: #07366d !important;
 
     font-size: 12px !important;
     font-weight: 900 !important;
 
     box-shadow:
-        inset 0 0 10px rgba(0,123,211,.08),
-        0 1px 5px rgba(0,0,0,.22) !important;
+        0 3px 0 #7897b6,
+        0 5px 9px rgba(6,48,91,.13),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
+
+    transition:
+        transform .12s ease,
+        box-shadow .12s ease,
+        background .12s ease !important;
 }
 
 div.stButton > button:hover {
-    border-color: #13a8ff !important;
+    border-color: #126bc0 !important;
+
     color: #ffffff !important;
 
     background:
         linear-gradient(
             180deg,
-            #e5eee3,
-            #d9e5d8
+            #1685db 0%,
+            #075ca8 100%
         ) !important;
 
+    transform:
+        translateY(-1px) !important;
+
     box-shadow:
-        0 0 12px rgba(13,163,255,.32),
-        inset 0 0 12px rgba(13,163,255,.08) !important;
+        0 4px 0 #06477f,
+        0 7px 13px rgba(4,74,135,.24),
+        inset 0 1px 0 rgba(255,255,255,.28) !important;
+}
+
+div.stButton > button:active {
+    transform:
+        translateY(2px) !important;
+
+    box-shadow:
+        0 1px 0 #06477f,
+        0 3px 6px rgba(4,74,135,.18) !important;
+}
+
+div.stButton > button:disabled {
+    color: #8293a7 !important;
+    background: #eef3f7 !important;
+    border-color: #c5d2df !important;
+    box-shadow: none !important;
+}
+
+
+/* =====================================================
+   PT REGISTER TOOLBAR — ONLY THESE 4 BUTTONS
+   ALL / COMPLETED / ONGOING / REFRESH DATA
+   NORMAL = WHITE SHINING
+   HOVER = DEEP OCEAN BLUE
+   ===================================================== */
+
+/* The toolbar is the horizontal block containing the
+   Search input. Columns 2–5 are the four buttons. */
+
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(2) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(3) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(4) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(5) button {
+
+    background: #ffffff !important;
+    background-image: none !important;
+
+    color:
+        #075985 !important;
+
+    border:
+        1.5px solid #b8cfe0 !important;
+
+    box-shadow:
+        0 2px 4px rgba(0,0,0,.12),
+        inset 0 1px 0 #ffffff !important;
+
+    transition:
+        background .15s ease,
+        color .15s ease,
+        border-color .15s ease,
+        transform .15s ease,
+        box-shadow .15s ease !important;
+}
+
+
+/* Mouse over ONLY the four toolbar buttons */
+
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(2) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(3) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(4) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(5) button:hover {
+
+    background:
+        linear-gradient(
+            180deg,
+            #0b6f9f 0%,
+            #064f73 52%,
+            #043d5c 100%
+        ) !important;
+
+    color:
+        #ffffff !important;
+
+    border-color:
+        #064f73 !important;
+
+    transform:
+        translateY(-1px) !important;
+
+    box-shadow:
+        0 4px 0 #032f46,
+        0 8px 15px rgba(4,79,115,.30),
+        inset 0 1px 0 rgba(255,255,255,.28) !important;
 }
 
 
@@ -442,255 +609,213 @@ div.stButton > button:hover {
 
 .kpi-card {
     position: relative;
-    height: 125px;
+    height: 105px;
     overflow: hidden;
 
     background:
         linear-gradient(
-            135deg,
-            #f7faf5 0%,
-            #e8efe6 100%
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
         );
 
-    border: 1px solid #aebead;
-    border-top: 2px solid #7da482;
+    border:
+        1.5px solid #c2d3e4;
+
+    border-top:
+        4px solid #176fc1;
 
     border-radius: 8px;
 
-    padding: 17px 18px;
+    padding: 17px 16px;
 
     box-shadow:
-        0 4px 12px rgba(0,0,0,.28),
-        inset 0 0 18px rgba(0,124,211,.045);
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98);
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1);
 }
 
 .kpi-card.completed {
-    border-top-color: #5aa477;
+    border-top-color: #19a657;
 }
 
 .kpi-card.ongoing {
-    border-top-color: #d99a35;
-}
-
-.kpi-icon {
-    position: absolute;
-
-    left: 23px;
-    top: 24px;
-
-    width: 60px;
-    height: 60px;
-
-    border-radius: 10px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: #ffffff;
-
-    font-size: 28px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #17618d,
-            #0c3e5d
-        );
-
-    border: 1px solid #00a8ff;
-
-    box-shadow:
-        0 0 12px rgba(0,161,255,.23),
-        inset 0 0 14px rgba(0,161,255,.10);
-}
-
-.kpi-card.completed .kpi-icon {
-    background:
-        linear-gradient(
-            180deg,
-            #6fb48a,
-            #e4f2e7
-        );
-
-    border-color: #5aa477;
-
-    box-shadow:
-        0 0 12px rgba(25,237,103,.22);
-}
-
-.kpi-card.ongoing .kpi-icon {
-    background:
-        linear-gradient(
-            180deg,
-            #d8aa58,
-            #f8ecd2
-        );
-
-    border-color: #d99a35;
-
-    box-shadow:
-        0 0 12px rgba(255,159,0,.23);
-}
-
-.kpi-content {
-    margin-left: 82px;
-}
-
-.kpi-label {
-    color: #00d0ff;
-    font-size: 16px;
-    font-weight: 950;
-    letter-spacing: .3px;
-}
-
-.kpi-card.completed .kpi-label {
-    color: #4d9869;
-}
-
-.kpi-card.ongoing .kpi-label {
-    color: #bd7d16;
-}
-
-.kpi-value {
-    font-size: 43px;
-    line-height: 1;
-    font-weight: 950;
-    margin-top: 7px;
-    color: #24342b;
-}
-
-.kpi-description {
-    color: #68766d;
-    font-size: 12px;
-    margin-top: 7px;
-}
-
-.kpi-pattern {
-    position: absolute;
-    right: 18px;
-    bottom: 17px;
-
-    width: 120px;
-    height: 58px;
-
-    opacity: .24;
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #9fbea2 0 8px,
-            transparent 8px 14px
-        );
-
-    transform: skewY(-7deg);
-}
-
-.kpi-card.completed .kpi-pattern {
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #8fc6a0 0 8px,
-            transparent 8px 14px
-        );
-}
-
-.kpi-card.ongoing .kpi-pattern {
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #e3b66b 0 8px,
-            transparent 8px 14px
-        );
-}
-
-.kpi-arrow {
-    position: absolute;
-
-    right: 13px;
-    bottom: 12px;
-
-    width: 29px;
-    height: 29px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 50%;
-
-    color: #14a9ff;
-
-    border: 1px solid #a5b6a7;
-
-    background: #edf3ea;
-
-    font-size: 17px;
+    border-top-color: #f18d05;
 }
 
 
 /* =====================================================
-   PT REGISTER
+   KPI ICONS
+   ===================================================== */
+
+.kpi-icon {
+    display: none !important;
+}
+
+
+
+
+/* =====================================================
+   TOTAL PT — REMOVE ICON ONLY
+   ===================================================== */
+
+.kpi-card.total .kpi-icon {
+    display: none;
+}
+
+.kpi-card.total .kpi-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    text-align: center !important;
+}
+
+
+/* =====================================================
+   KPI TEXT — HIGH CONTRAST
+   ===================================================== */
+
+.kpi-content {
+    margin-left: 78px;
+}
+
+.kpi-label {
+    color: #092d5c;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .15px;
+
+    text-align: center;
+}
+
+.kpi-card.completed .kpi-label {
+    color: #08783c;
+}
+
+.kpi-card.ongoing .kpi-label {
+    color: #b96700;
+}
+
+.kpi-value {
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 900;
+    margin-top: 6px;
+    color: #0a4e91;
+
+    text-align: center;
+}
+
+.kpi-value.green {
+    color: #159447 !important;
+}
+
+.kpi-value.orange {
+    color: #f0a000 !important;
+}
+
+.kpi-description {
+    color: #0a4e91 !important;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 7px;
+
+    text-align: center;
+}
+
+.kpi-pattern {
+    display: none !important;
+}
+
+
+
+.kpi-arrow {
+    display: none !important;
+}
+
+
+/* =====================================================
+   PT REGISTER PANEL
    ===================================================== */
 
 .register-wrap {
-    background:
-        linear-gradient(
-            180deg,
-            #f5f8f2,
-            #e8efe7
-        );
+    background: #ffffff;
 
-    border: 1px solid #adbead;
+    border:
+        1.5px solid #b7cce1;
 
-    border-radius: 8px 8px 0 0;
+    border-radius:
+        7px 7px 0 0;
 
     overflow: hidden;
 
     box-shadow:
-        0 4px 14px rgba(0,0,0,.28);
+        0 4px 10px rgba(7,45,82,.12);
 }
 
 .register-title {
-    height: 51px;
+    height: 40px;
 
     display: flex;
     align-items: center;
 
-    padding: 0 20px;
+    padding: 0 17px;
 
-    color: #24342b;
+    color: #ffffff;
 
-    font-size: 19px;
-    font-weight: 950;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: .25px;
 
     background:
         linear-gradient(
-            90deg,
-            #e0e9df,
-            #dce8dc,
-            #e0e9df
+            180deg,
+            #0a4f91 0%,
+            #063b70 100%
         );
 
     border-bottom:
-        1px solid #8aa88f;
+        2px solid #176fc1;
 
     text-shadow:
-        0 1px 5px rgba(0,0,0,.6);
+        0 1px 2px rgba(0,0,0,.25);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.16);
 }
 
 .register-icon {
-    margin-right: 10px;
-    color: #34483a;
+    margin-right: 9px;
+    color: #ffffff;
 }
 
 
 /* =====================================================
-   TABLE HEADER
+   TABLE HEADER — REFERENCE MATCH
    ===================================================== */
 
 .table-head {
-    min-height: 42px;
+    min-height: 43px;
 
     display: flex;
     align-items: center;
@@ -699,786 +824,244 @@ div.stButton > button:hover {
     background:
         linear-gradient(
             180deg,
-            #dce8dc,
-            #cfdccc
+            #0b4f91 0%,
+            #063c73 100%
         );
 
-    color: #2d4434;
+    color: #ffffff;
 
     border-right:
-        1px solid #a9bca9;
+        1px solid #8caecc;
 
     border-top:
-        1px solid #9fb39f;
+        1px solid #2879ba;
 
     border-bottom:
-        1px solid #9fb39f;
+        1px solid #052f5b;
 
-    font-size: 14px;
-    font-weight: 950;
+    font-size: 12px;
+    line-height: 1.15;
+    font-weight: 900;
 
     text-align: center;
-
-    padding: 4px;
+    padding: 5px 3px;
 
     text-shadow:
-        0 1px 3px rgba(0,0,0,.6);
+        0 1px 2px rgba(0,0,0,.30);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.16);
 }
 
 
 /* =====================================================
-   TABLE CELLS
-   PRODUCT / PROCESS / LOCATION ARE NOT DISPLAYED
+   TABLE CELLS — DARK BLUE CLEAR TEXT
    ===================================================== */
 
 .table-cell {
-    min-height: 42px;
+    min-height: 43px;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
     background:
-        linear-gradient(
-            90deg,
-            #f7faf5,
-            #edf3ea
-        );
+        #ffffff;
 
     border-right:
-        1px solid #c1cec0;
+        1px solid #c8d6e4;
 
     border-bottom:
-        1px solid #cbd7ca;
+        1px solid #c8d6e4;
 
-    color: #3c5042;
+    color:
+        #092d5c;
 
-    font-size: 11px;
+    font-size:
+        11px;
 
-    text-align: center;
+    line-height:
+        1.18;
 
-    padding: 4px;
+    font-weight:
+        600;
 
-    word-break: break-word;
+    text-align:
+        center;
 
-    text-shadow:
-        0 1px 2px rgba(0,0,0,.55);
+    padding:
+        5px 4px;
+
+    word-break:
+        break-word;
 }
 
 .table-cell.alt {
     background:
-        linear-gradient(
-            90deg,
-            #f0f5ed,
-            #e5ede3
-        );
+        #f3f7fb;
 }
 
 .table-cell.left {
-    justify-content: flex-start;
-    text-align: left;
+    justify-content:
+        flex-start;
+
+    text-align:
+        left;
+
+    font-weight:
+        650;
 }
-
-
 /* =====================================================
-   STATUS
+   STATUS — TEXT ONLY
    ===================================================== */
 
 .status-pill {
     display: inline-flex;
-
     align-items: center;
     justify-content: center;
 
-    min-width: 106px;
+    min-width: auto;
+    padding: 0;
 
-    padding: 4px 10px;
+    border-radius: 0;
 
-    border-radius: 6px;
-
-    font-size: 10px;
-    font-weight: 950;
-
-    background: #e8eee6;
-}
-
-.status-completed {
-    background: #e2f1e5;
-
-    border:
-        1px solid #73aa82;
-
-    color: #43865b;
-
-    box-shadow:
-        inset 0 0 8px rgba(35,237,102,.08);
-}
-
-.status-ongoing {
-    background: #fff0d1;
-
-    border:
-        1px solid #d6a34a;
-
-    color: #b87510;
-
-    box-shadow:
-        inset 0 0 8px rgba(255,163,0,.08);
-}
-
-
-/* =====================================================
-   RECORD BAR
-   ===================================================== */
-
-.record-bar {
-    height: 39px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 14px;
-
-    background: #e8efe6;
-
-    color: #68786d;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 
     font-size: 11px;
-    font-weight: 800;
-
-    border-top:
-        1px solid #b7c7b5;
-
-    border-bottom:
-        1px solid #c5d2c3;
-}
-
-
-/* =====================================================
-   PHA RECOMENDATION - KPI STYLE BOXES
-   ===================================================== */
-
-.pha-recommendation-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    padding: 10px 0 4px 0;
-}
-
-.pha-recommendation-card {
-    position: relative;
-    min-height: 175px;
-    overflow: hidden;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f7faf5 0%,
-            #e8efe6 100%
-        );
-
-    border: 1px solid #aebead;
-    border-top: 3px solid #7da482;
-    border-radius: 8px;
-
-    padding: 12px 13px;
-
-    box-shadow:
-        0 4px 12px rgba(0,0,0,.25),
-        inset 0 0 16px rgba(70,105,78,.04);
-}
-
-.pha-recommendation-card:hover {
-    border-top-color: #d99a24;
-
-    background:
-        linear-gradient(
-            135deg,
-            #ffffff 0%,
-            #edf3ea 100%
-        );
-
-    box-shadow:
-        0 5px 15px rgba(0,0,0,.28);
-}
-
-.pha-rec-number {
-    position: absolute;
-    top: 10px;
-    right: 11px;
-
-    min-width: 30px;
-    height: 28px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    padding: 0 7px;
-
-    border-radius: 6px;
-
-    background: #dce8dc;
-    border: 1px solid #9fb39f;
-
-    color: #34483a;
-
-    font-size: 13px;
-    font-weight: 950;
-}
-
-.pha-rec-title {
-    color: #648c69;
-
-    font-size: 15px;
-    font-weight: 950;
-
-    padding-right: 42px;
-    margin-bottom: 9px;
-
-    line-height: 1.15;
-}
-
-.pha-rec-recommendation {
-    min-height: 55px;
-
-    padding: 8px 9px;
-    margin-bottom: 9px;
-
-    border-radius: 6px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #e5ede3,
-            #f7faf5
-        );
-
-    border-left: 3px solid #7da482;
-    border-top: 1px solid #c1cec0;
-    border-right: 1px solid #c1cec0;
-    border-bottom: 1px solid #c1cec0;
-
-    color: #24342b;
-
-    font-size: 11px;
-    font-weight: 850;
-
-    line-height: 1.35;
-}
-
-.pha-rec-label {
-    display: block;
-
-    color: #68786d;
-
-    font-size: 8px;
-    font-weight: 950;
-
-    text-transform: uppercase;
-    letter-spacing: .35px;
-
-    margin-bottom: 3px;
-}
-
-.pha-rec-value {
-    color: #24342b;
-
-    font-size: 10px;
-    font-weight: 850;
-
-    line-height: 1.25;
-
-    word-break: break-word;
-}
-
-.pha-rec-details {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-
-    gap: 7px;
-}
-
-.pha-rec-detail {
-    min-height: 39px;
-
-    padding: 6px 8px;
-
-    background: #f7faf5;
-
-    border: 1px solid #c1cec0;
-    border-radius: 6px;
-}
-
-.pha-rec-status {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-height: 23px;
-
-    padding: 3px 8px;
-
-    border-radius: 5px;
-
-    background: #fff0d1;
-    border: 1px solid #d6a34a;
-
-    color: #b87510;
-
-    font-size: 9px;
-    font-weight: 950;
-
-    line-height: 1.15;
-}
-
-.pha-rec-approval {
-    display: inline-flex;
-
-    align-items: center;
-    justify-content: center;
-
-    min-height: 23px;
-
-    padding: 3px 8px;
-
-    border-radius: 5px;
-
-    background: #e8eee6;
-    border: 1px solid #aebead;
-
-    color: #56665b;
-
-    font-size: 9px;
-    font-weight: 950;
-
-    line-height: 1.15;
-}
-
-.pha-recommendation-empty {
-    padding: 20px;
-
-    text-align: center;
-
-    color: #728277;
-
-    background: #e8efe7;
-
-    border: 1px solid #adbead;
-    border-radius: 8px;
-}
-
-/* Responsive: keep 3 boxes on normal desktop,
-   reduce only on narrow screens. */
-@media (max-width: 1100px) {
-    .pha-recommendation-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 700px) {
-    .pha-recommendation-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-
-/* =====================================================
-   PHA RECOMENDATION KPI SUMMARY
-   ===================================================== */
-
-.pha-rec-summary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    padding: 10px 0 8px 0;
-}
-
-.pha-rec-kpi {
-    position: relative;
-    height: 125px;
-    overflow: hidden;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f7faf5 0%,
-            #e8efe6 100%
-        );
-
-    border: 1px solid #aebead;
-    border-top: 2px solid #7da482;
-    border-radius: 8px;
-
-    padding: 17px 18px;
-
-    box-shadow:
-        0 4px 12px rgba(0,0,0,.28),
-        inset 0 0 18px rgba(70,105,78,.045);
-}
-
-.pha-rec-kpi.total {
-    border-top-color: #168bc7;
-}
-
-.pha-rec-kpi.approved,
-.pha-rec-kpi.completed {
-    border-top-color: #5aa477;
-}
-
-.pha-rec-kpi.rejected,
-.pha-rec-kpi.overdue {
-    border-top-color: #d45b5b;
-}
-
-.pha-rec-kpi.pending {
-    border-top-color: #d99a35;
-}
-
-.pha-rec-kpi-icon {
-    position: absolute;
-    left: 23px;
-    top: 24px;
-
-    width: 60px;
-    height: 60px;
-
-    border-radius: 10px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: #ffffff;
-
-    font-size: 27px;
     font-weight: 900;
-
-    background:
-        linear-gradient(
-            180deg,
-            #17618d,
-            #0c3e5d
-        );
-
-    border: 1px solid #00a8ff;
-
-    box-shadow:
-        0 0 12px rgba(0,161,255,.23),
-        inset 0 0 14px rgba(0,161,255,.10);
-}
-
-.pha-rec-kpi.approved .pha-rec-kpi-icon,
-.pha-rec-kpi.completed .pha-rec-kpi-icon {
-    background:
-        linear-gradient(
-            180deg,
-            #6fb48a,
-            #e4f2e7
-        );
-
-    border-color: #5aa477;
-}
-
-.pha-rec-kpi.rejected .pha-rec-kpi-icon,
-.pha-rec-kpi.overdue .pha-rec-kpi-icon {
-    background:
-        linear-gradient(
-            180deg,
-            #d76c6c,
-            #f7dddd
-        );
-
-    border-color: #d45b5b;
-}
-
-.pha-rec-kpi.pending .pha-rec-kpi-icon {
-    background:
-        linear-gradient(
-            180deg,
-            #d8aa58,
-            #f8ecd2
-        );
-
-    border-color: #d99a35;
-}
-
-.pha-rec-kpi-content {
-    margin-left: 82px;
-}
-
-.pha-rec-kpi-label {
-    color: #168bc7;
-    font-size: 16px;
-    font-weight: 950;
-    letter-spacing: .3px;
-}
-
-.pha-rec-kpi.approved .pha-rec-kpi-label,
-.pha-rec-kpi.completed .pha-rec-kpi-label {
-    color: #4d9869;
-}
-
-.pha-rec-kpi.rejected .pha-rec-kpi-label,
-.pha-rec-kpi.overdue .pha-rec-kpi-label {
-    color: #c34d4d;
-}
-
-.pha-rec-kpi.pending .pha-rec-kpi-label {
-    color: #bd7d16;
-}
-
-.pha-rec-kpi-value {
-    font-size: 43px;
-    line-height: 1;
-    font-weight: 950;
-    margin-top: 7px;
-    color: #24342b;
-}
-
-.pha-rec-kpi-description {
-    color: #68766d;
-    font-size: 12px;
-    margin-top: 7px;
-}
-
-.pha-rec-kpi-pattern {
-    position: absolute;
-    right: 18px;
-    bottom: 17px;
-
-    width: 120px;
-    height: 58px;
-
-    opacity: .24;
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #9fbea2 0 8px,
-            transparent 8px 14px
-        );
-
-    transform: skewY(-7deg);
-}
-
-.pha-rec-kpi.rejected .pha-rec-kpi-pattern,
-.pha-rec-kpi.overdue .pha-rec-kpi-pattern {
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #d98d8d 0 8px,
-            transparent 8px 14px
-        );
-}
-
-.pha-rec-kpi.pending .pha-rec-kpi-pattern {
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #e3b66b 0 8px,
-            transparent 8px 14px
-        );
-}
-
-.pha-rec-kpi-arrow {
-    position: absolute;
-    right: 13px;
-    bottom: 12px;
-
-    width: 29px;
-    height: 29px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 50%;
-
-    color: #14a9ff;
-
-    border: 1px solid #a5b6a7;
-    background: #edf3ea;
-
-    font-size: 17px;
-}
-
-@media (max-width: 1100px) {
-    .pha-rec-summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 700px) {
-    .pha-rec-summary {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* =====================================================
-   PHA RECOMENDATION
-   ===================================================== */
-
-.recommendation-wrap {
-    margin-top: 14px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #f5f8f2,
-            #e8efe7
-        );
-
-    border: 1px solid #adbead;
-
-    border-radius: 8px 8px 0 0;
-
-    overflow: hidden;
-
-    box-shadow:
-        0 4px 14px rgba(0,0,0,.28);
-}
-
-.recommendation-title {
-    height: 51px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 20px;
-
-    color: #24342b;
-
-    font-size: 19px;
-    font-weight: 950;
-
-    background:
-        linear-gradient(
-            90deg,
-            #e0e9df,
-            #dce8dc,
-            #e0e9df
-        );
-
-    border-bottom:
-        1px solid #8aa88f;
-
-    text-shadow:
-        0 1px 5px rgba(0,0,0,.6);
-}
-
-.recommendation-icon {
-    margin-right: 10px;
-    color: #d99a24;
-}
-
-.recommendation-container {
-    width: 100%;
-    overflow-x: auto;
-
-    border-left: 1px solid #adbead;
-    border-right: 1px solid #adbead;
-    border-bottom: 1px solid #adbead;
-}
-
-.recommendation-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: auto;
-}
-
-.recommendation-table th {
-    background:
-        linear-gradient(
-            180deg,
-            #dce8dc,
-            #cfdccc
-        );
-
-    color: #2d4434;
-
-    border: 1px solid #a9bca9;
-
-    font-size: 13px;
-    font-weight: 950;
-
-    text-align: center;
-
-    padding: 8px 6px;
+    letter-spacing: .1px;
 
     white-space: nowrap;
 }
 
-.recommendation-table td {
-    background:
-        linear-gradient(
-            90deg,
-            #f7faf5,
-            #edf3ea
-        );
 
-    color: #3c5042;
+/* COMPLETED — GREEN TEXT ONLY */
 
-    border: 1px solid #c1cec0;
-
-    font-size: 11px;
-
-    text-align: left;
-
-    vertical-align: middle;
-
-    padding: 8px 7px;
-
-    word-break: break-word;
+.status-completed {
+    background: transparent !important;
+    border: none !important;
+    color: #16A34A !important;
+    box-shadow: none !important;
 }
 
-.recommendation-table tr:nth-child(even) td {
-    background:
-        linear-gradient(
-            90deg,
-            #f0f5ed,
-            #e5ede3
-        );
+
+/* ONGOING — ORANGE TEXT ONLY */
+
+.status-ongoing {
+    background: transparent !important;
+    border: none !important;
+    color: #EA8A00 !important;
+    box-shadow: none !important;
 }
+/* =====================================================
+   STREAMLIT TABLE ACTION BUTTONS
+   ===================================================== */
 
-.recommendation-table tr:hover td {
-    background: #d8e5d7;
+.table-cell + div button,
+div[data-testid="column"] div.stButton > button {
+    font-size: 11px !important;
+    font-weight: 900 !important;
 }
+/* =====================================================
+   RECORD BAR / PAGINATION
+   ===================================================== */
 
-.recommendation-empty {
-    padding: 20px;
-
-    text-align: center;
-
-    color: #728277;
-
-    font-size: 12px;
-
-    background: #e8efe7;
-
-    border: 1px solid #adbead;
-}
-
-.recommendation-count {
-    height: 36px;
+.record-bar {
+    height: 38px;
 
     display: flex;
     align-items: center;
 
-    padding: 0 14px;
+    padding: 0 12px;
 
-    color: #68786d;
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #edf3f8 100%
+        );
 
-    background: #e8efe6;
+    color:
+        #173f6d;
 
-    font-size: 11px;
-    font-weight: 800;
+    font-size:
+        11px;
 
-    border-left: 1px solid #adbead;
-    border-right: 1px solid #adbead;
-    border-bottom: 1px solid #adbead;
+    font-weight:
+        800;
+
+    border-top:
+        1px solid #c4d4e3;
+
+    border-bottom:
+        1px solid #c4d4e3;
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.9);
 }
+
+
+/* =====================================================
+   DOWNLOAD BUTTON
+   ===================================================== */
+
+div.stDownloadButton > button {
+    border-radius: 6px !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff,
+            #e9f1f8
+        ) !important;
+
+    border:
+        1.5px solid #9eb8d2 !important;
+
+    color:
+        #083c76 !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        900 !important;
+
+    box-shadow:
+        0 3px 0 #7895b1,
+        0 5px 8px rgba(8,53,94,.12) !important;
+}
+
+div.stDownloadButton > button:hover {
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #1685db,
+            #075ca8
+        ) !important;
+
+    border-color:
+        #075ca8 !important;
+}
+
+
+/* =====================================================
+   INFO / ALERT
+   ===================================================== */
+
+div[data-testid="stAlert"] {
+    border-radius: 6px !important;
+
+    color: #123b68 !important;
+
+    box-shadow:
+        0 2px 7px rgba(20,70,100,.08) !important;
+}
+
 
 /* =====================================================
    FOOTER
@@ -1491,260 +1074,430 @@ div.stButton > button:hover {
     align-items: center;
     justify-content: center;
 
-    color: #627268;
+    color: #ffffff;
 
     background:
         linear-gradient(
             180deg,
-            #e1eae0,
-            #cfdccd
+            #0a4f91 0%,
+            #063563 100%
         );
 
-    font-size: 11px;
-    font-weight: 800;
+    font-size:
+        11px;
+
+    font-weight:
+        800;
 
     border-top:
-        1px solid #91a992;
+        2px solid #176fc1;
 
     box-shadow:
-        0 -2px 10px rgba(0,0,0,.20);
+        0 -2px 8px rgba(0,0,0,.12);
 }
 
 
-/* =========================================================
-   STEEL BLUE INDUSTRIAL THEME OVERRIDE
-   No background image - color only
-   ========================================================= */
+/* =====================================================
+   SCROLLBAR
+   ===================================================== */
 
-.stApp {
-    background:
-        radial-gradient(circle at 50% 0%,
-            #F8FBFD 0%,
-            #EEF3F7 32%,
-            #E8EEF3 68%,
-            #DDE6ED 100%) !important;
-    color: #263B4A !important;
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
 }
 
-.stApp::before {
-    background-image:
-        linear-gradient(rgba(36,91,130,.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(36,91,130,.035) 1px, transparent 1px) !important;
-    background-size: 32px 32px !important;
+::-webkit-scrollbar-track {
+    background: #e9f0f6;
 }
 
-/* Filters */
-[data-testid="stSelectbox"] label {
-    color: #526B7D !important;
-}
-div[data-baseweb="select"] > div,
-div[data-testid="stTextInput"] input {
-    background: linear-gradient(180deg,#FFFFFF,#E8EEF3) !important;
-    border: 1px solid #A8BDCC !important;
-    color: #263B4A !important;
-}
-div[data-baseweb="select"] * {
-    color: #263B4A !important;
-}
-div[data-baseweb="select"] svg {
-    fill: #245B82 !important;
+::-webkit-scrollbar-thumb {
+    background: #8daac4;
+    border-radius: 8px;
 }
 
-/* 3D buttons */
-div.stButton > button {
-    background: linear-gradient(180deg,#FFFFFF 0%,#F4F8FB 42%,#D8E5EE 100%) !important;
-    border: 1px solid #A8BDCC !important;
-    color: #163A52 !important;
+::-webkit-scrollbar-thumb:hover {
+    background: #527fa6;
+}
+/* =====================================================
+   PHA-ONLY SECTIONS
+   Same white / navy industrial visual language as reference
+   ===================================================== */
+
+.pha-recommendation-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px 0 4px 0;
+}
+
+.pha-recommendation-card {
+    position: relative;
+    min-height: 155px;
+    overflow: hidden;
+    background: linear-gradient(145deg,#ffffff 0%,#ffffff 72%,#edf4fa 100%);
+    border: 1.5px solid #c2d3e4;
+    border-top: 4px solid #176fc1;
+    border-radius: 7px;
+    padding: 12px 13px;
     box-shadow:
-        inset 0 2px 0 rgba(255,255,255,.95),
-        inset 0 -3px 5px rgba(36,91,130,.10),
-        0 3px 0 #8FA9BA,
-        0 5px 10px rgba(22,58,82,.18) !important;
-}
-div.stButton > button:hover {
-    background: linear-gradient(180deg,#FFFFFF,#EAF4FA,#C9DCE9) !important;
-    border-color: #245B82 !important;
-    color: #163A52 !important;
-    transform: translateY(-1px) !important;
-    box-shadow:
-        inset 0 2px 0 rgba(255,255,255,.98),
-        inset 0 -3px 5px rgba(36,91,130,.12),
-        0 4px 0 #7897AC,
-        0 7px 14px rgba(36,91,130,.22) !important;
-}
-div.stButton > button:active {
-    transform: translateY(2px) !important;
-    box-shadow:
-        inset 0 3px 7px rgba(22,58,82,.20),
-        0 1px 0 #7897AC,
-        0 2px 5px rgba(22,58,82,.18) !important;
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98);
 }
 
-/* KPI cards */
-.kpi-card,
+.pha-recommendation-card:hover {
+    border-top-color: #0a4f91;
+    transform: translateY(-1px);
+    box-shadow:
+        0 6px 14px rgba(6,48,91,.17),
+        inset 0 1px 0 rgba(255,255,255,1);
+}
+
+.pha-rec-number {
+    position:absolute;
+    top:9px;
+    right:10px;
+    min-width:28px;
+    height:25px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 6px;
+    border-radius:5px;
+    background:#eaf2f8;
+    border:1px solid #a9bfd8;
+    color:#0a4e91;
+    font-size:12px;
+    font-weight:900;
+}
+
+.pha-rec-title {
+    color:#092d5c;
+    font-size:14px;
+    font-weight:900;
+    padding-right:38px;
+    margin-bottom:8px;
+    line-height:1.15;
+}
+
+.pha-rec-recommendation {
+    min-height:52px;
+    padding:7px 8px;
+    margin-bottom:8px;
+    border-radius:5px;
+    background:#f3f7fb;
+    border-left:3px solid #176fc1;
+    border-top:1px solid #c8d6e4;
+    border-right:1px solid #c8d6e4;
+    border-bottom:1px solid #c8d6e4;
+    color:#092d5c;
+    font-size:10.5px;
+    font-weight:700;
+    line-height:1.3;
+}
+
+.pha-rec-label {
+    display:block;
+    color:#657990;
+    font-size:8px;
+    font-weight:900;
+    text-transform:uppercase;
+    letter-spacing:.3px;
+    margin-bottom:2px;
+}
+
+.pha-rec-value {
+    color:#092d5c;
+    font-size:10px;
+    font-weight:700;
+    line-height:1.2;
+    word-break:break-word;
+}
+
+.pha-rec-details {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+}
+
+.pha-rec-detail {
+    min-height:36px;
+    padding:6px 7px;
+    background:#ffffff;
+    border:1px solid #c8d6e4;
+    border-radius:5px;
+}
+
+.pha-rec-status,
+.pha-rec-approval {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:22px;
+    padding:2px 7px;
+    border-radius:4px;
+    font-size:9px;
+    font-weight:900;
+    line-height:1.1;
+}
+
+.pha-rec-status {
+    background:#fff5e5;
+    border:1px solid #e5b66b;
+    color:#b96700;
+}
+
+.pha-rec-approval {
+    background:#edf8f1;
+    border:1px solid #7bc59a;
+    color:#08783c;
+}
+
+.pha-recommendation-empty {
+    padding:18px;
+    text-align:center;
+    color:#657990;
+    background:#ffffff;
+    border:1px solid #b7cce1;
+    border-radius:6px;
+}
+
+.pha-rec-summary {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    padding:8px 0 6px 0;
+}
+
 .pha-rec-kpi {
-    background: linear-gradient(135deg,#FFFFFF 0%,#F8FBFD 55%,#E7EFF5 100%) !important;
-    border-color: #A8BDCC !important;
-    border-top-color: #245B82 !important;
+    position:relative;
+    height:105px;
+    overflow:hidden;
+    background:linear-gradient(145deg,#ffffff 0%,#ffffff 72%,#edf4fa 100%);
+    border:1.5px solid #c2d3e4;
+    border-top:4px solid #176fc1;
+    border-radius:7px;
+    padding:15px 16px;
     box-shadow:
-        inset 0 2px 0 rgba(255,255,255,.95),
-        inset 0 -5px 12px rgba(36,91,130,.05),
-        0 4px 0 rgba(120,151,172,.30),
-        0 8px 18px rgba(22,58,82,.16) !important;
+        0 4px 10px rgba(6,48,91,.12),
+        inset 0 1px 0 rgba(255,255,255,.98);
 }
-.kpi-card.completed,
+
+.pha-rec-kpi.total { border-top-color:#176fc1; }
 .pha-rec-kpi.approved,
-.pha-rec-kpi.completed {
-    border-top-color: #4F9A68 !important;
-}
-.kpi-card.ongoing,
-.pha-rec-kpi.pending {
-    border-top-color: #D89A2B !important;
-}
+.pha-rec-kpi.completed { border-top-color:#19a657; }
 .pha-rec-kpi.rejected,
-.pha-rec-kpi.overdue {
-    border-top-color: #D45B5B !important;
+.pha-rec-kpi.overdue { border-top-color:#d9534f; }
+.pha-rec-kpi.pending { border-top-color:#f18d05; }
+
+.pha-rec-kpi-icon,
+.pha-rec-kpi-pattern,
+.pha-rec-kpi-arrow {
+    display:none !important;
 }
-.kpi-value,
-.pha-rec-kpi-value,
-.kpi-description,
-.pha-rec-kpi-description {
-    color: #263B4A !important;
+
+.pha-rec-kpi-content {
+    margin-left:0 !important;
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
 }
-.kpi-label,
+
 .pha-rec-kpi-label {
-    color: #245B82 !important;
+    color:#092d5c;
+    font-size:14px;
+    font-weight:900;
 }
 
-/* KPI icons */
-.kpi-icon,
-.pha-rec-kpi-icon {
-    background: linear-gradient(180deg,#2F719D,#163A52) !important;
-    border-color: #5C9CC4 !important;
-    box-shadow:
-        inset 0 2px 0 rgba(255,255,255,.25),
-        0 5px 10px rgba(22,58,82,.25) !important;
-}
-.kpi-card.completed .kpi-icon,
-.pha-rec-kpi.approved .pha-rec-kpi-icon,
-.pha-rec-kpi.completed .pha-rec-kpi-icon {
-    background: linear-gradient(180deg,#4FA66B,#247145) !important;
-    border-color: #3C8D59 !important;
-}
-.kpi-card.ongoing .kpi-icon,
-.pha-rec-kpi.pending .pha-rec-kpi-icon {
-    background: linear-gradient(180deg,#F1B64D,#C47A10) !important;
-    border-color: #D89A2B !important;
-}
-.pha-rec-kpi.rejected .pha-rec-kpi-icon,
-.pha-rec-kpi.overdue .pha-rec-kpi-icon {
-    background: linear-gradient(180deg,#E77A7A,#B83E3E) !important;
-    border-color: #D45B5B !important;
+.pha-rec-kpi.approved .pha-rec-kpi-label,
+.pha-rec-kpi.completed .pha-rec-kpi-label { color:#08783c; }
+
+.pha-rec-kpi.rejected .pha-rec-kpi-label,
+.pha-rec-kpi.overdue .pha-rec-kpi-label { color:#c63f3a; }
+
+.pha-rec-kpi.pending .pha-rec-kpi-label { color:#b96700; }
+
+.pha-rec-kpi-value {
+    font-size:38px;
+    line-height:1;
+    font-weight:900;
+    margin-top:5px;
+    color:#0a4e91;
 }
 
-/* Register containers */
-.register-wrap,
+.pha-rec-kpi-description {
+    color:#304d6d;
+    font-size:10px;
+    font-weight:700;
+    margin-top:5px;
+}
+
 .recommendation-wrap {
-    background: linear-gradient(180deg,#FFFFFF,#EDF3F7) !important;
-    border-color: #A8BDCC !important;
-    box-shadow: 0 4px 14px rgba(22,58,82,.16) !important;
+    margin-top:5px;
+    margin-bottom: 5px;
+    background:#ffffff;
+    border:1.5px solid #b7cce1;
+    border-radius:7px 7px 0 0;
+    overflow:hidden;
+    box-shadow:0 4px 10px rgba(7,45,82,.12);
 }
+
+.recommendation-title {
+    height:40px;
+    display:flex;
+    align-items:center;
+    padding:0 17px;
+    color:#ffffff;
+    font-size:18px;
+    font-weight:900;
+    letter-spacing:.25px;
+    background:linear-gradient(180deg,#0a4f91 0%,#063b70 100%);
+    border-bottom:2px solid #176fc1;
+}
+
+.recommendation-icon { margin-right:9px; color:#ffffff; }
+
+.recommendation-container {
+    width:100%;
+    overflow-x:auto;
+    border-left:1px solid #b7cce1;
+    border-right:1px solid #b7cce1;
+    border-bottom:1px solid #b7cce1;
+}
+
+.recommendation-table {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:auto;
+}
+
+.recommendation-table th {
+    background:linear-gradient(180deg,#0b4f91 0%,#063c73 100%);
+    color:#ffffff;
+    border:1px solid #8caecc;
+    font-size:12px;
+    font-weight:900;
+    text-align:center;
+    padding:7px 5px;
+}
+
+.recommendation-table td {
+    background:#ffffff;
+    color:#092d5c;
+    border:1px solid #c8d6e4;
+    font-size:10.5px;
+    text-align:left;
+    vertical-align:middle;
+    padding:7px 6px;
+    word-break:break-word;
+}
+
+.recommendation-table tr:nth-child(even) td { background:#f3f7fb; }
+.recommendation-table tr:hover td { background:#e7f0f8; }
+
+.recommendation-empty {
+    padding:18px;
+    text-align:center;
+    color:#657990;
+    font-size:11px;
+    background:#ffffff;
+    border:1px solid #b7cce1;
+}
+
+.recommendation-count {
+    height:34px;
+    display:flex;
+    align-items:center;
+    padding:0 12px;
+    color:#173f6d;
+    background:linear-gradient(180deg,#ffffff 0%,#edf3f8 100%);
+    font-size:10.5px;
+    font-weight:800;
+    border-left:1px solid #b7cce1;
+    border-right:1px solid #b7cce1;
+    border-bottom:1px solid #b7cce1;
+}
+
+@media (max-width:1100px) {
+    .pha-recommendation-grid,
+    .pha-rec-summary {
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+}
+
+@media (max-width:700px) {
+    .pha-recommendation-grid,
+    .pha-rec-summary {
+        grid-template-columns:1fr;
+    }
+}
+
+/* =====================================================
+   PT.PY REFERENCE FONT — FINAL OVERRIDE
+   ===================================================== */
+
+.stApp,
+.stApp *,
+.register-title,
+.recommendation-title,
+.table-head,
+.table-cell,
+.recommendation-table,
+.recommendation-table th,
+.recommendation-table td,
+.record-bar,
+div.stButton > button,
+div[data-testid="stTextInput"] input {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+
 .register-title,
 .recommendation-title {
-    color: #163A52 !important;
-    background: linear-gradient(90deg,#E4EDF3,#D7E3EB,#E4EDF3) !important;
-    border-bottom-color: #8FA9BA !important;
-    text-shadow: none !important;
-}
-.register-icon,
-.recommendation-icon {
-    color: #245B82 !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
 }
 
-/* Table */
 .table-head,
 .recommendation-table th {
-    background: linear-gradient(180deg,#245B82 0%,#163A52 100%) !important;
-    color: #FFFFFF !important;
-    border-color: #8EABC0 !important;
-    text-shadow: 0 1px 2px rgba(0,0,0,.25) !important;
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    line-height: 1.15 !important;
 }
-.table-cell,
+
+.table-cell {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1.18 !important;
+}
+
+.table-cell.left {
+    font-weight: 650 !important;
+}
+
+.status-pill {
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 900 !important;
+}
+
 .recommendation-table td {
-    background: linear-gradient(90deg,#FFFFFF,#F2F7FA) !important;
-    color: #263B4A !important;
-    border-color: #C4D4DF !important;
-    text-shadow: none !important;
-}
-.table-cell.alt,
-.recommendation-table tr:nth-child(even) td {
-    background: linear-gradient(90deg,#F0F5F8,#E7EFF4) !important;
-}
-.recommendation-table tr:hover td {
-    background: #DDEAF2 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1.18 !important;
 }
 
-/* Status */
-.status-completed {
-    background: #E4F2E8 !important;
-    border-color: #73A882 !important;
-    color: #2F7D49 !important;
-}
-.status-ongoing {
-    background: #FFF1D7 !important;
-    border-color: #D6A34A !important;
-    color: #B87510 !important;
+div[data-testid="stTextInput"] input {
+    font-size: 12px !important;
+    font-weight: 600 !important;
 }
 
-/* Record bars / recommendation areas */
-.record-bar,
-.recommendation-count {
-    background: #E7EFF4 !important;
-    color: #526B7D !important;
-    border-color: #B8CBD8 !important;
-}
-.pha-recommendation-card,
-.pha-rec-detail,
-.pha-rec-recommendation {
-    background: linear-gradient(135deg,#FFFFFF,#EEF4F8) !important;
-    border-color: #B7CBD8 !important;
-    color: #263B4A !important;
-}
-.pha-rec-title {
-    color: #245B82 !important;
-}
-.pha-rec-recommendation {
-    border-left-color: #245B82 !important;
-}
-.pha-rec-number {
-    background: #E3EDF3 !important;
-    border-color: #A8BDCC !important;
-    color: #163A52 !important;
-}
-.pha-rec-label {
-    color: #607A8D !important;
-}
-.pha-rec-value {
-    color: #263B4A !important;
-}
-.pha-rec-approval {
-    background: #E7EFF4 !important;
-    border-color: #A8BDCC !important;
-    color: #526B7D !important;
-}
-.pha-recommendation-empty,
-.recommendation-empty {
-    background: #EDF3F7 !important;
-    border-color: #A8BDCC !important;
-    color: #607A8D !important;
-}
-
-/* Footer */
-.footer {
-    color: #EAF3F8 !important;
-    background: linear-gradient(180deg,#245B82,#163A52) !important;
-    border-top-color: #6F94AD !important;
-    box-shadow: 0 -2px 10px rgba(22,58,82,.20) !important;
+div.stButton > button {
+    font-size: 12px !important;
+    font-weight: 900 !important;
 }
 
 </style>
@@ -1783,8 +1536,13 @@ body {
 }
 
 body {
-    background: #DDE6ED;
+    background: #06111f;
 }
+
+
+/* =====================================================
+   MAIN HEADER FRAME
+   ===================================================== */
 
 .header {
 
@@ -1795,36 +1553,36 @@ body {
 
     overflow: hidden;
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
     background:
+
         radial-gradient(
             ellipse at center,
-            rgba(115, 145, 118, .40) 0%,
-            rgba(225, 235, 222, .55) 45%,
-            rgba(241, 246, 238, .78) 100%
-        ),
-
-        linear-gradient(
-            180deg,
-            #E8EEF3 0%,
-            #D2DFE8 100%
+            rgba(15,91,150,.32) 0%,
+            rgba(5,29,52,.96) 48%,
+            #020b16 100%
         );
 
     border-top:
-        2px solid #245B82;
+        1px solid #238ed8;
 
     border-bottom:
-        3px solid #163A52;
+        2px solid #0a83d0;
 
     box-shadow:
-        0 0 18px rgba(87, 120, 91, .18);
+
+        0 0 0 1px rgba(0,153,255,.18),
+
+        0 5px 18px
+        rgba(0,0,0,.42),
+
+        inset 0 1px 0
+        rgba(255,255,255,.08);
 }
 
 
-/* TECH DOTS */
+/* =====================================================
+   SUBTLE TECH GRID
+   ===================================================== */
 
 .header::before {
 
@@ -1834,21 +1592,28 @@ body {
 
     inset: 0;
 
-    background-image:
-        radial-gradient(
-            circle,
-            rgba(90, 125, 95, .18) 1.3px,
-            transparent 1.5px
+    background:
+
+        linear-gradient(
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
+        ),
+
+        linear-gradient(
+            90deg,
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
         );
 
-    background-size:
-        15px 15px;
+    background-size: 26px 26px;
 
-    opacity: .55;
+    opacity: .75;
 }
 
 
-/* SIDE INDUSTRIAL BLUE ANGLES */
+/* =====================================================
+   BLUE SIDE LIGHT
+   ===================================================== */
 
 .header::after {
 
@@ -1861,26 +1626,20 @@ body {
     background:
 
         linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(90, 125, 95, .14) 7% 8%,
-            transparent 8% 11%,
-            rgba(90, 125, 95, .09) 11% 12%,
-            transparent 12%
-        ),
-
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(90, 125, 95, .14) 7% 8%,
-            transparent 8% 11%,
-            rgba(90, 125, 95, .09) 11% 12%,
-            transparent 12%
+            90deg,
+            rgba(0,137,255,.20),
+            transparent 14%,
+            transparent 86%,
+            rgba(0,137,255,.20)
         );
+
+    pointer-events: none;
 }
 
 
-/* INDUSTRIAL SVG BACKGROUND */
+/* =====================================================
+   INDUSTRIAL BACKGROUND
+   ===================================================== */
 
 .industrial {
 
@@ -1888,320 +1647,1453 @@ body {
 
     left: 0;
     right: 0;
-
     bottom: 0;
 
     width: 100%;
     height: 100px;
 
-    opacity: .75;
-
     z-index: 1;
+
+    opacity: .72;
 }
 
 .industrial .steel {
-    fill: #7C91A1;
-    stroke: #5F788B;
-    stroke-width: 1.5;
+
+    fill: #102b43;
+
+    stroke: #2675a8;
+
+    stroke-width: 1.3;
 }
 
-.industrial .light {
+.industrial .highlight {
+
     fill: none;
-    stroke: #5E829D;
-    stroke-width: 1.2;
+
+    stroke: #49b8ff;
+
+    stroke-width: 1.15;
+
     opacity: .65;
 }
 
-.industrial .window {
-    fill: #789DB5;
-    opacity: .75;
+.industrial .warm {
+
+    fill: #e9a63a;
+
+    opacity: .82;
 }
 
-.hex {
+.industrial .glass {
+
+    fill: #0b5c91;
+
+    stroke: #4cbcff;
+
+    stroke-width: .7;
+
+    opacity: .55;
+}
+
+.tech {
+
     fill: none;
-    stroke: #7895A7;
+
+    stroke: #238bd0;
+
     stroke-width: 1;
-    opacity: .35;
+
+    opacity: .25;
 }
 
 
-/* CONTENT */
+/* =====================================================
+   SIDE FADE
+   ===================================================== */
 
-.content {
-
-    position: relative;
-
-    z-index: 8;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    text-align: center;
-}
-
-
-/* PSM DASHBOARD */
-
-.title {
-
-    color: #163A52;
-
-    font-size: 24px;
-
-    font-weight: 950;
-
-    letter-spacing: 5px;
-
-    line-height: 1;
-
-    margin-bottom: 5px;
-
-    text-shadow:
-        0 2px 7px rgba(0,0,0,.65);
-}
-
-
-/* PILLAR PHA */
-
-.pillar {
-
-    position: relative;
-
-    width: 560px;
-
-    height: 66px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #edf3ea 0%,
-            #F0F5F8 100%
-        );
-
-    border:
-        1px solid #A8BDCC;
-
-    border-radius:
-        14px;
-
-    color: #d99a24;
-
-    font-size: 42px;
-
-    font-weight: 950;
-
-    letter-spacing: 1px;
-
-    box-shadow:
-
-        0 0 18px
-        rgba(89, 124, 94, .13),
-
-        inset 0 0 20px
-        rgba(89, 124, 94, .08);
-}
-
-.pillar::before,
-.pillar::after {
+.side-fade {
 
     position: absolute;
 
-    top: 50%;
-
-    transform:
-        translateY(-50%);
-
-    color: #648c69;
-
-    font-size: 21px;
-
-    font-weight: 950;
-
-    letter-spacing: -5px;
-
-    text-shadow:
-        0 0 8px rgba(0,170,255,.45);
-}
-
-.pillar::before {
-
-    content: "◀◀";
-
-    left: 17px;
-}
-
-.pillar::after {
-
-    content: "▶▶";
-
-    right: 17px;
-}
-
-
-/* SUBTITLE */
-
-.subtitle {
-
-    margin-top: 7px;
-
-    height: 25px;
-
-    min-width: 700px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    padding: 4px 30px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #6f9675,
-            #245B82,
-            #6f9675
-        );
-
-    border:
-        1px solid #A8BDCC;
-
-    border-radius:
-        7px;
-
-    color: #ffffff;
-
-    font-size: 10px;
-
-    font-weight: 900;
-
-    letter-spacing: 1.8px;
-
-    box-shadow:
-        0 0 8px rgba(89, 124, 94, .10);
-}
-
-
-/* TOP BLUE ENERGY LINE */
-
-.top-line {
-
-    position: absolute;
+    z-index: 3;
 
     top: 0;
-
-    left: 24%;
-
-    width: 52%;
-
-    height: 3px;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #7da482 18%,
-            #ffffff 50%,
-            #7da482 82%,
-            transparent
-        );
-
-    box-shadow:
-        0 0 10px #7da482,
-        0 0 22px rgba(0,169,255,.7);
-}
-
-
-/* ANIMATED BOTTOM SCAN */
-
-.scan {
-
-    position: absolute;
-
-    z-index: 12;
-
     bottom: 0;
 
-    left: -16%;
+    width: 24%;
 
-    width: 16%;
+    pointer-events: none;
+}
 
-    height: 4px;
+.side-fade.left {
+
+    left: 0;
 
     background:
         linear-gradient(
             90deg,
-            transparent,
-            #82a988,
-            #ffffff,
-            #82a988,
+            rgba(1,8,18,.74),
             transparent
         );
-
-    box-shadow:
-        0 0 10px #82a988,
-        0 0 24px rgba(0,181,255,.75);
-
-    animation:
-        scanline 3s linear infinite;
 }
 
-@keyframes scanline {
+.side-fade.right {
 
-    0% {
-        left: -16%;
-    }
+    right: 0;
 
-    100% {
-        left: 100%;
-    }
+    background:
+        linear-gradient(
+            270deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
 }
 
 
-/* CORNER BLUE LIGHTS */
+/* =====================================================
+   CENTRAL 3D TITLE PLATE
+   ===================================================== */
 
-.corner-light {
+.title-plate {
 
     position: absolute;
 
     z-index: 10;
 
-    width: 110px;
+    left: 50%;
+    top: 50%;
 
-    height: 3px;
+    transform:
+        translate(-50%, -50%);
+
+    width:
+        min(92%, 950px);
+
+    height:
+        72px;
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
 
     background:
+
+        linear-gradient(
+            180deg,
+            #124e80 0%,
+            #07345f 45%,
+            #031e3d 100%
+        );
+
+    border:
+        2px solid #78cfff;
+
+    border-radius:
+        15px;
+
+    box-shadow:
+
+        0 0 0 3px rgba(6,36,65,.92),
+
+        0 0 0 5px rgba(105,183,229,.55),
+
+        0 8px 20px
+        rgba(0,0,0,.52),
+
+        0 0 22px
+        rgba(0,139,255,.42),
+
+        inset 0 2px 0
+        rgba(255,255,255,.28),
+
+        inset 0 -8px 15px
+        rgba(0,0,0,.24);
+}
+
+
+/* =====================================================
+   METALLIC BEVEL
+   ===================================================== */
+
+.title-plate::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: -10px;
+
+    z-index: -1;
+
+    border-radius:
+        20px;
+
+    border:
+        5px solid transparent;
+
+    background:
+
+        linear-gradient(
+            145deg,
+            #f5fbff 0%,
+            #7d9bad 16%,
+            #e7f0f5 28%,
+            #536d7e 48%,
+            #d8e7ef 68%,
+            #668092 82%,
+            #f5fbff 100%
+        ) border-box;
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+
+    -webkit-mask-composite:
+        xor;
+
+    mask-composite:
+        exclude;
+
+    box-shadow:
+        0 0 10px rgba(112,199,255,.35);
+}
+
+
+/* =====================================================
+   BLUE INNER LIGHT
+   ===================================================== */
+
+.title-plate::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 13px;
+    right: 13px;
+    top: 6px;
+
+    height: 2px;
+
+    border-radius: 10px;
+
+    background:
+
         linear-gradient(
             90deg,
             transparent,
-            #87ad8c,
+            #50c8ff 18%,
+            #d8f5ff 50%,
+            #50c8ff 82%,
             transparent
         );
 
     box-shadow:
-        0 0 10px #87ad8c;
+        0 0 8px
+        rgba(55,190,255,.72);
 }
 
-.corner-left {
-    left: 7%;
-    top: 7px;
+
+/* =====================================================
+   TITLE
+   ===================================================== */
+
+.title-text {
+
+    position: relative;
+
+    z-index: 12;
+
+    color:
+        #ffc400;
+
+    font-size:
+        clamp(30px, 3.2vw, 54px);
+
+    font-weight:
+        950;
+
+    letter-spacing:
+        1px;
+
+    line-height:
+        1;
+
+    text-align:
+        center;
+
+    text-shadow:
+
+        0 2px 0 #8c5f00,
+
+        0 3px 5px
+        rgba(0,0,0,.65),
+
+        0 0 12px
+        rgba(255,194,0,.22);
 }
 
-.corner-right {
-    right: 7%;
-    top: 7px;
+
+/* =====================================================
+   NAVIGATION ARROWS
+   ===================================================== */
+
+.nav-arrow {
+
+    position:
+        absolute;
+
+    z-index:
+        13;
+
+    top:
+        50%;
+
+    transform:
+        translateY(-50%);
+
+    color:
+        #54c9ff;
+
+    font-size:
+        32px;
+
+    line-height:
+        1;
+
+    font-weight:
+        950;
+
+    text-shadow:
+
+        0 0 7px
+        rgba(40,187,255,.9),
+
+        0 2px 2px
+        rgba(0,0,0,.65);
+}
+
+.nav-left {
+    left: 28px;
+}
+
+.nav-right {
+    right: 28px;
+}
+
+
+/* =====================================================
+   CORNER ARMOUR
+   ===================================================== */
+
+.corner {
+
+    position:
+        absolute;
+
+    z-index:
+        9;
+
+    width:
+        180px;
+
+    height:
+        35px;
+
+    border:
+        2px solid #168bd4;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(11,82,135,.85),
+            rgba(4,27,49,.2)
+        );
+
+    box-shadow:
+        0 0 12px
+        rgba(0,133,255,.24),
+
+        inset 0 1px 0
+        rgba(255,255,255,.16);
+}
+
+.corner.left {
+
+    left:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(-38deg);
+}
+
+.corner.right {
+
+    right:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(38deg);
+}
+
+
+/* =====================================================
+   TOP METAL RAIL
+   ===================================================== */
+
+.top-rail {
+
+    position:
+        absolute;
+
+    z-index:
+        11;
+
+    left:
+        31%;
+
+    right:
+        31%;
+
+    top:
+        3px;
+
+    height:
+        5px;
+
+    border-radius:
+        10px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            transparent,
+            #7594a7 10%,
+            #eef8ff 35%,
+            #4c728b 50%,
+            #eef8ff 65%,
+            #7594a7 90%,
+            transparent
+        );
+
+    box-shadow:
+        0 0 9px
+        rgba(52,164,230,.55);
+}
+
+
+/* =====================================================
+   BOTTOM BLUE ENERGY LINE
+   ===================================================== */
+
+.energy-line {
+
+    position:
+        absolute;
+
+    z-index:
+        15;
+
+    left:
+        0;
+
+    bottom:
+        0;
+
+    width:
+        100%;
+
+    height:
+        3px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            #07548d 0%,
+            #0ca6ff 25%,
+            #ffffff 50%,
+            #0ca6ff 75%,
+            #07548d 100%
+        );
+
+    box-shadow:
+
+        0 0 7px
+        #008dff,
+
+        0 0 18px
+        rgba(0,141,255,.75);
+}
+
+
+/* =====================================================
+   FINAL KPI STYLE MATCH
+   TOP 3 KPI + BOTTOM 6 KPI = SAME APPEARANCE
+   ===================================================== */
+
+/* Same card background, border, height, radius and shadow */
+.kpi-card,
+.pha-rec-kpi {
+    position: relative !important;
+
+    height: 105px !important;
+
+    overflow: hidden !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
+        ) !important;
+
+    border:
+        1.5px solid #c2d3e4 !important;
+
+    border-top:
+        4px solid #176fc1 !important;
+
+    border-radius:
+        8px !important;
+
+    padding:
+        17px 16px !important;
+
+    box-shadow:
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98) !important;
+}
+
+
+/* Remove different green/orange/red top borders */
+.kpi-card.completed,
+.kpi-card.ongoing,
+.pha-rec-kpi.total,
+.pha-rec-kpi.approved,
+.pha-rec-kpi.rejected,
+.pha-rec-kpi.overdue,
+.pha-rec-kpi.completed,
+.pha-rec-kpi.pending {
+    border-top:
+        4px solid #176fc1 !important;
+}
+
+
+/* Same centered content structure */
+.kpi-content,
+.pha-rec-kpi-content {
+    margin-left:
+        0 !important;
+
+    width:
+        100% !important;
+
+    height:
+        100% !important;
+
+    display:
+        flex !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* Same heading font */
+.kpi-label,
+.pha-rec-kpi-label {
+    color:
+        #092d5c !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        15px !important;
+
+    font-weight:
+        900 !important;
+
+    letter-spacing:
+        .15px !important;
+
+    line-height:
+        1.15 !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* Same number font */
+.kpi-value,
+.pha-rec-kpi-value {
+    color:
+        #0a4e91 !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        42px !important;
+
+    line-height:
+        1 !important;
+
+    font-weight:
+        900 !important;
+
+    margin-top:
+        6px !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* Same description font */
+.kpi-description,
+.pha-rec-kpi-description {
+    color:
+        #304d6d !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
+
+    margin-top:
+        7px !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* Remove status-specific text colors */
+.kpi-card.completed .kpi-label,
+.kpi-card.ongoing .kpi-label,
+.kpi-value.green,
+.kpi-value.orange,
+.pha-rec-kpi.approved .pha-rec-kpi-label,
+.pha-rec-kpi.completed .pha-rec-kpi-label,
+.pha-rec-kpi.rejected .pha-rec-kpi-label,
+.pha-rec-kpi.overdue .pha-rec-kpi-label,
+.pha-rec-kpi.pending .pha-rec-kpi-label {
+    color:
+        #092d5c !important;
+}
+
+
+/* All KPI numbers use the same blue */
+.kpi-card.completed .kpi-value,
+.kpi-card.ongoing .kpi-value,
+.pha-rec-kpi.approved .pha-rec-kpi-value,
+.pha-rec-kpi.completed .pha-rec-kpi-value,
+.pha-rec-kpi.rejected .pha-rec-kpi-value,
+.pha-rec-kpi.overdue .pha-rec-kpi-value,
+.pha-rec-kpi.pending .pha-rec-kpi-value {
+    color:
+        #0a4e91 !important;
+}
+
+
+/* Same hover appearance */
+.kpi-card:hover,
+.pha-rec-kpi:hover {
+    transform:
+        translateY(-2px) !important;
+
+    box-shadow:
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1) !important;
+}
+
+
+/* No icons/patterns/arrows in either KPI group */
+.kpi-icon,
+.kpi-pattern,
+.kpi-arrow,
+.pha-rec-kpi-icon,
+.pha-rec-kpi-pattern,
+.pha-rec-kpi-arrow {
+    display:
+        none !important;
+}
+
+
+/* =====================================================
+   FINAL KPI UNIFICATION
+   ALL 9 CARDS USE THE SAME COMPONENT
+   ===================================================== */
+
+.kpi-card {
+    height: 105px !important;
+    position: relative !important;
+    overflow: hidden !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
+        ) !important;
+
+    border:
+        1.5px solid #c2d3e4 !important;
+
+    border-top:
+        4px solid #176fc1 !important;
+
+    border-radius:
+        8px !important;
+
+    padding:
+        17px 16px !important;
+
+    box-shadow:
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98) !important;
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease !important;
+}
+
+.kpi-card:hover {
+    transform:
+        translateY(-2px) !important;
+
+    box-shadow:
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1) !important;
+}
+
+.kpi-card .kpi-content {
+    margin-left:
+        0 !important;
+
+    width:
+        100% !important;
+
+    height:
+        100% !important;
+
+    display:
+        flex !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-label {
+    color:
+        #092d5c !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        15px !important;
+
+    font-weight:
+        900 !important;
+
+    letter-spacing:
+        .15px !important;
+
+    line-height:
+        1.15 !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-value {
+    color:
+        #0a4e91 !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        42px !important;
+
+    line-height:
+        1 !important;
+
+    font-weight:
+        900 !important;
+
+    margin-top:
+        6px !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-description {
+    color:
+        #0a4e91 !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
+
+    margin-top:
+        7px !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-icon,
+.kpi-card .kpi-pattern,
+.kpi-card .kpi-arrow {
+    display:
+        none !important;
+}
+
+
+/* =====================================================
+   FINAL: ALL KPI ROWS SAME COLORS AS TOP ROW
+   ===================================================== */
+
+.kpi-card .kpi-label,
+.kpi-card.completed .kpi-label,
+.kpi-card.ongoing .kpi-label {
+    color: #092d5c !important;
+}
+
+.kpi-card .kpi-value,
+.kpi-card .kpi-value.green,
+.kpi-card .kpi-value.orange {
+    color: #0a4e91 !important;
+}
+
+.kpi-card .kpi-description {
+    color: #0a4e91 !important;
+}
+
+
+/* =====================================================
+   FINAL STATUS COLOR SYSTEM
+   SAME STATUS = SAME COLOR IN EVERY KPI ROW/COLUMN
+   ===================================================== */
+
+/* -----------------------------
+   BLUE — TOTAL
+   ----------------------------- */
+
+.kpi-card.total .kpi-label,
+.kpi-card.total .kpi-value,
+.kpi-card.total .kpi-description {
+    color: #0a4e91 !important;
+}
+
+.kpi-card.total {
+    border-top-color: #176fc1 !important;
+}
+
+
+/* -----------------------------
+   GREEN — COMPLETED + APPROVED
+   ----------------------------- */
+
+.kpi-card.completed .kpi-label,
+.kpi-card.completed .kpi-value,
+.kpi-card.completed .kpi-description,
+.pha-rec-kpi.completed .pha-rec-kpi-label,
+.pha-rec-kpi.completed .pha-rec-kpi-value,
+.pha-rec-kpi.completed .pha-rec-kpi-description,
+.pha-rec-kpi.approved .pha-rec-kpi-label,
+.pha-rec-kpi.approved .pha-rec-kpi-value,
+.pha-rec-kpi.approved .pha-rec-kpi-description {
+    color: #159447 !important;
+}
+
+.kpi-card.completed,
+.pha-rec-kpi.completed,
+.pha-rec-kpi.approved {
+    border-top-color: #19a657 !important;
+}
+
+
+/* -----------------------------
+   RED — REJECTED + OVERDUE
+   ----------------------------- */
+
+.pha-rec-kpi.rejected .pha-rec-kpi-label,
+.pha-rec-kpi.rejected .pha-rec-kpi-value,
+.pha-rec-kpi.rejected .pha-rec-kpi-description,
+.pha-rec-kpi.overdue .pha-rec-kpi-label,
+.pha-rec-kpi.overdue .pha-rec-kpi-value,
+.pha-rec-kpi.overdue .pha-rec-kpi-description {
+    color: #d9534f !important;
+}
+
+.pha-rec-kpi.rejected,
+.pha-rec-kpi.overdue {
+    border-top-color: #d9534f !important;
+}
+
+
+/* -----------------------------
+   ORANGE — ONGOING + PENDING
+   ----------------------------- */
+
+.kpi-card.ongoing .kpi-label,
+.kpi-card.ongoing .kpi-value,
+.kpi-card.ongoing .kpi-description,
+.pha-rec-kpi.pending .pha-rec-kpi-label,
+.pha-rec-kpi.pending .pha-rec-kpi-value,
+.pha-rec-kpi.pending .pha-rec-kpi-description {
+    color: #f0a000 !important;
+}
+
+.kpi-card.ongoing,
+.pha-rec-kpi.pending {
+    border-top-color: #f18d05 !important;
+}
+
+
+/* -----------------------------
+   IMPORTANT:
+   TOTAL RECOMMENDATION = BLUE
+   ----------------------------- */
+
+.pha-rec-kpi.total .pha-rec-kpi-label,
+.pha-rec-kpi.total .pha-rec-kpi-value,
+.pha-rec-kpi.total .pha-rec-kpi-description {
+    color: #0a4e91 !important;
+}
+
+.pha-rec-kpi.total {
+    border-top-color: #176fc1 !important;
+}
+
+
+/* =====================================================
+   FINAL FIX — COLUMN COLORS MATCH TOP ROW
+   ===================================================== */
+
+/* ALL 9 CARDS: identical physical appearance */
+.kpi-card {
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
+        ) !important;
+
+    border:
+        1.5px solid #c2d3e4 !important;
+
+    border-radius:
+        8px !important;
+
+    height:
+        105px !important;
+
+    padding:
+        17px 16px !important;
+
+    box-shadow:
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98) !important;
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease !important;
+}
+
+
+/* =====================================================
+   COLUMN 1 — BLUE
+   TOP: TOTAL PHA
+   LOWER: TOTAL RECOMMENDATION + OVERDUE
+   ===================================================== */
+
+.kpi-card.total {
+    border-top:
+        4px solid #176fc1 !important;
+}
+
+.kpi-card.total .kpi-label,
+.kpi-card.total .kpi-value,
+.kpi-card.total .kpi-description {
+    color:
+        #0a4e91 !important;
+}
+
+
+/* =====================================================
+   COLUMN 2 — GREEN
+   TOP: COMPLETED
+   LOWER: APPROVED + COMPLETED
+   ===================================================== */
+
+.kpi-card.completed,
+.kpi-card.approved {
+    border-top:
+        4px solid #19a657 !important;
+}
+
+.kpi-card.completed .kpi-label,
+.kpi-card.completed .kpi-value,
+.kpi-card.completed .kpi-description,
+.kpi-card.approved .kpi-label,
+.kpi-card.approved .kpi-value,
+.kpi-card.approved .kpi-description {
+    color:
+        #159447 !important;
+}
+
+
+/* =====================================================
+   COLUMN 3 — ORANGE
+   TOP: ONGOING
+   LOWER: REJECTED + PENDING
+   ===================================================== */
+
+.kpi-card.ongoing,
+.kpi-card.rejected,
+.kpi-card.pending {
+    border-top:
+        4px solid #f18d05 !important;
+}
+
+.kpi-card.ongoing .kpi-label,
+.kpi-card.ongoing .kpi-value,
+.kpi-card.ongoing .kpi-description,
+.kpi-card.rejected .kpi-label,
+.kpi-card.rejected .kpi-value,
+.kpi-card.rejected .kpi-description,
+.kpi-card.pending .kpi-label,
+.kpi-card.pending .kpi-value,
+.kpi-card.pending .kpi-description {
+    color:
+        #f0a000 !important;
+}
+
+
+/* =====================================================
+   SAME HOVER / MOVEMENT FOR ALL 9
+   ===================================================== */
+
+.kpi-card:hover {
+    transform:
+        translateY(-2px) !important;
+
+    box-shadow:
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1) !important;
+}
+
+
+/* =====================================================
+   SAME CONTENT ALIGNMENT FOR ALL 9
+   ===================================================== */
+
+.kpi-card .kpi-content {
+    margin-left:
+        0 !important;
+
+    width:
+        100% !important;
+
+    height:
+        100% !important;
+
+    display:
+        flex !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* =====================================================
+   SAME TYPOGRAPHY
+   ===================================================== */
+
+.kpi-card .kpi-label {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        15px !important;
+
+    font-weight:
+        900 !important;
+
+    letter-spacing:
+        .15px !important;
+
+    line-height:
+        1.15 !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-value {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        42px !important;
+
+    line-height:
+        1 !important;
+
+    font-weight:
+        900 !important;
+
+    margin-top:
+        6px !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-card .kpi-description {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
+
+    margin-top:
+        7px !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* No icon/pattern/arrow — exactly like the current top cards */
+.kpi-card .kpi-icon,
+.kpi-card .kpi-pattern,
+.kpi-card .kpi-arrow {
+    display:
+        none !important;
+}
+
+
+/* =====================================================
+   FINAL DASHBOARD KPI STYLE
+   TOP ROW IS THE COLOR REFERENCE
+   COLUMN 1 = BLUE | COLUMN 2 = GREEN | COLUMN 3 = ORANGE
+   ===================================================== */
+
+/* ---------- COMMON CARD LOOK ---------- */
+
+.kpi-card {
+    position: relative !important;
+    height: 105px !important;
+    overflow: hidden !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #ffffff 72%,
+            #edf4fa 100%
+        ) !important;
+
+    border:
+        1.5px solid #c2d3e4 !important;
+
+    border-radius:
+        8px !important;
+
+    padding:
+        17px 16px !important;
+
+    box-shadow:
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98) !important;
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease !important;
+}
+
+
+/* ---------- SAME HOVER FOR ALL BOXES ---------- */
+
+.kpi-card:hover {
+    transform:
+        translateY(-2px) !important;
+
+    box-shadow:
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1) !important;
+}
+
+
+/* ---------- SAME CONTENT POSITION ---------- */
+
+.kpi-content {
+    margin-left:
+        0 !important;
+
+    width:
+        100% !important;
+
+    height:
+        100% !important;
+
+    display:
+        flex !important;
+
+    flex-direction:
+        column !important;
+
+    align-items:
+        center !important;
+
+    justify-content:
+        center !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* ---------- SAME FONT ---------- */
+
+.kpi-label {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        15px !important;
+
+    font-weight:
+        900 !important;
+
+    letter-spacing:
+        .15px !important;
+
+    line-height:
+        1.15 !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-value {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        42px !important;
+
+    line-height:
+        1 !important;
+
+    font-weight:
+        900 !important;
+
+    margin-top:
+        6px !important;
+
+    text-align:
+        center !important;
+}
+
+.kpi-description {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        700 !important;
+
+    margin-top:
+        7px !important;
+
+    text-align:
+        center !important;
+}
+
+
+/* =====================================================
+   COLUMN 1 — BLUE
+   TOTAL PHA
+   TOTAL RECOMMENDATION
+   OVERDUE
+   ===================================================== */
+
+.kpi-card.total,
+.kpi-card.overdue {
+    border-top:
+        4px solid #176fc1 !important;
+}
+
+.kpi-card.total .kpi-label,
+.kpi-card.total .kpi-value,
+.kpi-card.total .kpi-description,
+.kpi-card.overdue .kpi-label,
+.kpi-card.overdue .kpi-value,
+.kpi-card.overdue .kpi-description {
+    color:
+        #0a4e91 !important;
+}
+
+
+/* =====================================================
+   COLUMN 2 — GREEN
+   COMPLETED
+   APPROVED
+   COMPLETED
+   ===================================================== */
+
+.kpi-card.completed,
+.kpi-card.approved {
+    border-top:
+        4px solid #19a657 !important;
+}
+
+.kpi-card.completed .kpi-label,
+.kpi-card.completed .kpi-value,
+.kpi-card.completed .kpi-description,
+.kpi-card.approved .kpi-label,
+.kpi-card.approved .kpi-value,
+.kpi-card.approved .kpi-description {
+    color:
+        #159447 !important;
+}
+
+
+/* =====================================================
+   COLUMN 3 — ORANGE
+   ONGOING
+   REJECTED
+   PENDING
+   ===================================================== */
+
+.kpi-card.ongoing,
+.kpi-card.rejected,
+.kpi-card.pending {
+    border-top:
+        4px solid #f18d05 !important;
+}
+
+.kpi-card.ongoing .kpi-label,
+.kpi-card.ongoing .kpi-value,
+.kpi-card.ongoing .kpi-description,
+.kpi-card.rejected .kpi-label,
+.kpi-card.rejected .kpi-value,
+.kpi-card.rejected .kpi-description,
+.kpi-card.pending .kpi-label,
+.kpi-card.pending .kpi-value,
+.kpi-card.pending .kpi-description {
+    color:
+        #f0a000 !important;
+}
+
+
+/* =====================================================
+   REMOVE OLD STATUS COLORS / ICONS
+   ===================================================== */
+
+.kpi-card .kpi-icon,
+.kpi-card .kpi-pattern,
+.kpi-card .kpi-arrow {
+    display:
+        none !important;
 }
 
 </style>
@@ -2211,179 +3103,267 @@ body {
 
 <div class="header">
 
-    <div class="top-line"></div>
+    <div class="corner left"></div>
+    <div class="corner right"></div>
 
-    <div class="corner-light corner-left"></div>
-    <div class="corner-light corner-right"></div>
+    <div class="top-rail"></div>
 
-    <svg class="industrial"
-         viewBox="0 0 1672 145"
-         preserveAspectRatio="none"
-         aria-hidden="true">
 
-        <!-- LEFT TOWER -->
+    <svg
+        class="industrial"
+        viewBox="0 0 1672 145"
+        preserveAspectRatio="none"
+        aria-hidden="true">
+
+        <!-- LEFT INDUSTRIAL PLANT -->
+
         <g>
-            <rect class="steel"
-                  x="85" y="24"
-                  width="34" height="116"
-                  rx="4"/>
 
             <rect class="steel"
-                  x="91" y="9"
-                  width="22" height="18"/>
+                  x="48" y="58"
+                  width="22" height="82"
+                  rx="3"/>
 
             <rect class="steel"
-                  x="96" y="0"
-                  width="12" height="12"/>
+                  x="82" y="40"
+                  width="34" height="100"
+                  rx="5"/>
 
-            <path class="light"
-                  d="M102 0 L102 140
-                     M87 55 L117 55
-                     M87 78 L117 78
-                     M87 103 L117 103"/>
+            <rect class="steel"
+                  x="88" y="23"
+                  width="22" height="19"/>
 
-            <circle class="window"
-                    cx="102" cy="43" r="3"/>
-            <circle class="window"
-                    cx="102" cy="67" r="3"/>
-            <circle class="window"
-                    cx="102" cy="91" r="3"/>
+            <rect class="steel"
+                  x="93" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="99" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M99 10 V140
+                    M84 62 H114
+                    M84 86 H114
+                    M84 110 H114
+                  "/>
+
+            <rect class="steel"
+                  x="137" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M137 91 H189
+                    M137 114 H189
+                  "/>
+
+            <circle class="glass"
+                    cx="163" cy="102" r="5"/>
+
         </g>
 
-        <!-- LEFT STACK -->
+
+        <!-- LEFT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M0 121
+                H310
+                V92
+                H395
+            "/>
+
+            <path d="
+                M35 132
+                H270
+                V108
+                H420
+            "/>
+
+            <path d="
+                M170 77
+                H285
+                V52
+                H380
+            "/>
+
+            <path d="
+                M247 140
+                V70
+                H335
+            "/>
+
+        </g>
+
+
+        <!-- RIGHT INDUSTRIAL PLANT -->
+
         <g>
-            <rect class="steel"
-                  x="150" y="52"
-                  width="17" height="88"/>
 
             <rect class="steel"
-                  x="146" y="48"
-                  width="25" height="8"/>
+                  x="1430" y="57"
+                  width="22" height="83"
+                  rx="3"/>
 
-            <path class="light"
-                  d="M158 52 L158 140"/>
+            <rect class="steel"
+                  x="1470" y="40"
+                  width="34" height="100"
+                  rx="5"/>
+
+            <rect class="steel"
+                  x="1476" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="1481" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="1487" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M1487 10 V140
+                    M1472 62 H1502
+                    M1472 86 H1502
+                    M1472 110 H1502
+                  "/>
+
+            <rect class="steel"
+                  x="1533" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M1533 91 H1585
+                    M1533 114 H1585
+                  "/>
+
+            <circle class="glass"
+                    cx="1559" cy="102" r="5"/>
+
         </g>
 
-        <!-- LEFT PIPE NETWORK -->
-        <g class="light">
-            <path d="M55 113 H245 V85 H320"/>
-            <path d="M120 125 H260 V105 H355"/>
-            <path d="M180 96 H285 V65 H340"/>
-            <path d="M215 130 V70 H280"/>
+
+        <!-- RIGHT PIPING -->
+
+        <g class="highlight">
+
+            <path d="
+                M1672 121
+                H1362
+                V92
+                H1277
+            "/>
+
+            <path d="
+                M1637 132
+                H1402
+                V108
+                H1252
+            "/>
+
+            <path d="
+                M1502 77
+                H1387
+                V52
+                H1292
+            "/>
+
+            <path d="
+                M1425 140
+                V70
+                H1337
+            "/>
+
         </g>
 
-        <!-- LEFT VESSEL -->
-        <g>
-            <rect class="steel"
-                  x="260" y="64"
-                  width="58" height="76"
-                  rx="26"/>
 
-            <path class="light"
-                  d="M260 82 H318
-                     M260 107 H318"/>
+        <!-- TECHNICAL HEXAGONS -->
 
-            <circle class="window"
-                    cx="289" cy="95" r="4"/>
-        </g>
+        <g class="tech">
 
-        <!-- RIGHT TOWER -->
-        <g>
-            <rect class="steel"
-                  x="1512" y="25"
-                  width="36" height="115"
-                  rx="4"/>
+            <path d="
+                M270 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <rect class="steel"
-                  x="1518" y="9"
-                  width="24" height="18"/>
+            <path d="
+                M309 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <rect class="steel"
-                  x="1523" y="0"
-                  width="14" height="12"/>
+            <path d="
+                M1366 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <path class="light"
-                  d="M1530 0 L1530 140
-                     M1514 54 L1546 54
-                     M1514 79 L1546 79
-                     M1514 103 L1546 103"/>
-
-            <circle class="window"
-                    cx="1530" cy="42" r="3"/>
-            <circle class="window"
-                    cx="1530" cy="66" r="3"/>
-            <circle class="window"
-                    cx="1530" cy="90" r="3"/>
-        </g>
-
-        <!-- RIGHT STACK -->
-        <g>
-            <rect class="steel"
-                  x="1450" y="54"
-                  width="18" height="86"/>
-
-            <rect class="steel"
-                  x="1446" y="49"
-                  width="26" height="8"/>
-
-            <path class="light"
-                  d="M1459 54 L1459 140"/>
-        </g>
-
-        <!-- RIGHT PIPE NETWORK -->
-        <g class="light">
-            <path d="M1620 112 H1425 V85 H1350"/>
-            <path d="M1575 125 H1410 V104 H1330"/>
-            <path d="M1500 95 H1390 V65 H1335"/>
-            <path d="M1465 130 V70 H1390"/>
-        </g>
-
-        <!-- RIGHT VESSEL -->
-        <g>
-            <rect class="steel"
-                  x="1350" y="64"
-                  width="58" height="76"
-                  rx="26"/>
-
-            <path class="light"
-                  d="M1350 82 H1408
-                     M1350 107 H1408"/>
-
-            <circle class="window"
-                    cx="1379" cy="95" r="4"/>
-        </g>
-
-        <!-- CENTRAL LOW PIPE -->
-        <g class="light">
-            <path d="M0 137 H1672"/>
-            <path d="M0 126 H420 V116 H650"/>
-            <path d="M1672 126 H1250 V116 H1020"/>
-        </g>
-
-        <!-- HEXAGONAL TECHNICAL MOTIFS -->
-        <g class="hex">
-
-            <path d="M250 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M282 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M1335 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-            <path d="M1370 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
+            <path d="
+                M1405 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
         </g>
 
     </svg>
 
 
-    <div class="content">
+    <div class="side-fade left"></div>
+    <div class="side-fade right"></div>
 
 
+    <!-- CENTRAL 3D TITLE -->
 
-        <div class="pillar">
-            PILLAR: PHA
+    <div class="title-plate">
+
+        <div class="nav-arrow nav-left">
+            ◀◀
+        </div>
+
+        <div class="title-text">
+            Process Hazard Analysis (PHA)
+        </div>
+
+        <div class="nav-arrow nav-right">
+            ▶▶
         </div>
 
     </div>
 
-    <div class="scan"></div>
+
+    <div class="energy-line"></div>
 
 </div>
 
@@ -2396,6 +3376,21 @@ components.html(
     height=100,
     scrolling=False
 )
+
+# =========================================================
+# RESET FILTER CALLBACK
+# =========================================================
+
+def reset_pha_filters():
+    # Reset status filter
+    st.session_state.status_filter = "All"
+
+    # Always return pagination to page 1
+    st.session_state.page_number = 1
+
+    # Reset Department selectbox to All Departments
+    st.session_state.department_selector = "All Departments"
+
 
 # =========================================================
 # FILTER SECTION
@@ -2413,7 +3408,7 @@ filter_month, filter_department, filter_reset = st.columns(
 with filter_month:
     # Same vertical spacing as all other controls
     st.markdown(
-        "<div style='height:22px;'></div>",
+        "<div class='month-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
     )
 
@@ -2437,7 +3432,7 @@ with filter_month:
 with filter_department:
     # Same vertical spacing
     st.markdown(
-        "<div style='height:22px;'></div>",
+        "<div class='department-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
     )
 
@@ -2463,7 +3458,6 @@ with filter_department:
     selected_department = st.selectbox(
         "Department",
         department_options,
-        index=0,
         key="department_selector"
     )
 
@@ -2474,18 +3468,16 @@ with filter_department:
 with filter_reset:
     # Same vertical spacing
     st.markdown(
-        "<div style='height:46px;'></div>",
+        "<div style='height:40px;'></div>",
         unsafe_allow_html=True
     )
 
-    if st.button(
-            "↻ Reset Filters",
-            use_container_width=True
-    ):
-        st.session_state.status_filter = "All"
-        st.session_state.page_number = 1
-
-        st.rerun()
+    st.button(
+        "↻ Reset Filters",
+        use_container_width=True,
+        key="reset_pha_filters_button",
+        on_click=reset_pha_filters
+    )
 # =========================================================
 # FILTER DATA
 # =========================================================
@@ -2730,6 +3722,11 @@ else:
 
 # ---------------------------------------------------------
 # SIX KPI BOXES
+# Same KPI component as TOP 3.
+# Color follows the TOP ROW COLUMN reference:
+# Column 1 = BLUE
+# Column 2 = GREEN
+# Column 3 = ORANGE
 # ---------------------------------------------------------
 
 recommendation_kpis = [
@@ -2738,7 +3735,7 @@ recommendation_kpis = [
         "▣",
         "TOTAL RECOMMENDATION",
         total_recommendations,
-        "Total recommendations",
+        "",
         "total"
     ),
 
@@ -2747,7 +3744,7 @@ recommendation_kpis = [
         "APPROVED",
         approved_recommendations,
         "Approved recommendations",
-        "approved"
+        "completed"
     ),
 
     (
@@ -2755,15 +3752,15 @@ recommendation_kpis = [
         "REJECTED",
         rejected_recommendations,
         "Rejected recommendations",
-        "rejected"
+        "ongoing"
     ),
 
     (
         "!",
         "OVERDUE",
         overdue_recommendations,
-        "Overdue recommendations",
-        "overdue"
+        "",
+        "total"
     ),
 
     (
@@ -2779,7 +3776,7 @@ recommendation_kpis = [
         "PENDING",
         pending_recommendations,
         "Pending recommendations",
-        "pending"
+        "ongoing"
     )
 ]
 
@@ -2787,7 +3784,12 @@ for row_start in range(
         0,
         len(recommendation_kpis),
         3
-):
+    ):
+    if row_start == 3:
+        st.markdown(
+            "<div style='height:22px;'></div>",
+            unsafe_allow_html=True
+        )
 
     recommendation_row = st.columns(
         3,
@@ -2795,214 +3797,50 @@ for row_start in range(
     )
 
     for column, card in zip(
-            recommendation_row,
-            recommendation_kpis[
-                row_start:row_start + 3
-            ]
+        recommendation_row,
+        recommendation_kpis[
+            row_start:row_start + 3
+        ]
     ):
+
         icon, label, value, description, card_class = card
 
         with column:
+
+            # SAME HTML COMPONENT AS THE TOP 3.
+            # Only the color class changes according to the
+            # TOP ROW COLUMN reference.
             st.html(
                 f"""
-<div class="pha-rec-kpi {card_class}">
+<div class="kpi-card {card_class}">
 
-    <div class="pha-rec-kpi-icon">
+    <div class="kpi-icon">
         {icon}
     </div>
 
-    <div class="pha-rec-kpi-content">
+    <div class="kpi-content">
 
-        <div class="pha-rec-kpi-label">
+        <div class="kpi-label">
             {label}
         </div>
 
-        <div class="pha-rec-kpi-value">
+        <div class="kpi-value">
             {value}
         </div>
 
-        <div class="pha-rec-kpi-description">
+        <div class="kpi-description">
             {description}
         </div>
 
     </div>
 
-    <div class="pha-rec-kpi-pattern"></div>
+    <div class="kpi-pattern"></div>
 
-    <div class="pha-rec-kpi-arrow">
-        ›
-    </div>
+    <div class="kpi-arrow">›</div>
 
 </div>
 """
             )
-
-# =========================================================
-# RECOMENDATION REGISTER
-# =========================================================
-
-st.html(
-    """
-<div class="recommendation-wrap">
-
-    <div class="recommendation-title">
-        <span class="recommendation-icon">⚠</span>
-        RECOMENDATION REGISTER
-    </div>
-
-</div>
-"""
-)
-
-# =========================================================
-# RECOMENDATION REGISTER - SELECTED HEADERS
-# =========================================================
-
-recommendation_register_columns = [
-    "Department",
-    "PHA No.",
-    "PHA Description",
-    "Recomendation",
-    "Target Date",
-    "Overdue/Pending/Completion",
-    "Remarks"
-]
-
-# =========================================================
-# RECOMENDATION REGISTER DATA
-# =========================================================
-
-missing_register_columns = [
-    column
-    for column in recommendation_register_columns
-    if column not in pha_recommendation_df.columns
-]
-
-if pha_recommendation_df.empty:
-
-    st.html(
-        """
-<div class="recommendation-empty">
-    No RECOMENDATION REGISTER data found.
-</div>
-"""
-    )
-
-elif missing_register_columns:
-
-    st.error(
-        "RECOMENDATION REGISTER headers not found."
-    )
-
-    st.write(
-        "Missing headers:"
-    )
-
-    st.write(
-        missing_register_columns
-    )
-
-    st.write(
-        "Available Google Sheet headers:"
-    )
-
-    st.write(
-        pha_recommendation_df.columns.tolist()
-    )
-
-else:
-
-    recommendation_register_df = (
-        pha_recommendation_df[
-            recommendation_register_columns
-        ]
-        .copy()
-    )
-
-    recommendation_register_html = """
-<div class="recommendation-container">
-
-<table class="recommendation-table">
-
-<thead>
-<tr>
-"""
-
-    # -----------------------------------------------------
-    # HEADERS
-    # -----------------------------------------------------
-
-    for column in recommendation_register_columns:
-        recommendation_register_html += (
-            f"<th>{column}</th>"
-        )
-
-    recommendation_register_html += """
-</tr>
-</thead>
-
-<tbody>
-"""
-
-    # -----------------------------------------------------
-    # DATA
-    # -----------------------------------------------------
-
-    for _, row in recommendation_register_df.iterrows():
-
-        recommendation_register_html += "<tr>"
-
-        for column in recommendation_register_columns:
-
-            value = row[column]
-
-            if pd.isna(value):
-
-                value = ""
-
-            else:
-
-                value = str(
-                    value
-                ).strip()
-
-            value = (
-                value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\n", "<br>")
-            )
-
-            recommendation_register_html += (
-                f"<td>{value}</td>"
-            )
-
-        recommendation_register_html += "</tr>"
-
-    recommendation_register_html += """
-</tbody>
-
-</table>
-
-</div>
-
-<div class="recommendation-count">
-"""
-
-    recommendation_register_html += (
-        f"Showing "
-        f"{len(recommendation_register_df)} "
-        f"recommendation entries"
-    )
-
-    recommendation_register_html += """
-</div>
-"""
-
-    st.html(
-        recommendation_register_html
-    )
 
 # =========================================================
 # PT REGISTER TITLE
@@ -3025,8 +3863,8 @@ st.html(
 # REGISTER TOOLBAR
 # =========================================================
 
-search_col, all_col, completed_col, ongoing_col, refresh_col, upload_col = st.columns(
-    [4.2, .8, 1.15, 1.0, 1.15, 1.35],
+search_col, all_col, completed_col, ongoing_col, refresh_col = st.columns(
+    [4.2, .8, 1.15, 1.0, 1.15],
     gap="small"
 )
 
@@ -3052,10 +3890,20 @@ with completed_col:
         use_container_width=True
     )
 
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True
+    )
+
 with ongoing_col:
     ongoing_button = st.button(
         "Ongoing",
         use_container_width=True
+    )
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True
     )
 
 with refresh_col:
@@ -3066,15 +3914,7 @@ with refresh_col:
         st.cache_data.clear()
         st.rerun()
 
-with upload_col:
-    if st.button(
-            "⬆ Upload Document",
-            use_container_width=True
-    ):
-        st.session_state.upload_pha_no = ""
-        st.session_state.open_upload_dialog = True
 
-        st.rerun()
 
 # =========================================================
 # STATUS FILTER
@@ -3486,6 +4326,274 @@ with page_right:
         st.session_state.page_number += 1
         st.rerun()
 
+# =========================================================
+# RECOMENDATION REGISTER
+# 5 ROWS PER PAGE
+# =========================================================
+
+st.html(
+    """
+<div class="recommendation-wrap">
+
+    <div class="recommendation-title">
+        <span class="recommendation-icon">⚠</span>
+        RECOMENDATION REGISTER
+    </div>
+
+</div>
+"""
+)
+
+recommendation_register_columns = [
+    "Sr No",
+    "PHA No.",
+    "Department",
+    "Target Date",
+    "Completion Date",
+    "Status (Open/Close)"
+]
+
+missing_register_columns = [
+    column
+    for column in recommendation_register_columns
+    if column not in pha_recommendation_df.columns
+]
+
+if pha_recommendation_df.empty:
+
+    st.html(
+        """
+<div class="recommendation-empty">
+    No RECOMENDATION REGISTER data found.
+</div>
+"""
+    )
+
+elif missing_register_columns:
+
+    st.error(
+        "RECOMENDATION REGISTER headers not found."
+    )
+
+    st.write(
+        missing_register_columns
+    )
+
+else:
+
+    recommendation_register_df = (
+        pha_recommendation_df[
+            recommendation_register_columns
+        ]
+        .copy()
+    )
+
+    # =====================================================
+    # PAGINATION - 5 ROWS
+    # =====================================================
+
+    recommendation_rows_per_page = 5
+
+    if "recommendation_page_number" not in st.session_state:
+        st.session_state.recommendation_page_number = 1
+
+    total_recommendation_records = len(
+        recommendation_register_df
+    )
+
+    recommendation_total_pages = max(
+        1,
+        (
+            total_recommendation_records
+            + recommendation_rows_per_page
+            - 1
+        )
+        // recommendation_rows_per_page
+    )
+
+    recommendation_page_number = (
+        st.session_state.recommendation_page_number
+    )
+
+    if recommendation_page_number > recommendation_total_pages:
+
+        recommendation_page_number = (
+            recommendation_total_pages
+        )
+
+        st.session_state.recommendation_page_number = (
+            recommendation_page_number
+        )
+
+    recommendation_start_index = (
+        recommendation_page_number - 1
+    ) * recommendation_rows_per_page
+
+    recommendation_end_index = (
+        recommendation_start_index
+        + recommendation_rows_per_page
+    )
+
+    recommendation_display_df = (
+        recommendation_register_df.iloc[
+            recommendation_start_index:
+            recommendation_end_index
+        ]
+        .copy()
+    )
+
+    # =====================================================
+    # TABLE
+    # =====================================================
+
+    recommendation_register_html = """
+<div class="recommendation-container">
+
+<table class="recommendation-table">
+
+<thead>
+<tr>
+"""
+
+    for column in recommendation_register_columns:
+
+        recommendation_register_html += (
+            f"<th>{column}</th>"
+        )
+
+    recommendation_register_html += """
+</tr>
+</thead>
+
+<tbody>
+"""
+
+    for _, row in recommendation_display_df.iterrows():
+
+        recommendation_register_html += "<tr>"
+
+        for column in recommendation_register_columns:
+
+            value = row[column]
+
+            if pd.isna(value):
+                value = ""
+            else:
+                value = str(value).strip()
+
+            value = (
+                value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\n", "<br>")
+            )
+
+            recommendation_register_html += (
+                f"<td>{value}</td>"
+            )
+
+        recommendation_register_html += "</tr>"
+
+    recommendation_register_html += """
+</tbody>
+
+</table>
+
+</div>
+"""
+
+    st.html(
+        recommendation_register_html
+    )
+
+    # =====================================================
+    # RECORD COUNT
+    # =====================================================
+
+    recommendation_first_record = (
+        recommendation_start_index + 1
+        if total_recommendation_records
+        else 0
+    )
+
+    recommendation_last_record = min(
+        recommendation_end_index,
+        total_recommendation_records
+    )
+
+    st.html(
+        f"""
+<div class="record-bar">
+    Showing {recommendation_first_record}
+    to {recommendation_last_record}
+    of {total_recommendation_records}
+    entries
+</div>
+"""
+    )
+
+    # =====================================================
+    # PAGINATION BUTTONS
+    # =====================================================
+
+    (
+        recommendation_previous_col,
+        recommendation_page_col,
+        recommendation_next_col
+    ) = st.columns(
+        [1, 1, 1],
+        gap="small"
+    )
+
+    with recommendation_previous_col:
+
+        if st.button(
+            "‹",
+            key="recommendation_previous_button",
+            disabled=(
+                recommendation_page_number <= 1
+            ),
+            use_container_width=True
+        ):
+
+            st.session_state.recommendation_page_number -= 1
+
+            st.rerun()
+
+    with recommendation_page_col:
+
+        st.html(
+            f"""
+<div class="record-bar"
+     style="justify-content:center;">
+    {recommendation_page_number}
+    &nbsp; / &nbsp;
+    {recommendation_total_pages}
+</div>
+"""
+        )
+
+    with recommendation_next_col:
+
+        if st.button(
+            "›",
+            key="recommendation_next_button",
+            disabled=(
+                recommendation_page_number
+                >= recommendation_total_pages
+            ),
+            use_container_width=True
+        ):
+
+            st.session_state.recommendation_page_number += 1
+
+            st.rerun()
+
+
+# =========================================================
+# UPLOAD DIALOG
+# =========================================================
 # =========================================================
 # UPLOAD DIALOG
 # =========================================================

@@ -7,7 +7,6 @@ import requests
 import streamlit as st
 import plotly.graph_objects as go
 
-
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -17,7 +16,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
 
 # ============================================================
 # GOOGLE SHEET
@@ -34,14 +32,13 @@ SHEETS = {
     "PHA Recommendation": "1114420199",
     "MOC": "1493447251",
     "PSSR": "1914804736",
-    "PS Incident": "354502422",   # corrected: Incident
-    "Training": "1071736559",       # corrected: Training
+    "PS Incident": "354502422",  # corrected: Incident
+    "Training": "1071736559",  # corrected: Training
     "SOC-SOL": "510439154",
     "Critical Equipment": None,
     "Alarm": None,
     "Barrier Audit": None,
 }
-
 
 # ============================================================
 # STYLE
@@ -188,6 +185,31 @@ div[data-testid="stMetricLabel"] p {
         margin-top:-35px !important;
         margin-bottom:0px !important;
     }
+
+
+
+/* MATCH CLICKABLE MODULE HEADINGS WITH NORMAL MODULE HEADING */
+[data-testid="stPageLink"] {
+    margin-bottom:6px !important;
+}
+
+[data-testid="stPageLink"],
+[data-testid="stPageLink"] a,
+[data-testid="stPageLink"] a *,
+[data-testid="stPageLink"] p,
+[data-testid="stPageLink"] span,
+[data-testid="stPageLink"] div {
+    color:#073f78 !important;
+    font-size:12px !important;
+    font-weight:900 !important;
+    text-decoration:none !important;
+}
+
+[data-testid="stPageLink"] a:hover,
+[data-testid="stPageLink"] a:hover * {
+    color:#073f78 !important;
+    text-decoration:none !important;
+}
 
     </style>
     """,
@@ -505,6 +527,8 @@ st.components.v1.html(
     height=170,
     scrolling=False
 )
+
+
 # ============================================================
 # HELPERS
 # ============================================================
@@ -666,7 +690,53 @@ def load_module(name):
     return filter_SMS_1(raw)
 
 
-def status_counts(df):
+def find_status_col(df, candidates=None):
+    """Find the real status column, prioritizing explicit Open/Close fields."""
+    if df is None or df.empty:
+        return None
+
+    normalized = {norm(c): c for c in df.columns}
+
+    priority = [
+        "Status (Open/Close)",
+        "Status (Open / Close)",
+        "Status",
+        "Current Status",
+        "Action Status",
+        "Completion Status",
+        "Investigation Status",
+        "Recommendation Status",
+    ]
+
+    if candidates:
+        priority = list(candidates) + priority
+
+    seen = set()
+    for candidate in priority:
+        key = norm(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if key in normalized:
+            return normalized[key]
+
+    status_keywords = [
+        "status",
+        "actionstatus",
+        "completionstatus",
+        "investigationstatus",
+        "recommendationstatus",
+    ]
+
+    for column in df.columns:
+        key = norm(column)
+        if any(keyword in key for keyword in status_keywords):
+            return column
+
+    return None
+
+
+def status_counts(df, status_candidates=None):
     result = {
         "total": 0,
         "completed": 0,
@@ -682,17 +752,7 @@ def status_counts(df):
 
     result["total"] = len(df)
 
-    status_col = find_col(
-        df,
-        [
-            "Status",
-            "Current Status",
-            "Action Status",
-            "Completion Status",
-            "Investigation Status",
-            "Recommendation Status",
-        ],
-    )
+    status_col = find_status_col(df, status_candidates)
 
     if status_col is None:
         return result
@@ -738,7 +798,7 @@ def make_register(df, id_names, description_names, status_names):
 
     id_col = find_col(df, id_names)
     desc_col = find_col(df, description_names)
-    status_col = find_col(df, status_names)
+    status_col = find_status_col(df, status_names)
 
     result = pd.DataFrame(index=df.index)
 
@@ -811,7 +871,6 @@ def status_style(value):
 # ============================================================
 
 def show_register(title, df, id_names, description_names, status_names):
-
     st.markdown(
         f'<div class="section-bar">{title}</div>',
         unsafe_allow_html=True,
@@ -847,11 +906,30 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+    "TRAINING": "pages/13_Training.py",
+}
+
+
 def show_module_title(number, icon, title):
-    st.markdown(
-        f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-        unsafe_allow_html=True,
-    )
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title" style="color:#073f78 !important; font-size:12px !important; font-weight:900 !important;">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def show_metric_row(items):
@@ -897,7 +975,6 @@ soc = loaded["SOC-SOL"]
 incident = loaded["PS Incident"]
 audit = loaded["Barrier Audit"]
 
-
 # ============================================================
 # LIVE DATA BAR
 # ============================================================
@@ -921,17 +998,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
 # ============================================================
 # ROW 1 — PT / PHA / RECOMMENDATION / MOC
 # ============================================================
 a, b, c, d = st.columns(4, gap="small")
 
-
 with a:
-
     with st.container(border=True):
-
         # PT HEADER
         show_module_title(
             1,
@@ -963,9 +1036,7 @@ with a:
 
 
 with b:
-
     with st.container(border=True):
-
         show_module_title(
             2,
             "△",
@@ -1000,23 +1071,28 @@ with b:
             ],
         )
 
-
-
 # ============================================================
 # 3 — PHA RECOMMENDATION
 # ============================================================
 
 with c:
-
     with st.container(border=True):
-
         show_module_title(
             3,
             "♧",
             "PHA RECOMMENDATION"
         )
 
-        x = status_counts(rec)
+        x = status_counts(
+            rec,
+            [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
+                "Status",
+                "Action Status",
+                "Recommendation Status",
+            ],
+        )
 
         show_metric_row([
             (
@@ -1049,13 +1125,13 @@ with c:
                 "Description"
             ],
             [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
                 "Status",
                 "Action Status",
-                "Recommendation Status"
+                "Recommendation Status",
             ],
         )
-
-
 
 # ============================================================
 # 4 — MANAGEMENT OF CHANGE (MOC)
@@ -1169,8 +1245,8 @@ with d:
             )
 
             if (
-                moc_change_type_col
-                and not moc_chart.empty
+                    moc_change_type_col
+                    and not moc_chart.empty
             ):
 
                 type_data = (
@@ -1182,7 +1258,7 @@ with d:
 
                 type_data = type_data[
                     type_data != ""
-                ]
+                    ]
 
                 type_counts = (
                     type_data.value_counts()
@@ -1282,8 +1358,8 @@ with d:
             )
 
             if (
-                moc_category_col
-                and not moc_chart.empty
+                    moc_category_col
+                    and not moc_chart.empty
             ):
 
                 category_data = (
@@ -1295,7 +1371,7 @@ with d:
 
                 category_data = category_data[
                     category_data != ""
-                ]
+                    ]
 
                 category_counts = (
                     category_data.value_counts()
@@ -1373,7 +1449,6 @@ with d:
                     "MOC Category column not found."
                 )
 
-
 # ============================================================
 # ROW 2 — PSSR / INCIDENT / TRAINING
 # ============================================================
@@ -1383,15 +1458,12 @@ a, b, c = st.columns(
     gap="small"
 )
 
-
 # ============================================================
 # 5 — PSSR
 # ============================================================
 
 with a:
-
     with st.container(border=True):
-
         show_module_title(
             5,
             "",
@@ -1427,16 +1499,14 @@ with a:
             ],
         )
 
-
 # ============================================================
 # 6 — PROCESS SAFETY INCIDENT
 # ============================================================
 
 with b:
-
     with st.container(
-        border=True,
-        height=365
+            border=True,
+            height=365
     ):
 
         show_module_title(
@@ -1504,10 +1574,9 @@ with b:
         total_incidents = 0
 
         if (
-            department_col
-            and not incident.empty
+                department_col
+                and not incident.empty
         ):
-
             department_values = (
                 incident[department_col]
                 .fillna("")
@@ -1538,10 +1607,9 @@ with b:
         investigation_pending = 0
 
         if (
-            investigation_status_col
-            and not incident.empty
+                investigation_status_col
+                and not incident.empty
         ):
-
             investigation_values = (
                 incident[
                     investigation_status_col
@@ -1629,8 +1697,8 @@ with b:
             )
 
             if (
-                classification_col
-                and not incident.empty
+                    classification_col
+                    and not incident.empty
             ):
 
                 classification_values = (
@@ -1666,21 +1734,21 @@ with b:
                         lambda x:
                         "Serious Process Incident"
                         if (
-                            "serious" in x
-                            and "process" in x
-                            and "incident" in x
+                                "serious" in x
+                                and "process" in x
+                                and "incident" in x
                         )
                         else
                         "Process Incident"
                         if (
-                            "process" in x
-                            and "incident" in x
+                                "process" in x
+                                and "incident" in x
                         )
                         else
                         "Near Miss"
                         if (
-                            "near" in x
-                            and "miss" in x
+                                "near" in x
+                                and "miss" in x
                         )
                         else x.title()
                     )
@@ -1708,7 +1776,7 @@ with b:
                 classification_counts = (
                     classification_counts[
                         classification_counts > 0
-                    ]
+                        ]
                 )
 
                 if not classification_counts.empty:
@@ -1803,8 +1871,8 @@ with b:
             )
 
             if (
-                level_col
-                and not incident.empty
+                    level_col
+                    and not incident.empty
             ):
 
                 level_values = (
@@ -1869,7 +1937,7 @@ with b:
                 level_counts = (
                     level_counts[
                         level_counts > 0
-                    ]
+                        ]
                 )
 
                 if not level_counts.empty:
@@ -1955,16 +2023,14 @@ with b:
                     "Incident Level column not found."
                 )
 
-
 # ============================================================
 # 7 — TRAINING
 # ============================================================
 
 with c:
-
     with st.container(
-        border=True,
-        height=365
+            border=True,
+            height=365
     ):
 
         show_module_title(
@@ -1973,10 +2039,9 @@ with c:
             "TRAINING"
         )
 
-
         if (
-            training is None
-            or training.empty
+                training is None
+                or training.empty
         ):
 
             st.info(
@@ -2070,8 +2135,8 @@ with c:
             ]
 
             if any(
-                col is None
-                for col in required_columns
+                    col is None
+                    for col in required_columns
             ):
 
                 st.error(
@@ -2098,6 +2163,7 @@ with c:
                         .str.strip(),
                         errors="coerce"
                     )
+
 
                 # ------------------------------------------------
                 # BUILD HEATMAP DATA
@@ -2196,7 +2262,7 @@ with c:
                 heatmap_df = heatmap_df[
                     heatmap_df["Module"]
                     .str.strip() != ""
-                ].copy()
+                    ].copy()
 
                 # ------------------------------------------------
                 # MODULE ORDER
@@ -2248,7 +2314,6 @@ with c:
                 ]
 
                 for column in percentage_columns:
-
                     display_df[column] = (
                         display_df[column]
                         .apply(
@@ -2258,6 +2323,7 @@ with c:
                             else f"{x:.2f}%"
                         )
                     )
+
 
                 # ------------------------------------------------
                 # HEATMAP STYLE
@@ -2302,27 +2368,27 @@ with c:
                                 green = int(
                                     220
                                     + (
-                                        25 * ratio
+                                            25 * ratio
                                     )
                                 )
 
                                 blue = int(
                                     220
                                     - (
-                                        70 * ratio
+                                            70 * ratio
                                     )
                                 )
 
                             else:
 
                                 ratio = (
-                                    numeric - 50
-                                ) / 50
+                                                numeric - 50
+                                        ) / 50
 
                                 red = int(
                                     255
                                     - (
-                                        55 * ratio
+                                            55 * ratio
                                     )
                                 )
 
@@ -2331,7 +2397,7 @@ with c:
                                 blue = int(
                                     150
                                     + (
-                                        45 * ratio
+                                            45 * ratio
                                     )
                                 )
 
@@ -2344,6 +2410,7 @@ with c:
                             )
 
                     return styles
+
 
                 styled_df = (
                     display_df.style
@@ -2405,7 +2472,6 @@ with c:
                     key="bf_training_heatmap",
                 )
 
-
 # ============================================================
 # ROW 3 — SOC / SOL + AUDIT
 # ============================================================
@@ -2415,13 +2481,11 @@ a, b = st.columns(
     gap="small"
 )
 
-
 # ============================================================
 # 8 — SOC / SOL DEVIATION
 # ============================================================
 
 with a:
-
     with st.container(border=True):
 
         show_module_title(
@@ -2431,8 +2495,8 @@ with a:
         )
 
         if (
-            soc is None
-            or soc.empty
+                soc is None
+                or soc.empty
         ):
 
             st.info(
@@ -2502,7 +2566,7 @@ with a:
 
                 df_socsol = df_socsol[
                     df_socsol["_MONTH"] != ""
-                ].copy()
+                    ].copy()
 
                 # ------------------------------------------------
                 # SMS-1 FILTER
@@ -2750,13 +2814,11 @@ with a:
                     key="bf_soc_sol_deviation_chart"
                 )
 
-
 # ============================================================
 # 9 — AUDIT / COMPLIANCE
 # ============================================================
 
 with b:
-
     with st.container(
             border=True,
             height=340
@@ -2800,8 +2862,8 @@ with b:
         with q1:
 
             if (
-                audit_date_col
-                and not audit.empty
+                    audit_date_col
+                    and not audit.empty
             ):
 
                 dates = pd.to_datetime(
@@ -2833,8 +2895,8 @@ with b:
                 )
 
             if (
-                compliance_col
-                and not audit.empty
+                    compliance_col
+                    and not audit.empty
             ):
 
                 values = pd.to_numeric(

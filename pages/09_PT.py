@@ -3,9 +3,6 @@ import streamlit.components.v1 as components
 import pandas as pd
 import os
 from streamlit_autorefresh import st_autorefresh
-from components.psm_theme import apply_psm_theme, psm_header, psm_section
-
-apply_psm_theme()
 
 
 # =========================================================
@@ -30,6 +27,9 @@ if "status_filter" not in st.session_state:
 if "page_number" not in st.session_state:
     st.session_state.page_number = 1
 
+if "department_selector" not in st.session_state:
+    st.session_state.department_selector = "All Departments"
+
 if "upload_pt_no" not in st.session_state:
     st.session_state.upload_pt_no = ""
 
@@ -46,7 +46,7 @@ if "view_pt_no" not in st.session_state:
 
 if not st.session_state.open_upload_dialog:
     st_autorefresh(
-        interval=1000,
+        interval=100000,
         key="psm_auto_refresh"
     )
 
@@ -102,7 +102,7 @@ def get_pt_data():
     except Exception as exc:
 
         st.error(
-            f"Unable to load Google Sheet Sheet2: {exc}"
+            f"Unable to load Google Sheet PT: {exc}"
         )
 
         return pd.DataFrame()
@@ -124,36 +124,14 @@ os.makedirs(
 
 
 # =========================================================
-# REQUIRED COLUMNS
+# ONLY COLUMNS REQUIRED FROM GOOGLE SHEET: PT
 # =========================================================
 
 required_columns = [
-
-    "Sr No",
     "PT No.",
     "Department",
     "Name of PT",
-    "Status  (Ongoing/Completed)",
-    "Product",
-    "Process",
-    "Location",
-    "Valid Till",
-    "Approved  (Yes/No)",
-    "P&ID updated",
-    "PFD",
-    "Equipment Datasheets",
-    "Design basis",
-    "Process parameters",
-    "SOC",
-    "SOL",
-    "Chemical Properties",
-    "MSDS/SDS Available",
-    "Process chemistry",
-    "Documents updated",
-    "Attach PT Softcopy Link",
-    "Remarks",
-    "Upload Document",
-    "View Document"
+    "Status  (Ongoing/Completed)"
 ]
 
 STATUS_COLUMN = "Status  (Ongoing/Completed)"
@@ -166,7 +144,7 @@ STATUS_COLUMN = "Status  (Ongoing/Completed)"
 if df.empty:
 
     st.error(
-        "No data found in Google Sheet Sheet2."
+        "No data found in Google Sheet: PT."
     )
 
     st.stop()
@@ -181,13 +159,13 @@ missing_columns = [
 if missing_columns:
 
     st.error(
-        "Some required columns are missing from Sheet2."
+        "Some required columns are missing from Google Sheet: PT."
     )
 
     st.write("Missing columns:")
     st.write(missing_columns)
 
-    st.write("Columns found in Sheet2:")
+    st.write("Columns found in PT:")
     st.write(df.columns.tolist())
 
     st.stop()
@@ -203,15 +181,12 @@ st.markdown(
 <style>
 
 /* =====================================================
-   FULL SCREEN / NO TOP GAP
+   REFERENCE-STYLE WHITE / NAVY INDUSTRIAL THEME
+   VISUAL ONLY — NO DATA / LOGIC CHANGES
    ===================================================== */
 
-#MainMenu,
-header,
-footer,
-[data-testid="stHeader"],
-[data-testid="stToolbar"] {
-    display: none !important;
+* {
+    box-sizing: border-box;
 }
 
 html,
@@ -221,6 +196,17 @@ body,
 [data-testid="stAppViewContainer"] > .main {
     margin: 0 !important;
     padding: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+#MainMenu,
+header,
+footer,
+[data-testid="stHeader"],
+[data-testid="stToolbar"] {
+    display: none !important;
 }
 
 [data-testid="stMainBlockContainer"],
@@ -229,7 +215,7 @@ body,
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 0 6px !important;
 }
 
 [data-testid="stAppViewContainer"] > .main > div {
@@ -253,25 +239,28 @@ iframe {
         linear-gradient(
             180deg,
             #ffffff 0%,
-            #f7fbfe 45%,
-            #eef5f9 100%
+            #f7faff 55%,
+            #eef4fa 100%
         ) !important;
 
-    color: #17324d !important;
+    color: #092d5c !important;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif !important;
+}
+
+.stApp * {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 }
 
 
 /* =====================================================
-   REMOVE DARK GRID
-   ===================================================== */
-
-.stApp::before {
-    display: none !important;
-}
-
-
-/* =====================================================
-   COMPACT SPACING
+   SPACING
    ===================================================== */
 
 [data-testid="stVerticalBlock"] {
@@ -279,7 +268,7 @@ iframe {
 }
 
 [data-testid="stHorizontalBlock"] {
-    gap: 10px !important;
+    gap: 8px !important;
 }
 
 
@@ -288,17 +277,12 @@ iframe {
    ===================================================== */
 
 [data-testid="stSelectbox"] label {
-    color: #173b5c !important;
-
+    color: #092d5c !important;
     font-size: 12px !important;
-
     font-weight: 900 !important;
-
-    letter-spacing: .5px !important;
-
+    letter-spacing: .35px !important;
     margin-bottom: 3px !important;
-
-    padding-left: 7px !important;
+    padding-left: 4px !important;
 }
 
 
@@ -307,46 +291,64 @@ iframe {
    ===================================================== */
 
 div[data-baseweb="select"] > div {
-
     height: 38px !important;
-
     min-height: 38px !important;
-
-    border-radius: 7px !important;
+    border-radius: 6px !important;
 
     background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #f4f8fb 100%
-        ) !important;
+        #ffffff !important;
 
     border:
-        1px solid #b8d5e8 !important;
+        1.5px solid #a9bfd8 !important;
 
     box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.95),
-        0 2px 6px rgba(22,72,110,.08) !important;
+        0 2px 5px rgba(8,45,92,.10),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
 }
 
 div[data-baseweb="select"]:hover > div {
-
-    border-color: #2493d0 !important;
-
+    border-color: #176fc1 !important;
     box-shadow:
-        0 3px 9px rgba(24,126,181,.15) !important;
+        0 3px 8px rgba(8,76,135,.16) !important;
 }
 
 div[data-baseweb="select"] * {
-
-    color: #23445f !important;
-
-    font-size: 11px !important;
+    color: #092d5c !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
 }
 
 div[data-baseweb="select"] svg {
+    fill: #0a4e91 !important;
+}
 
-    fill: #176da0 !important;
+
+/* =====================================================
+   MONTH + DEPARTMENT — ALIGN WITH RESET FILTERS
+   ===================================================== */
+
+/*
+   IMPORTANT:
+   Move only the two selectbox widgets.
+   The 22px spacers and the Reset Filters 46px spacer
+   remain unchanged, so the Reset Filters position is
+   not affected.
+*/
+
+/* Month */
+div[data-testid="stColumn"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.month-filter-anchor)
+div[data-testid="stSelectbox"] {
+    transform: translateY(-3px) !important;
+}
+
+/* Department */
+div[data-testid="stColumn"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"],
+div[data-testid="column"]:has(.department-filter-anchor)
+div[data-testid="stSelectbox"] {
+    transform: translateY(-3px) !important;
 }
 
 
@@ -355,108 +357,195 @@ div[data-baseweb="select"] svg {
    ===================================================== */
 
 div[data-testid="stTextInput"] input {
-
     height: 40px !important;
-
     min-height: 40px !important;
-
-    border-radius: 7px !important;
+    border-radius: 6px !important;
 
     background:
-        linear-gradient(
-            180deg,
-            #ffffff,
-            #f5f9fc
-        ) !important;
+        #ffffff !important;
 
     border:
-        1px solid #b7d2e5 !important;
+        1.5px solid #a9bfd8 !important;
 
-    color: #173b57 !important;
+    color: #092d5c !important;
 
-    font-size: 11px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
 
     box-shadow:
-        inset 0 1px 2px rgba(0,0,0,.03),
-        0 2px 6px rgba(22,72,110,.07) !important;
+        0 2px 5px rgba(8,45,92,.09),
+        inset 0 1px 2px rgba(0,0,0,.025) !important;
 }
 
 div[data-testid="stTextInput"] input:focus {
-
-    border-color: #168fe0 !important;
+    border-color: #126bc0 !important;
 
     box-shadow:
-        0 0 0 1px #168fe0,
-        0 3px 10px rgba(22,143,224,.12) !important;
+        0 0 0 1px #126bc0,
+        0 3px 9px rgba(18,107,192,.15) !important;
 }
 
 div[data-testid="stTextInput"] input::placeholder {
-
-    color: #71869a !important;
+    color: #657990 !important;
+    opacity: 1 !important;
 }
 
 
 /* =====================================================
-   ALL BUTTONS
+   3D INDUSTRIAL BUTTONS
    ===================================================== */
 
 div.stButton > button {
-
     height: 36px !important;
-
     min-height: 36px !important;
 
-    border-radius: 7px !important;
+    border-radius: 6px !important;
 
     background:
         linear-gradient(
             180deg,
             #ffffff 0%,
-            #edf5fa 100%
+            #e8f0f8 100%
         ) !important;
 
     border:
-        1px solid #a9cde4 !important;
+        1.5px solid #9db7d2 !important;
 
-    color: #14578a !important;
+    color: #07366d !important;
 
     font-size: 12px !important;
-
     font-weight: 900 !important;
 
     box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.95),
-        0 2px 6px rgba(22,72,110,.10) !important;
+        0 3px 0 #7897b6,
+        0 5px 9px rgba(6,48,91,.13),
+        inset 0 1px 0 rgba(255,255,255,.95) !important;
 
     transition:
-        all .18s ease !important;
+        transform .12s ease,
+        box-shadow .12s ease,
+        background .12s ease !important;
 }
 
 div.stButton > button:hover {
-
-    border-color: #168fe0 !important;
+    border-color: #126bc0 !important;
 
     color: #ffffff !important;
 
     background:
         linear-gradient(
             180deg,
-            #168fe0,
-            #0864a4
+            #1685db 0%,
+            #075ca8 100%
         ) !important;
 
     transform:
-        translateY(-1px);
+        translateY(-1px) !important;
 
     box-shadow:
-        0 5px 12px rgba(13,116,181,.22),
-        inset 0 1px 0 rgba(255,255,255,.25) !important;
+        0 4px 0 #06477f,
+        0 7px 13px rgba(4,74,135,.24),
+        inset 0 1px 0 rgba(255,255,255,.28) !important;
 }
 
 div.stButton > button:active {
+    transform:
+        translateY(2px) !important;
+
+    box-shadow:
+        0 1px 0 #06477f,
+        0 3px 6px rgba(4,74,135,.18) !important;
+}
+
+div.stButton > button:disabled {
+    color: #8293a7 !important;
+    background: #eef3f7 !important;
+    border-color: #c5d2df !important;
+    box-shadow: none !important;
+}
+
+
+/* =====================================================
+   PT REGISTER TOOLBAR — ONLY THESE 4 BUTTONS
+   ALL / COMPLETED / ONGOING / REFRESH DATA
+   NORMAL = WHITE SHINING
+   HOVER = DEEP OCEAN BLUE
+   ===================================================== */
+
+/* The toolbar is the horizontal block containing the
+   Search input. Columns 2–5 are the four buttons. */
+
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(2) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(3) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(4) button,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(5) button {
+
+    background: #ffffff !important;
+    background-image: none !important;
+
+    color:
+        #075985 !important;
+
+    border:
+        1.5px solid #b8cfe0 !important;
+
+    box-shadow:
+        0 2px 4px rgba(0,0,0,.12),
+        inset 0 1px 0 #ffffff !important;
+
+    transition:
+        background .15s ease,
+        color .15s ease,
+        border-color .15s ease,
+        transform .15s ease,
+        box-shadow .15s ease !important;
+}
+
+
+/* Mouse over ONLY the four toolbar buttons */
+
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(2) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(3) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(4) button:hover,
+[data-testid="stHorizontalBlock"]:has(
+    [data-testid="stTextInput"]
+) > [data-testid="column"]:nth-child(5) button:hover {
+
+    background:
+        linear-gradient(
+            180deg,
+            #0b6f9f 0%,
+            #064f73 52%,
+            #043d5c 100%
+        ) !important;
+
+    color:
+        #ffffff !important;
+
+    border-color:
+        #064f73 !important;
 
     transform:
-        translateY(1px);
+        translateY(-1px) !important;
+
+    box-shadow:
+        0 4px 0 #032f46,
+        0 8px 15px rgba(4,79,115,.30),
+        inset 0 1px 0 rgba(255,255,255,.28) !important;
 }
 
 
@@ -465,634 +554,383 @@ div.stButton > button:active {
    ===================================================== */
 
 .kpi-card {
-
     position: relative;
-
-    height: 125px;
-
+    height: 105px;
     overflow: hidden;
 
     background:
         linear-gradient(
             145deg,
             #ffffff 0%,
-            #f7fbfd 62%,
-            #edf5f9 100%
+            #ffffff 72%,
+            #edf4fa 100%
         );
 
     border:
-        1px solid #c5dce9;
+        1.5px solid #c2d3e4;
 
     border-top:
-        3px solid #159ee4;
+        4px solid #176fc1;
 
-    border-radius: 9px;
+    border-radius: 8px;
 
-    padding: 17px 18px;
+    padding: 17px 16px;
 
     box-shadow:
-
-        0 4px 12px
-        rgba(28,78,110,.12),
-
-        0 1px 2px
-        rgba(28,78,110,.08),
-
-        inset 0 1px 0
-        rgba(255,255,255,.95);
+        0 4px 10px rgba(6,48,91,.12),
+        0 1px 2px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,.98);
 
     transition:
-        transform .18s ease,
-        box-shadow .18s ease;
+        transform .15s ease,
+        box-shadow .15s ease;
 }
 
 .kpi-card:hover {
-
-    transform:
-        translateY(-2px);
+    transform: translateY(-2px);
 
     box-shadow:
-
-        0 8px 20px
-        rgba(28,78,110,.17),
-
-        0 2px 5px
-        rgba(28,78,110,.08),
-
-        inset 0 1px 0
-        rgba(255,255,255,1);
+        0 7px 16px rgba(6,48,91,.17),
+        0 2px 4px rgba(6,48,91,.08),
+        inset 0 1px 0 rgba(255,255,255,1);
 }
 
 .kpi-card.completed {
-
-    border-top-color:
-        #18a957;
+    border-top-color: #19a657;
 }
 
 .kpi-card.ongoing {
-
-    border-top-color:
-        #f59d13;
+    border-top-color: #f18d05;
 }
 
 
 /* =====================================================
-   KPI ICON
+   KPI ICONS
    ===================================================== */
 
 .kpi-icon {
-
-    position: absolute;
-
-    left: 23px;
-
-    top: 24px;
-
-    width: 60px;
-
-    height: 60px;
-
-    border-radius: 10px;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    color: #ffffff;
-
-    font-size: 28px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #39b8f4 0%,
-            #0878c3 65%,
-            #075e99 100%
-        );
-
-    border:
-        1px solid #0c8ed2;
-
-    box-shadow:
-
-        0 5px 10px
-        rgba(7,107,167,.24),
-
-        inset 0 1px 0
-        rgba(255,255,255,.35);
+    display: none !important;
 }
 
-.kpi-card.completed .kpi-icon {
 
-    background:
-        linear-gradient(
-            145deg,
-            #36c978 0%,
-            #149c53 65%,
-            #08773c 100%
-        );
 
-    border-color:
-        #19a85a;
 
-    box-shadow:
-        0 5px 10px
-        rgba(12,133,67,.22),
+/* =====================================================
+   TOTAL PT — REMOVE ICON ONLY
+   ===================================================== */
 
-        inset 0 1px 0
-        rgba(255,255,255,.35);
+.kpi-card.total .kpi-icon {
+    display: none;
 }
 
-.kpi-card.ongoing .kpi-icon {
+.kpi-card.total .kpi-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
 
-    background:
-        linear-gradient(
-            145deg,
-            #ffc34d 0%,
-            #f49a0b 65%,
-            #d87900 100%
-        );
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
 
-    border-color:
-        #ee9705;
-
-    box-shadow:
-        0 5px 10px
-        rgba(211,126,0,.22),
-
-        inset 0 1px 0
-        rgba(255,255,255,.35);
+    text-align: center !important;
 }
 
 
 /* =====================================================
-   KPI CONTENT
+   KPI TEXT — HIGH CONTRAST
    ===================================================== */
 
 .kpi-content {
-
-    margin-left: 82px;
+    margin-left: 78px;
 }
 
 .kpi-label {
+    color: #092d5c;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .15px;
 
-    color:
-        #008bd0;
-
-    font-size:
-        16px;
-
-    font-weight:
-        950;
-
-    letter-spacing:
-        .3px;
+    text-align: center;
 }
 
 .kpi-card.completed .kpi-label {
-
-    color:
-        #11984e;
+    color: #08783c;
 }
 
 .kpi-card.ongoing .kpi-label {
-
-    color:
-        #e88900;
+    color: #b96700;
 }
 
 .kpi-value {
+    font-size: 42px;
+    line-height: 1;
+    font-weight: 900;
+    margin-top: 6px;
+    color: #0a4e91;
 
-    font-size:
-        43px;
+    text-align: center;
+}
 
-    line-height:
-        1;
+.kpi-value.green {
+    color: #159447 !important;
+}
 
-    font-weight:
-        950;
-
-    margin-top:
-        7px;
-
-    color:
-        #173b5a;
+.kpi-value.orange {
+    color: #f0a000 !important;
 }
 
 .kpi-description {
+    color: #304d6d;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 7px;
 
-    color:
-        #5c7181;
-
-    font-size:
-        12px;
-
-    margin-top:
-        7px;
+    text-align: center;
 }
-
-
-/* =====================================================
-   KPI PATTERN
-   ===================================================== */
 
 .kpi-pattern {
-
-    position: absolute;
-
-    right: 18px;
-
-    bottom: 17px;
-
-    width: 120px;
-
-    height: 58px;
-
-    opacity: .30;
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #52b9ed 0 8px,
-            transparent 8px 14px
-        );
-
-    transform:
-        skewY(-7deg);
-}
-
-.kpi-card.completed .kpi-pattern {
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #42bd7a 0 8px,
-            transparent 8px 14px
-        );
-}
-
-.kpi-card.ongoing .kpi-pattern {
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #f6bb59 0 8px,
-            transparent 8px 14px
-        );
+    display: none !important;
 }
 
 
-/* =====================================================
-   KPI ARROW
-   ===================================================== */
 
 .kpi-arrow {
-
-    position: absolute;
-
-    right: 13px;
-
-    bottom: 12px;
-
-    width: 29px;
-
-    height: 29px;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    border-radius: 50%;
-
-    color:
-        #087bc1;
-
-    border:
-        1px solid #75b9dd;
-
-    background:
-        #ffffff;
-
-    font-size:
-        17px;
-
-    box-shadow:
-        0 2px 5px rgba(17,92,135,.12);
+    display: none !important;
 }
 
 
 /* =====================================================
-   PT REGISTER
+   PT REGISTER PANEL
    ===================================================== */
 
 .register-wrap {
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff,
-            #f4f9fc
-        );
+    background: #ffffff;
 
     border:
-        1px solid #c5dce9;
+        1.5px solid #b7cce1;
 
     border-radius:
-        8px 8px 0 0;
+        7px 7px 0 0;
 
-    overflow:
-        hidden;
+    overflow: hidden;
 
     box-shadow:
-        0 4px 12px
-        rgba(28,78,110,.10);
+        0 4px 10px rgba(7,45,82,.12);
 }
 
 .register-title {
+    height: 40px;
 
-    height:
-        51px;
+    display: flex;
+    align-items: center;
 
-    display:
-        flex;
+    padding: 0 17px;
 
-    align-items:
-        center;
+    color: #ffffff;
 
-    padding:
-        0 20px;
-
-    color:
-        #163b5b;
-
-    font-size:
-        19px;
-
-    font-weight:
-        950;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: .25px;
 
     background:
         linear-gradient(
             180deg,
-            #ffffff,
-            #eef6fa
+            #0a4f91 0%,
+            #063b70 100%
         );
 
     border-bottom:
-        2px solid #158fd0;
-
-    text-shadow:
-        none;
-}
-
-.register-icon {
-
-    margin-right:
-        10px;
-
-    color:
-        #087fc3;
-}
-
-
-/* =====================================================
-   TABLE HEADER
-   ===================================================== */
-
-.table-head {
-
-    min-height:
-        42px;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #1679bd 0%,
-            #075896 100%
-        );
-
-    color:
-        #ffffff;
-
-    border-right:
-        1px solid #7fb8d8;
-
-    border-top:
-        1px solid #3b9bd0;
-
-    border-bottom:
-        1px solid #064e85;
-
-    font-size:
-        14px;
-
-    font-weight:
-        950;
-
-    text-align:
-        center;
-
-    padding:
-        4px;
+        2px solid #176fc1;
 
     text-shadow:
         0 1px 2px rgba(0,0,0,.25);
 
     box-shadow:
-        inset 0 1px 0
-        rgba(255,255,255,.18);
+        inset 0 1px 0 rgba(255,255,255,.16);
+}
+
+.register-icon {
+    margin-right: 9px;
+    color: #ffffff;
 }
 
 
 /* =====================================================
-   TABLE CELLS
+   TABLE HEADER — REFERENCE MATCH
    ===================================================== */
 
-.table-cell {
+.table-head {
+    min-height: 43px;
 
-    min-height:
-        42px;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
     background:
         linear-gradient(
             180deg,
-            #ffffff,
-            #f7fafc
+            #0b4f91 0%,
+            #063c73 100%
         );
 
+    color: #ffffff;
+
     border-right:
-        1px solid #d7e4ec;
+        1px solid #8caecc;
+
+    border-top:
+        1px solid #2879ba;
 
     border-bottom:
-        1px solid #d7e4ec;
+        1px solid #052f5b;
+
+    font-size: 12px;
+    line-height: 1.15;
+    font-weight: 900;
+
+    text-align: center;
+    padding: 5px 3px;
+
+    text-shadow:
+        0 1px 2px rgba(0,0,0,.30);
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.16);
+}
+
+
+/* =====================================================
+   TABLE CELLS — DARK BLUE CLEAR TEXT
+   ===================================================== */
+
+.table-cell {
+    min-height: 43px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+        #ffffff;
+
+    border-right:
+        1px solid #c8d6e4;
+
+    border-bottom:
+        1px solid #c8d6e4;
 
     color:
-        #213c55;
+        #092d5c;
 
     font-size:
         11px;
+
+    line-height:
+        1.18;
+
+    font-weight:
+        600;
 
     text-align:
         center;
 
     padding:
-        4px;
+        5px 4px;
 
     word-break:
         break-word;
-
-    text-shadow:
-        none;
 }
 
 .table-cell.alt {
-
     background:
-        linear-gradient(
-            180deg,
-            #f5f9fb,
-            #edf4f8
-        );
+        #f3f7fb;
 }
 
 .table-cell.left {
-
     justify-content:
         flex-start;
 
     text-align:
         left;
+
+    font-weight:
+        650;
 }
-
-
 /* =====================================================
-   STATUS
+   STATUS — TEXT ONLY
    ===================================================== */
 
 .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 
-    display:
-        inline-flex;
+    min-width: auto;
+    padding: 0;
 
-    align-items:
-        center;
+    border-radius: 0;
 
-    justify-content:
-        center;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 
-    min-width:
-        106px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .1px;
 
-    padding:
-        4px 10px;
-
-    border-radius:
-        6px;
-
-    font-size:
-        10px;
-
-    font-weight:
-        950;
-
-    background:
-        #f5f8fa;
+    white-space: nowrap;
 }
 
 
-/* COMPLETED */
+/* COMPLETED — GREEN TEXT ONLY */
 
 .status-completed {
-
-    background:
-        #ecfaf2;
-
-    border:
-        1px solid #8bd5aa;
-
-    color:
-        #108b49;
-
-    box-shadow:
-        inset 0 1px 3px
-        rgba(16,139,73,.06),
-
-        0 1px 3px
-        rgba(16,139,73,.08);
+    background: transparent !important;
+    border: none !important;
+    color: #16A34A !important;
+    box-shadow: none !important;
 }
 
 
-/* ONGOING */
+/* ONGOING — ORANGE TEXT ONLY */
 
 .status-ongoing {
-
-    background:
-        #fff7e8;
-
-    border:
-        1px solid #f3c66e;
-
-    color:
-        #d88300;
-
-    box-shadow:
-        inset 0 1px 3px
-        rgba(216,131,0,.06),
-
-        0 1px 3px
-        rgba(216,131,0,.08);
+    background: transparent !important;
+    border: none !important;
+    color: #EA8A00 !important;
+    box-shadow: none !important;
 }
-
-
 /* =====================================================
-   RECORD BAR
+   STREAMLIT TABLE ACTION BUTTONS
+   ===================================================== */
+
+.table-cell + div button,
+div[data-testid="column"] div.stButton > button {
+    font-size: 11px !important;
+    font-weight: 900 !important;
+}
+/* =====================================================
+   RECORD BAR / PAGINATION
    ===================================================== */
 
 .record-bar {
+    height: 38px;
 
-    height:
-        39px;
+    display: flex;
+    align-items: center;
 
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    padding:
-        0 14px;
+    padding: 0 12px;
 
     background:
         linear-gradient(
             180deg,
-            #ffffff,
-            #f1f6f9
+            #ffffff 0%,
+            #edf3f8 100%
         );
 
     color:
-        #526b7d;
+        #173f6d;
 
     font-size:
         11px;
@@ -1101,14 +939,73 @@ div.stButton > button:active {
         800;
 
     border-top:
-        1px solid #d4e2eb;
+        1px solid #c4d4e3;
 
     border-bottom:
-        1px solid #d4e2eb;
+        1px solid #c4d4e3;
 
     box-shadow:
-        inset 0 1px 0
-        rgba(255,255,255,.9);
+        inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+
+/* =====================================================
+   DOWNLOAD BUTTON
+   ===================================================== */
+
+div.stDownloadButton > button {
+    border-radius: 6px !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff,
+            #e9f1f8
+        ) !important;
+
+    border:
+        1.5px solid #9eb8d2 !important;
+
+    color:
+        #083c76 !important;
+
+    font-size:
+        11px !important;
+
+    font-weight:
+        900 !important;
+
+    box-shadow:
+        0 3px 0 #7895b1,
+        0 5px 8px rgba(8,53,94,.12) !important;
+}
+
+div.stDownloadButton > button:hover {
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            180deg,
+            #1685db,
+            #075ca8
+        ) !important;
+
+    border-color:
+        #075ca8 !important;
+}
+
+
+/* =====================================================
+   INFO / ALERT
+   ===================================================== */
+
+div[data-testid="stAlert"] {
+    border-radius: 6px !important;
+
+    color: #123b68 !important;
+
+    box-shadow:
+        0 2px 7px rgba(20,70,100,.08) !important;
 }
 
 
@@ -1117,27 +1014,19 @@ div.stButton > button:active {
    ===================================================== */
 
 .footer {
+    height: 34px;
 
-    height:
-        34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    color:
-        #587084;
+    color: #ffffff;
 
     background:
         linear-gradient(
             180deg,
-            #f8fbfd,
-            #eaf2f6
+            #0a4f91 0%,
+            #063563 100%
         );
 
     font-size:
@@ -1147,54 +1036,10 @@ div.stButton > button:active {
         800;
 
     border-top:
-        1px solid #c8dce8;
+        2px solid #176fc1;
 
     box-shadow:
-        0 -2px 8px
-        rgba(0,0,0,.06);
-}
-
-
-/* =====================================================
-   STREAMLIT DOWNLOAD BUTTON
-   ===================================================== */
-
-div.stDownloadButton > button {
-
-    border-radius:
-        7px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff,
-            #f1f7fa
-        ) !important;
-
-    border:
-        1px solid #b8d5e7 !important;
-
-    color:
-        #116aa5 !important;
-
-    box-shadow:
-        0 2px 6px
-        rgba(25,83,118,.10) !important;
-}
-
-
-/* =====================================================
-   INFO / CAPTION
-   ===================================================== */
-
-div[data-testid="stAlert"] {
-
-    border-radius:
-        7px !important;
-
-    box-shadow:
-        0 2px 7px
-        rgba(20,70,100,.08) !important;
+        0 -2px 8px rgba(0,0,0,.12);
 }
 
 
@@ -1203,33 +1048,21 @@ div[data-testid="stAlert"] {
    ===================================================== */
 
 ::-webkit-scrollbar {
-
-    width:
-        8px;
-
-    height:
-        8px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-
-    background:
-        #eef4f7;
+    background: #e9f0f6;
 }
 
 ::-webkit-scrollbar-thumb {
-
-    background:
-        #a9c9dc;
-
-    border-radius:
-        10px;
+    background: #8daac4;
+    border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-
-    background:
-        #6ea9c8;
+    background: #527fa6;
 }
 
 </style>
@@ -1237,9 +1070,8 @@ div[data-testid="stAlert"] {
     unsafe_allow_html=True
 )
 
-
 # =========================================================
-# INDUSTRIAL REFERENCE HEADER
+# DARK INDUSTRIAL 3D HEADER
 # =========================================================
 
 header_html = """
@@ -1256,13 +1088,10 @@ header_html = """
 
 html,
 body {
-
     margin: 0;
     padding: 0;
-
     width: 100%;
     height: 100%;
-
     overflow: hidden;
 
     font-family:
@@ -1272,53 +1101,53 @@ body {
 }
 
 body {
-
-    background:
-        #f4f9fc;
+    background: #06111f;
 }
+
+
+/* =====================================================
+   MAIN HEADER FRAME
+   ===================================================== */
 
 .header {
 
     position: relative;
 
     width: 100%;
-    height: 145px;
+    height: 100px;
 
     overflow: hidden;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
 
     background:
 
         radial-gradient(
             ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
-
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
+            rgba(15,91,150,.32) 0%,
+            rgba(5,29,52,.96) 48%,
+            #020b16 100%
         );
 
     border-top:
-        2px solid #0b91d1;
+        1px solid #238ed8;
 
     border-bottom:
-        3px solid #1487c2;
+        2px solid #0a83d0;
 
     box-shadow:
-        0 4px 12px
-        rgba(21,92,130,.18);
+
+        0 0 0 1px rgba(0,153,255,.18),
+
+        0 5px 18px
+        rgba(0,0,0,.42),
+
+        inset 0 1px 0
+        rgba(255,255,255,.08);
 }
 
 
-/* TECH DOTS */
+/* =====================================================
+   SUBTLE TECH GRID
+   ===================================================== */
 
 .header::before {
 
@@ -1328,22 +1157,28 @@ body {
 
     inset: 0;
 
-    background-image:
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17) 1.2px,
-            transparent 1.5px
+    background:
+
+        linear-gradient(
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
+        ),
+
+        linear-gradient(
+            90deg,
+            rgba(0,126,220,.055) 1px,
+            transparent 1px
         );
 
-    background-size:
-        15px 15px;
+    background-size: 26px 26px;
 
-    opacity:
-        .65;
+    opacity: .75;
 }
 
 
-/* SIDE INDUSTRIAL BLUE ANGLES */
+/* =====================================================
+   BLUE SIDE LIGHT
+   ===================================================== */
 
 .header::after {
 
@@ -1356,27 +1191,19 @@ body {
     background:
 
         linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        ),
-
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
+            90deg,
+            rgba(0,137,255,.20),
+            transparent 14%,
+            transparent 86%,
+            rgba(0,137,255,.20)
         );
+
+    pointer-events: none;
 }
 
 
 /* =====================================================
-   INDUSTRIAL SVG
+   INDUSTRIAL BACKGROUND
    ===================================================== */
 
 .industrial {
@@ -1385,150 +1212,130 @@ body {
 
     left: 0;
     right: 0;
-
     bottom: 0;
 
     width: 100%;
-    height: 145px;
+    height: 100px;
 
-    opacity:
-        .38;
+    z-index: 1;
 
-    z-index:
-        1;
+    opacity: .72;
 }
 
 .industrial .steel {
 
-    fill:
-        #a8c9da;
+    fill: #102b43;
 
-    stroke:
-        #5791af;
+    stroke: #2675a8;
 
-    stroke-width:
-        1.5;
+    stroke-width: 1.3;
 }
 
-.industrial .light {
+.industrial .highlight {
 
-    fill:
-        none;
+    fill: none;
 
-    stroke:
-        #2e8bb9;
+    stroke: #49b8ff;
 
-    stroke-width:
-        1.2;
+    stroke-width: 1.15;
 
-    opacity:
-        .70;
+    opacity: .65;
 }
 
-.industrial .window {
+.industrial .warm {
 
-    fill:
-        #2787b5;
+    fill: #e9a63a;
 
-    opacity:
-        .65;
+    opacity: .82;
 }
 
-.hex {
+.industrial .glass {
 
-    fill:
-        none;
+    fill: #0b5c91;
 
-    stroke:
-        #278abd;
+    stroke: #4cbcff;
 
-    stroke-width:
-        1;
+    stroke-width: .7;
 
-    opacity:
-        .28;
+    opacity: .55;
+}
+
+.tech {
+
+    fill: none;
+
+    stroke: #238bd0;
+
+    stroke-width: 1;
+
+    opacity: .25;
 }
 
 
 /* =====================================================
-   HEADER CONTENT
+   SIDE FADE
    ===================================================== */
 
-.content {
+.side-fade {
 
-    position:
-        relative;
+    position: absolute;
 
-    z-index:
-        8;
+    z-index: 3;
+
+    top: 0;
+    bottom: 0;
+
+    width: 24%;
+
+    pointer-events: none;
+}
+
+.side-fade.left {
+
+    left: 0;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
+}
+
+.side-fade.right {
+
+    right: 0;
+
+    background:
+        linear-gradient(
+            270deg,
+            rgba(1,8,18,.74),
+            transparent
+        );
+}
+
+
+/* =====================================================
+   CENTRAL 3D TITLE PLATE
+   ===================================================== */
+
+.title-plate {
+
+    position: absolute;
+
+    z-index: 10;
+
+    left: 50%;
+    top: 50%;
+
+    transform:
+        translate(-50%, -50%);
 
     width:
-        100%;
+        min(62%, 850px);
 
     height:
-        100%;
-
-    display:
-        flex;
-
-    flex-direction:
-        column;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    text-align:
-        center;
-}
-
-
-/* =====================================================
-   PSM DASHBOARD
-   ===================================================== */
-
-.title {
-
-    color:
-        #153e68;
-
-    font-size:
-        24px;
-
-    font-weight:
-        950;
-
-    letter-spacing:
-        5px;
-
-    line-height:
-        1;
-
-    margin-bottom:
-        5px;
-
-    text-shadow:
-        0 1px 1px
-        rgba(255,255,255,.9);
-}
-
-
-/* =====================================================
-   PILLAR PT
-   ===================================================== */
-
-.pillar {
-
-    position:
-        relative;
-
-    width:
-        560px;
-
-    height:
-        66px;
+        72px;
 
     display:
         flex;
@@ -1543,22 +1350,135 @@ body {
 
         linear-gradient(
             180deg,
-            #176ca5 0%,
-            #07518b 55%,
-            #063e70 100%
+            #124e80 0%,
+            #07345f 45%,
+            #031e3d 100%
         );
 
     border:
-        1px solid #0877ba;
+        2px solid #78cfff;
 
     border-radius:
-        14px;
+        15px;
+
+    box-shadow:
+
+        0 0 0 3px rgba(6,36,65,.92),
+
+        0 0 0 5px rgba(105,183,229,.55),
+
+        0 8px 20px
+        rgba(0,0,0,.52),
+
+        0 0 22px
+        rgba(0,139,255,.42),
+
+        inset 0 2px 0
+        rgba(255,255,255,.28),
+
+        inset 0 -8px 15px
+        rgba(0,0,0,.24);
+}
+
+
+/* =====================================================
+   METALLIC BEVEL
+   ===================================================== */
+
+.title-plate::before {
+
+    content: "";
+
+    position: absolute;
+
+    inset: -10px;
+
+    z-index: -1;
+
+    border-radius:
+        20px;
+
+    border:
+        5px solid transparent;
+
+    background:
+
+        linear-gradient(
+            145deg,
+            #f5fbff 0%,
+            #7d9bad 16%,
+            #e7f0f5 28%,
+            #536d7e 48%,
+            #d8e7ef 68%,
+            #668092 82%,
+            #f5fbff 100%
+        ) border-box;
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0) padding-box,
+        linear-gradient(#fff 0 0);
+
+    -webkit-mask-composite:
+        xor;
+
+    mask-composite:
+        exclude;
+
+    box-shadow:
+        0 0 10px rgba(112,199,255,.35);
+}
+
+
+/* =====================================================
+   BLUE INNER LIGHT
+   ===================================================== */
+
+.title-plate::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 13px;
+    right: 13px;
+    top: 6px;
+
+    height: 2px;
+
+    border-radius: 10px;
+
+    background:
+
+        linear-gradient(
+            90deg,
+            transparent,
+            #50c8ff 18%,
+            #d8f5ff 50%,
+            #50c8ff 82%,
+            transparent
+        );
+
+    box-shadow:
+        0 0 8px
+        rgba(55,190,255,.72);
+}
+
+
+/* =====================================================
+   TITLE
+   ===================================================== */
+
+.title-text {
+
+    position: relative;
+
+    z-index: 12;
 
     color:
-        #ffd21a;
+        #ffc400;
 
     font-size:
-        42px;
+        clamp(30px, 3.2vw, 54px);
 
     font-weight:
         950;
@@ -1566,23 +1486,35 @@ body {
     letter-spacing:
         1px;
 
-    box-shadow:
+    line-height:
+        1;
 
-        0 7px 16px
-        rgba(11,83,130,.25),
+    text-align:
+        center;
 
-        inset 0 1px 0
-        rgba(255,255,255,.28),
+    text-shadow:
 
-        inset 0 -5px 12px
-        rgba(0,35,75,.16);
+        0 2px 0 #8c5f00,
+
+        0 3px 5px
+        rgba(0,0,0,.65),
+
+        0 0 12px
+        rgba(255,194,0,.22);
 }
 
-.pillar::before,
-.pillar::after {
+
+/* =====================================================
+   NAVIGATION ARROWS
+   ===================================================== */
+
+.nav-arrow {
 
     position:
         absolute;
+
+    z-index:
+        13;
 
     top:
         50%;
@@ -1591,214 +1523,162 @@ body {
         translateY(-50%);
 
     color:
-        #51c5ff;
+        #54c9ff;
 
     font-size:
-        21px;
+        32px;
+
+    line-height:
+        1;
 
     font-weight:
         950;
 
-    letter-spacing:
-        -5px;
-
     text-shadow:
-        0 1px 5px
-        rgba(0,100,160,.5);
+
+        0 0 7px
+        rgba(40,187,255,.9),
+
+        0 2px 2px
+        rgba(0,0,0,.65);
 }
 
-.pillar::before {
-
-    content:
-        "◀◀";
-
-    left:
-        17px;
+.nav-left {
+    left: 28px;
 }
 
-.pillar::after {
-
-    content:
-        "▶▶";
-
-    right:
-        17px;
+.nav-right {
+    right: 28px;
 }
 
 
 /* =====================================================
-   SUBTITLE
+   CORNER ARMOUR
    ===================================================== */
 
-.subtitle {
-
-    margin-top:
-        7px;
-
-    height:
-        25px;
-
-    min-width:
-        700px;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    padding:
-        4px 30px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            #075b8e,
-            #1188c4,
-            #075b8e
-        );
-
-    border:
-        1px solid #078fd2;
-
-    border-radius:
-        7px;
-
-    color:
-        #ffffff;
-
-    font-size:
-        10px;
-
-    font-weight:
-        900;
-
-    letter-spacing:
-        1.8px;
-
-    box-shadow:
-
-        0 4px 9px
-        rgba(10,93,140,.20),
-
-        inset 0 1px 0
-        rgba(255,255,255,.25);
-}
-
-
-/* =====================================================
-   TOP BLUE ENERGY LINE
-   ===================================================== */
-
-.top-line {
+.corner {
 
     position:
         absolute;
 
-    top:
-        0;
-
-    left:
-        24%;
+    z-index:
+        9;
 
     width:
-        52%;
+        180px;
 
     height:
+        35px;
+
+    border:
+        2px solid #168bd4;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(11,82,135,.85),
+            rgba(4,27,49,.2)
+        );
+
+    box-shadow:
+        0 0 12px
+        rgba(0,133,255,.24),
+
+        inset 0 1px 0
+        rgba(255,255,255,.16);
+}
+
+.corner.left {
+
+    left:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(-38deg);
+}
+
+.corner.right {
+
+    right:
+        -35px;
+
+    top:
+        4px;
+
+    transform:
+        skewX(38deg);
+}
+
+
+/* =====================================================
+   TOP METAL RAIL
+   ===================================================== */
+
+.top-rail {
+
+    position:
+        absolute;
+
+    z-index:
+        11;
+
+    left:
+        31%;
+
+    right:
+        31%;
+
+    top:
         3px;
+
+    height:
+        5px;
+
+    border-radius:
+        10px;
 
     background:
 
         linear-gradient(
             90deg,
             transparent,
-            #00a9ff 18%,
-            #ffffff 50%,
-            #00a9ff 82%,
+            #7594a7 10%,
+            #eef8ff 35%,
+            #4c728b 50%,
+            #eef8ff 65%,
+            #7594a7 90%,
             transparent
         );
 
     box-shadow:
-        0 0 8px
-        rgba(0,169,255,.55);
+        0 0 9px
+        rgba(52,164,230,.55);
 }
 
 
 /* =====================================================
-   ANIMATED BOTTOM SCAN
+   BOTTOM BLUE ENERGY LINE
    ===================================================== */
 
-.scan {
+.energy-line {
 
     position:
         absolute;
 
     z-index:
-        12;
+        15;
+
+    left:
+        0;
 
     bottom:
         0;
 
-    left:
-        -16%;
-
     width:
-        16%;
-
-    height:
-        4px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00b5ff,
-            #ffffff,
-            #00b5ff,
-            transparent
-        );
-
-    box-shadow:
-        0 0 8px
-        rgba(0,181,255,.55);
-
-    animation:
-        scanline 3s linear infinite;
-}
-
-@keyframes scanline {
-
-    0% {
-        left:
-            -16%;
-    }
-
-    100% {
-        left:
-            100%;
-    }
-}
-
-
-/* =====================================================
-   CORNER BLUE LIGHTS
-   ===================================================== */
-
-.corner-light {
-
-    position:
-        absolute;
-
-    z-index:
-        10;
-
-    width:
-        110px;
+        100%;
 
     height:
         3px;
@@ -1807,32 +1687,20 @@ body {
 
         linear-gradient(
             90deg,
-            transparent,
-            #00baff,
-            transparent
+            #07548d 0%,
+            #0ca6ff 25%,
+            #ffffff 50%,
+            #0ca6ff 75%,
+            #07548d 100%
         );
 
     box-shadow:
-        0 0 8px
-        rgba(0,186,255,.55);
-}
 
-.corner-left {
+        0 0 7px
+        #008dff,
 
-    left:
-        7%;
-
-    top:
-        7px;
-}
-
-.corner-right {
-
-    right:
-        7%;
-
-    top:
-        7px;
+        0 0 18px
+        rgba(0,141,255,.75);
 }
 
 </style>
@@ -1842,280 +1710,267 @@ body {
 
 <div class="header">
 
-    <div class="top-line"></div>
+    <div class="corner left"></div>
+    <div class="corner right"></div>
 
-    <div class="corner-light corner-left"></div>
-
-    <div class="corner-light corner-right"></div>
-
-
-    <svg class="industrial"
-         viewBox="0 0 1672 145"
-         preserveAspectRatio="none"
-         aria-hidden="true">
+    <div class="top-rail"></div>
 
 
-        <!-- LEFT TOWER -->
+    <svg
+        class="industrial"
+        viewBox="0 0 1672 145"
+        preserveAspectRatio="none"
+        aria-hidden="true">
 
-        <g>
-
-            <rect class="steel"
-                  x="85"
-                  y="24"
-                  width="34"
-                  height="116"
-                  rx="4"/>
-
-            <rect class="steel"
-                  x="91"
-                  y="9"
-                  width="22"
-                  height="18"/>
-
-            <rect class="steel"
-                  x="96"
-                  y="0"
-                  width="12"
-                  height="12"/>
-
-            <path class="light"
-                  d="M102 0 L102 140
-                     M87 55 L117 55
-                     M87 78 L117 78
-                     M87 103 L117 103"/>
-
-            <circle class="window"
-                    cx="102"
-                    cy="43"
-                    r="3"/>
-
-            <circle class="window"
-                    cx="102"
-                    cy="67"
-                    r="3"/>
-
-            <circle class="window"
-                    cx="102"
-                    cy="91"
-                    r="3"/>
-
-        </g>
-
-
-        <!-- LEFT STACK -->
+        <!-- LEFT INDUSTRIAL PLANT -->
 
         <g>
 
             <rect class="steel"
-                  x="150"
-                  y="52"
-                  width="17"
-                  height="88"/>
+                  x="48" y="58"
+                  width="22" height="82"
+                  rx="3"/>
 
             <rect class="steel"
-                  x="146"
-                  y="48"
-                  width="25"
-                  height="8"/>
+                  x="82" y="40"
+                  width="34" height="100"
+                  rx="5"/>
 
-            <path class="light"
-                  d="M158 52 L158 140"/>
+            <rect class="steel"
+                  x="88" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="93" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="99" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="99" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M99 10 V140
+                    M84 62 H114
+                    M84 86 H114
+                    M84 110 H114
+                  "/>
+
+            <rect class="steel"
+                  x="137" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M137 91 H189
+                    M137 114 H189
+                  "/>
+
+            <circle class="glass"
+                    cx="163" cy="102" r="5"/>
 
         </g>
 
 
-        <!-- LEFT PIPE NETWORK -->
+        <!-- LEFT PIPING -->
 
-        <g class="light">
+        <g class="highlight">
 
-            <path d="M55 113 H245 V85 H320"/>
+            <path d="
+                M0 121
+                H310
+                V92
+                H395
+            "/>
 
-            <path d="M120 125 H260 V105 H355"/>
+            <path d="
+                M35 132
+                H270
+                V108
+                H420
+            "/>
 
-            <path d="M180 96 H285 V65 H340"/>
+            <path d="
+                M170 77
+                H285
+                V52
+                H380
+            "/>
 
-            <path d="M215 130 V70 H280"/>
+            <path d="
+                M247 140
+                V70
+                H335
+            "/>
 
         </g>
 
 
-        <!-- LEFT VESSEL -->
+        <!-- RIGHT INDUSTRIAL PLANT -->
 
         <g>
 
             <rect class="steel"
-                  x="260"
-                  y="64"
-                  width="58"
-                  height="76"
-                  rx="26"/>
+                  x="1430" y="57"
+                  width="22" height="83"
+                  rx="3"/>
 
-            <path class="light"
-                  d="M260 82 H318
-                     M260 107 H318"/>
+            <rect class="steel"
+                  x="1470" y="40"
+                  width="34" height="100"
+                  rx="5"/>
 
-            <circle class="window"
-                    cx="289"
-                    cy="95"
-                    r="4"/>
+            <rect class="steel"
+                  x="1476" y="23"
+                  width="22" height="19"/>
+
+            <rect class="steel"
+                  x="1481" y="10"
+                  width="12" height="15"/>
+
+            <circle class="warm"
+                    cx="1487" cy="58" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="81" r="3"/>
+
+            <circle class="warm"
+                    cx="1487" cy="104" r="3"/>
+
+            <path class="highlight"
+                  d="
+                    M1487 10 V140
+                    M1472 62 H1502
+                    M1472 86 H1502
+                    M1472 110 H1502
+                  "/>
+
+            <rect class="steel"
+                  x="1533" y="72"
+                  width="52" height="68"
+                  rx="25"/>
+
+            <path class="highlight"
+                  d="
+                    M1533 91 H1585
+                    M1533 114 H1585
+                  "/>
+
+            <circle class="glass"
+                    cx="1559" cy="102" r="5"/>
 
         </g>
 
 
-        <!-- RIGHT TOWER -->
+        <!-- RIGHT PIPING -->
 
-        <g>
+        <g class="highlight">
 
-            <rect class="steel"
-                  x="1512"
-                  y="25"
-                  width="36"
-                  height="115"
-                  rx="4"/>
+            <path d="
+                M1672 121
+                H1362
+                V92
+                H1277
+            "/>
 
-            <rect class="steel"
-                  x="1518"
-                  y="9"
-                  width="24"
-                  height="18"/>
+            <path d="
+                M1637 132
+                H1402
+                V108
+                H1252
+            "/>
 
-            <rect class="steel"
-                  x="1523"
-                  y="0"
-                  width="14"
-                  height="12"/>
+            <path d="
+                M1502 77
+                H1387
+                V52
+                H1292
+            "/>
 
-            <path class="light"
-                  d="M1530 0 L1530 140
-                     M1514 54 L1546 54
-                     M1514 79 L1546 79
-                     M1514 103 L1546 103"/>
-
-            <circle class="window"
-                    cx="1530"
-                    cy="42"
-                    r="3"/>
-
-            <circle class="window"
-                    cx="1530"
-                    cy="66"
-                    r="3"/>
-
-            <circle class="window"
-                    cx="1530"
-                    cy="90"
-                    r="3"/>
+            <path d="
+                M1425 140
+                V70
+                H1337
+            "/>
 
         </g>
 
 
-        <!-- RIGHT STACK -->
+        <!-- TECHNICAL HEXAGONS -->
 
-        <g>
+        <g class="tech">
 
-            <rect class="steel"
-                  x="1450"
-                  y="54"
-                  width="18"
-                  height="86"/>
+            <path d="
+                M270 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <rect class="steel"
-                  x="1446"
-                  y="49"
-                  width="26"
-                  height="8"/>
+            <path d="
+                M309 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-            <path class="light"
-                  d="M1459 54 L1459 140"/>
+            <path d="
+                M1366 25
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
-        </g>
-
-
-        <!-- RIGHT PIPE NETWORK -->
-
-        <g class="light">
-
-            <path d="M1620 112 H1425 V85 H1350"/>
-
-            <path d="M1575 125 H1410 V104 H1330"/>
-
-            <path d="M1500 95 H1390 V65 H1335"/>
-
-            <path d="M1465 130 V70 H1390"/>
-
-        </g>
-
-
-        <!-- RIGHT VESSEL -->
-
-        <g>
-
-            <rect class="steel"
-                  x="1350"
-                  y="64"
-                  width="58"
-                  height="76"
-                  rx="26"/>
-
-            <path class="light"
-                  d="M1350 82 H1408
-                     M1350 107 H1408"/>
-
-            <circle class="window"
-                    cx="1379"
-                    cy="95"
-                    r="4"/>
-
-        </g>
-
-
-        <!-- CENTRAL LOW PIPE -->
-
-        <g class="light">
-
-            <path d="M0 137 H1672"/>
-
-            <path d="M0 126 H420 V116 H650"/>
-
-            <path d="M1672 126 H1250 V116 H1020"/>
-
-        </g>
-
-
-        <!-- HEXAGONAL TECHNICAL MOTIFS -->
-
-        <g class="hex">
-
-            <path d="M250 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-
-            <path d="M282 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-
-            <path d="M1335 25 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
-
-            <path d="M1370 54 l18 -11 l18 11 v22 l-18 11 l-18-11 z"/>
+            <path d="
+                M1405 58
+                l18 -11
+                l18 11
+                v22
+                l-18 11
+                l-18-11z
+            "/>
 
         </g>
 
     </svg>
 
 
-    <div class="content">
+    <div class="side-fade left"></div>
+    <div class="side-fade right"></div>
 
-        <div class="title">
-            PSM DASHBOARD
+
+    <!-- CENTRAL 3D TITLE -->
+
+    <div class="title-plate">
+
+        <div class="nav-arrow nav-left">
+            ◀◀
         </div>
 
-        <div class="pillar">
-            PILLAR: PT
+        <div class="title-text">
+            Process Technology (PT)
         </div>
 
-        <div class="subtitle">
-            PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL
+        <div class="nav-arrow nav-right">
+            ▶▶
         </div>
 
     </div>
 
-    <div class="scan"></div>
+
+    <div class="energy-line"></div>
 
 </div>
 
@@ -2125,9 +1980,17 @@ body {
 
 components.html(
     header_html,
-    height=170,
+    height=100,
     scrolling=False
 )
+# =========================================================
+# RESET FILTER CALLBACK
+# =========================================================
+
+def reset_pt_filters():
+    st.session_state.status_filter = "All"
+    st.session_state.page_number = 1
+    st.session_state.department_selector = "All Departments"
 
 
 # =========================================================
@@ -2138,8 +2001,6 @@ filter_month, filter_department, filter_reset = st.columns(
     [1.0, 1.0, 0.34],
     gap="small"
 )
-
-
 # =========================================================
 # MONTH
 # =========================================================
@@ -2147,7 +2008,7 @@ filter_month, filter_department, filter_reset = st.columns(
 with filter_month:
 
     st.markdown(
-        "<div style='height:22px;'></div>",
+        "<div class='month-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
     )
 
@@ -2163,8 +2024,6 @@ with filter_month:
         ],
         index=0
     )
-
-
 # =========================================================
 # DEPARTMENT
 # =========================================================
@@ -2172,7 +2031,7 @@ with filter_month:
 with filter_department:
 
     st.markdown(
-        "<div style='height:22px;'></div>",
+        "<div class='department-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
     )
 
@@ -2196,11 +2055,10 @@ with filter_department:
     )
 
     selected_department = st.selectbox(
-        "Department",
-        department_options,
-        index=0,
-        key="department_selector"
-    )
+    "Department",
+    department_options,
+    key="department_selector"
+)
 
 
 # =========================================================
@@ -2216,13 +2074,10 @@ with filter_reset:
 
     if st.button(
         "↻ Reset Filters",
-        use_container_width=True
+        use_container_width=True,
+        key="reset_pt_filters_button",
+        on_click=reset_pt_filters
     ):
-
-        st.session_state.status_filter = "All"
-
-        st.session_state.page_number = 1
-
         st.rerun()
 
 
@@ -2294,16 +2149,16 @@ k1, k2, k3 = st.columns(
 cards = [
 
     (
-        "▣",
+        "",
         "TOTAL PT",
         total_pt,
-        "Total identified PT",
+        "",
         "blue",
-        ""
+        "total"
     ),
 
     (
-        "✓",
+        "",
         "COMPLETED",
         completed,
         f"{completion_percentage:.1f}% completed",
@@ -2312,7 +2167,7 @@ cards = [
     ),
 
     (
-        "◌",
+        "",
         "ONGOING",
         ongoing,
         "Currently under progress",
@@ -2373,669 +2228,316 @@ for column, card in zip(
 st.html(
     """
 <div class="register-wrap">
-
     <div class="register-title">
-
-        <span class="register-icon">
-            ▣
-        </span>
-
+        <span class="register-icon">▣</span>
         PT REGISTER
-
     </div>
-
 </div>
 """
 )
 
 
 # =========================================================
-# REGISTER TOOLBAR
+# PT REGISTER TOOLBAR
 # =========================================================
 
-search_col, all_col, completed_col, ongoing_col, refresh_col, upload_col = st.columns(
-    [4.2, .8, 1.15, 1.0, 1.15, 1.35],
+search_col, all_col, completed_col, ongoing_col, refresh_col = st.columns(
+    [2.8, 0.55, 0.85, 0.75, 1.05],
     gap="small"
 )
 
-
 with search_col:
-
     search_text = st.text_input(
         "Search",
-        placeholder=(
-            "Search PT No., Name of PT, "
-            "Department, Product..."
-        ),
-        label_visibility="collapsed"
+        placeholder="Search PT No., Name of PT, Department...",
+        label_visibility="collapsed",
+        key="pt_search"
     )
-
 
 with all_col:
-
-    all_button = st.button(
-        "All",
-        use_container_width=True
-    )
-
+    if st.button("All", use_container_width=True, key="pt_all"):
+        st.session_state.status_filter = "All"
+        st.session_state.page_number = 1
+        st.rerun()
 
 with completed_col:
-
-    completed_button = st.button(
-        "Completed",
-        use_container_width=True
-    )
-
+    if st.button("Completed", use_container_width=True, key="pt_completed"):
+        st.session_state.status_filter = "Completed"
+        st.session_state.page_number = 1
+        st.rerun()
 
 with ongoing_col:
-
-    ongoing_button = st.button(
-        "Ongoing",
-        use_container_width=True
-    )
-
+    if st.button("Ongoing", use_container_width=True, key="pt_ongoing"):
+        st.session_state.status_filter = "Ongoing"
+        st.session_state.page_number = 1
+        st.rerun()
 
 with refresh_col:
-
-    if st.button(
-        "↻ Refresh Data",
-        use_container_width=True
-    ):
-
+    if st.button("↻ Refresh Data", use_container_width=True, key="pt_refresh"):
         st.cache_data.clear()
-
         st.rerun()
 
 
-with upload_col:
-
-    if st.button(
-        "⬆ Upload Document",
-        use_container_width=True
-    ):
-
-        st.session_state.upload_pt_no = ""
-
-        st.session_state.open_upload_dialog = True
-
-        st.rerun()
-
 
 # =========================================================
-# STATUS FILTER
-# =========================================================
-
-if all_button:
-
-    st.session_state.status_filter = "All"
-
-    st.session_state.page_number = 1
-
-elif completed_button:
-
-    st.session_state.status_filter = "Completed"
-
-    st.session_state.page_number = 1
-
-elif ongoing_button:
-
-    st.session_state.status_filter = "Ongoing"
-
-    st.session_state.page_number = 1
-
-
-# =========================================================
-# DISPLAY DATA
+# SEARCH + STATUS FILTER
 # =========================================================
 
 display_df = filtered_df.copy()
 
-if st.session_state.status_filter != "All":
+if search_text.strip():
+    q = search_text.strip().lower()
 
-    display_df = display_df[
-        display_df[STATUS_COLUMN]
-        ==
-        st.session_state.status_filter.lower()
-    ]
-
-
-# =========================================================
-# SEARCH
-# =========================================================
-
-if search_text:
-
-    query = search_text.lower().strip()
-
-    search_columns = [
-        "PT No.",
-        "Department",
-        "Name of PT",
-        "Product",
-        "Process",
-        "Location",
-        "Remarks"
-    ]
-
-    mask = pd.Series(
-        False,
-        index=display_df.index
+    search_mask = (
+        display_df["PT No."].fillna("").astype(str).str.lower().str.contains(q, regex=False)
+        | display_df["Department"].fillna("").astype(str).str.lower().str.contains(q, regex=False)
+        | display_df["Name of PT"].fillna("").astype(str).str.lower().str.contains(q, regex=False)
+        | display_df[STATUS_COLUMN].fillna("").astype(str).str.lower().str.contains(q, regex=False)
     )
 
-    for column in search_columns:
+    display_df = display_df[search_mask]
 
-        mask = (
-            mask
-            |
-            display_df[column]
-            .fillna("")
-            .astype(str)
-            .str.lower()
-            .str.contains(
-                query,
-                na=False
-            )
-        )
-
-    display_df = display_df[mask]
+if st.session_state.status_filter != "All":
+    display_df = display_df[
+        display_df[STATUS_COLUMN].fillna("").astype(str).str.strip().str.lower()
+        == st.session_state.status_filter.lower()
+    ]
 
 
 # =========================================================
-# PAGINATION
+# PT TABLE
+# ONLY SIX COLUMNS SHOWN IN DASHBOARD
 # =========================================================
 
-PAGE_SIZE = 10
-
-total_records = len(display_df)
-
-total_pages = max(
-    1,
-    (total_records + PAGE_SIZE - 1)
-    //
-    PAGE_SIZE
-)
+ROWS_PER_PAGE = 5
+total_entries = len(display_df)
+total_pages = max(1, (total_entries + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
 
 if st.session_state.page_number > total_pages:
-
     st.session_state.page_number = total_pages
 
 page_number = st.session_state.page_number
+start_index = (page_number - 1) * ROWS_PER_PAGE
+end_index = start_index + ROWS_PER_PAGE
 
-start_index = (
-    page_number - 1
-) * PAGE_SIZE
+page_df = display_df.iloc[start_index:end_index].copy()
 
-end_index = (
-    start_index + PAGE_SIZE
-)
-
-page_df = display_df.iloc[
-    start_index:end_index
-].copy()
-
-
-# =========================================================
-# TABLE
-# =========================================================
-
-table_widths = [
-    .45,
-    .85,
-    1.25,
-    1.65,
-    .95,
-    1.15,
-    1.05
-]
-
-table_headers = [
-    "Sr No",
-    "PT No.",
-    "Department",
-    "Name of PT",
-    "Status",
-    "Upload Document",
-    "View Document"
-]
-
-
-header_columns = st.columns(
-    table_widths,
-    gap="small"
-)
-
-for column, header_text in zip(
-    header_columns,
-    table_headers
-):
-
-    with column:
-
-        st.html(
-            f"""
-<div class="table-head">
-    {header_text}
-</div>
-"""
-        )
-
-
-# =========================================================
-# TABLE ROWS
-# =========================================================
-
-for row_number, (_, row) in enumerate(
-    page_df.iterrows()
-):
-
-    row_columns = st.columns(
-        table_widths,
-        gap="small"
-    )
-
-    alternate = (
-        " alt"
-        if row_number % 2 == 1
-        else ""
-    )
-
-
-    # =====================================================
-    # DATA CELLS
-    # =====================================================
-
-    row_values = [
-
-        row["Sr No"],
-        row["PT No."],
-        row["Department"],
-        row["Name of PT"]
-
-    ]
-
-    row_positions = [
-        0,
-        1,
-        2,
-        3
-    ]
-
-
-    for position, value in zip(
-        row_positions,
-        row_values
-    ):
-
-        with row_columns[position]:
-
-            value_text = str(
-                value
-            ).strip()
-
-            if value_text.lower() == "nan":
-
-                value_text = ""
-
-            left_class = (
-                " left"
-                if position in [2, 3]
-                else ""
-            )
-
-            st.html(
-                f"""
-<div class="table-cell{alternate}{left_class}">
-    {value_text}
-</div>
-"""
-            )
-
-
-    # =====================================================
-    # STATUS
-    # =====================================================
-
-    with row_columns[4]:
-
-        status = str(
-            row[STATUS_COLUMN]
-        ).strip().lower()
-
-
-        if status == "completed":
-
-            status_html = """
-<span class="status-pill status-completed">
-    ● COMPLETED
-</span>
+rows_html = """
+<div class="pt-table">
+    <div class="pt-row pt-header">
+        <div class="pt-cell">PT No.</div>
+        <div class="pt-cell">Department</div>
+        <div class="pt-cell">Name of PT</div>
+        <div class="pt-cell">Status<br>(Ongoing/Completed)</div>
+        <div class="pt-cell">Upload Document</div>
+        <div class="pt-cell">View Document</div>
+    </div>
 """
 
-        elif status == "ongoing":
+for row_no, (_, row) in enumerate(page_df.iterrows()):
+    alt = " pt-alt" if row_no % 2 else ""
 
-            status_html = """
-<span class="status-pill status-ongoing">
-    ● ONGOING
-</span>
-"""
+    pt_no = str(row["PT No."]).strip()
+    department = str(row["Department"]).strip()
+    name_pt = str(row["Name of PT"]).strip()
+    status = str(row[STATUS_COLUMN]).strip()
 
-        else:
-
-            status_html = """
-<span class="status-pill">
-    —
-</span>
-"""
-
-
-        st.html(
-            f"""
-<div class="table-cell{alternate}">
-    {status_html}
-</div>
-"""
-        )
-
-
-    # =====================================================
-    # UPLOAD
-    # =====================================================
-
-    with row_columns[5]:
-
-        if st.button(
-            "📤 Upload",
-            key=(
-                f"upload_{page_number}_"
-                f"{row_number}_"
-                f"{row['PT No.']}"
-            ),
-            use_container_width=True
-        ):
-
-            st.session_state.upload_pt_no = str(
-                row["PT No."]
-            )
-
-            st.session_state.open_upload_dialog = True
-
-            st.rerun()
-
-
-    # =====================================================
-    # VIEW
-    # =====================================================
-
-    with row_columns[6]:
-
-        if st.button(
-            "📄 View",
-            key=(
-                f"view_{page_number}_"
-                f"{row_number}_"
-                f"{row['PT No.']}"
-            ),
-            use_container_width=True
-        ):
-
-            st.session_state.view_pt_no = str(
-                row["PT No."]
-            )
-
-            st.rerun()
-
-
-# =========================================================
-# VIEW DOCUMENT
-# =========================================================
-
-view_pt = st.session_state.get(
-    "view_pt_no",
-    ""
-)
-
-if view_pt:
-
-    matching_files = []
-
-    if os.path.exists(
-        DOCUMENT_FOLDER
-    ):
-
-        for filename in os.listdir(
-            DOCUMENT_FOLDER
-        ):
-
-            if filename.startswith(
-                f"{view_pt}_"
-            ):
-
-                matching_files.append(
-                    filename
-                )
-
-
-    if matching_files:
-
-        st.info(
-            f"Documents available for {view_pt}: "
-            f"{len(matching_files)}"
-        )
-
-        for filename in matching_files:
-
-            file_path = os.path.join(
-                DOCUMENT_FOLDER,
-                filename
-            )
-
-            with open(
-                file_path,
-                "rb"
-            ) as document_file:
-
-                st.download_button(
-                    label=f"📄 {filename}",
-                    data=document_file.read(),
-                    file_name=filename,
-                    key=f"download_{filename}"
-                )
-
+    if status.lower() == "completed":
+        status_html = '<span class="status-completed">COMPLETED</span>'
+    elif status.lower() == "ongoing":
+        status_html = '<span class="status-ongoing">ONGOING</span>'
     else:
+        status_html = f'<span class="status-normal">{status or "—"}</span>'
 
-        st.caption(
-            f"No uploaded document found for {view_pt}."
-        )
-
-
-# =========================================================
-# RECORD COUNT + PAGINATION
-# =========================================================
-
-count_left, page_left, page_center, page_right = st.columns(
-    [2.2, 1.0, 1.8, 1.0],
-    gap="small"
-)
-
-
-with count_left:
-
-    first_record = (
-        start_index + 1
-        if total_records
-        else 0
-    )
-
-    last_record = min(
-        end_index,
-        total_records
-    )
-
-    st.html(
-        f"""
-<div class="record-bar">
-    Showing {first_record} to {last_record}
-    of {total_records} entries
-</div>
+    rows_html += f"""
+    <div class="pt-row{alt}">
+        <div class="pt-cell pt-left">{pt_no}</div>
+        <div class="pt-cell pt-left">{department}</div>
+        <div class="pt-cell pt-left">{name_pt}</div>
+        <div class="pt-cell">{status_html}</div>
+        <div class="pt-cell">
+            <span class="action-upload">↑ Upload</span>
+        </div>
+        <div class="pt-cell">
+            <span class="action-view">◉ View</span>
+        </div>
+    </div>
 """
-    )
 
-
-with page_left:
-
-    if st.button(
-        "‹",
-        disabled=(
-            page_number <= 1
-        ),
-        use_container_width=True
-    ):
-
-        st.session_state.page_number -= 1
-
-        st.rerun()
-
-
-with page_center:
-
-    st.html(
-        f"""
-<div class="record-bar"
-     style="justify-content:center;">
-
-    {page_number}
-    &nbsp; / &nbsp;
-    {total_pages}
-
-</div>
-"""
-    )
-
-
-with page_right:
-
-    if st.button(
-        "›",
-        disabled=(
-            page_number >= total_pages
-        ),
-        use_container_width=True
-    ):
-
-        st.session_state.page_number += 1
-
-        st.rerun()
-
-
-# =========================================================
-# UPLOAD DIALOG
-# =========================================================
-
-if st.session_state.get(
-    "open_upload_dialog",
-    False
-):
-
-    @st.dialog("📤 Upload PT Document")
-    def upload_document_dialog():
-
-        pt_no = st.session_state.get(
-            "upload_pt_no",
-            ""
-        )
-
-        if pt_no:
-
-            st.write(
-                f"PT No.: **{pt_no}**"
-            )
-
-        else:
-
-            st.info(
-                "Enter the PT number for this document."
-            )
-
-            pt_no = st.text_input(
-                "PT No.",
-                key="dialog_pt_no"
-            )
-
-
-        uploaded_file = st.file_uploader(
-            "Select document from your computer",
-            type=[
-                "pdf",
-                "doc",
-                "docx",
-                "xls",
-                "xlsx",
-                "ppt",
-                "pptx",
-                "jpg",
-                "jpeg",
-                "png"
-            ],
-            key="pt_upload_file"
-        )
-
-
-        if uploaded_file is not None:
-
-            if not pt_no:
-
-                st.warning(
-                    "Please enter PT No. first."
-                )
-
-            else:
-
-                file_name = (
-                    f"{pt_no}_"
-                    f"{uploaded_file.name}"
-                )
-
-                file_path = os.path.join(
-                    DOCUMENT_FOLDER,
-                    file_name
-                )
-
-                with open(
-                    file_path,
-                    "wb"
-                ) as file:
-
-                    file.write(
-                        uploaded_file.getbuffer()
-                    )
-
-                st.success(
-                    f"Document uploaded successfully for {pt_no}"
-                )
-
-                st.session_state.open_upload_dialog = False
-
-                st.session_state.upload_pt_no = ""
-
-                st.rerun()
-
-
-    upload_document_dialog()
-
-
-# =========================================================
-# FOOTER
-# =========================================================
+rows_html += "</div>"
 
 st.html(
-    """
-<div class="footer">
+    f"""
+<style>
+.pt-table {{
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid #d5e0ea;
+    background: #ffffff;
+}}
 
-    🛡 &nbsp;
-    © 2026 Process Safety Management Dashboard
-    |
-    Pillar: PT
+.pt-row {{
+    display: grid;
+    grid-template-columns: 1.10fr 1.45fr 2.10fr 1.15fr 1.45fr 1.45fr;
+    0
+}}
 
-</div>
+.pt-header {{
+    min-height: 52px;
+    background: linear-gradient(180deg, #205796 0%, #174b87 100%);
+}}
+
+.pt-cell {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 10px;
+    border-right: 1px solid #d5e0ea;
+    border-bottom: 1px solid #d5e0ea;
+    color: #243b57;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
+}}
+
+.pt-header .pt-cell {{
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 12px;
+}}
+
+.pt-left {{
+    justify-content: flex-start;
+    text-align: left;
+}}
+
+.pt-alt .pt-cell {{
+    background: #f5f8fb;
+}}
+
+.status-completed {{
+    color: #198754;
+    font-weight: 900;
+}}
+
+.status-ongoing {{
+    color: #e08a00;
+    font-weight: 900;
+}}
+
+.status-normal {{
+    color: #243b57;
+    font-weight: 900;
+}}
+
+.action-upload {{
+    color: #e1262d;
+    font-weight: 800;
+    cursor: pointer;
+}}
+
+.action-view {{
+    color: #174b87;
+    font-weight: 800;
+    cursor: pointer;
+}}
+
+.action-upload:hover,
+.action-view:hover {{
+    text-decoration: underline;
+}}
+</style>
+
+{rows_html}
 """
 )
+
+
+# =========================================================
+# RECORD BAR + PAGINATION
+# =========================================================
+
+shown_from = start_index + 1 if total_entries else 0
+shown_to = min(end_index, total_entries)
+
+p1, p2, p3, p4, p5, p6 = st.columns(
+    [3.2, 0.45, 0.45, 0.45, 0.45, 0.45],
+    gap="small"
+)
+
+with p1:
+    st.markdown(
+        f"""
+        <div style="
+            height:38px;
+            display:flex;
+            align-items:center;
+            padding-left:12px;
+            color:#5d7085;
+            font-size:11px;
+            font-weight:600;
+        ">
+            Showing {shown_from} to {shown_to} of {total_entries} entries
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with p2:
+    if st.button("«", key="page_first", use_container_width=True):
+        st.session_state.page_number = 1
+        st.rerun()
+
+with p3:
+    if st.button("‹", key="page_prev", use_container_width=True):
+        st.session_state.page_number = max(1, page_number - 1)
+        st.rerun()
+
+with p4:
+    st.markdown(
+        f"""
+        <div style="
+            height:36px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:#174b87;
+            color:white;
+            border-radius:6px;
+            font-size:12px;
+            font-weight:900;
+        ">{page_number}</div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with p5:
+    if st.button("›", key="page_next", use_container_width=True):
+        st.session_state.page_number = min(total_pages, page_number + 1)
+        st.rerun()
+
+with p6:
+    if st.button("»", key="page_last", use_container_width=True):
+        st.session_state.page_number = total_pages
+        st.rerun()
+
+
+# =========================================================
+# GOOGLE SHEET SOURCE
+# =========================================================
+# The data source remains the Google Sheet tab named "PT".
+#
+# Fetched from PT:
+#   1. PT No.
+#   2. Department
+#   3. Name of PT
+#   4. Status (Ongoing/Completed)
+#
+# Upload Document and View Document are dashboard action
+# columns and are NOT fetched as data columns from the sheet.
+#
+# The existing Month selector is retained. No Month column
+# exists in the requested PT parameters, so no artificial
+# month filter is applied.
 

@@ -139,6 +139,31 @@ div[data-testid="stMetricLabel"] p {
         margin-bottom:6px;
     }
 
+
+    /* MATCH CLICKABLE MODULE HEADINGS WITH NORMAL MODULE HEADING */
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
+
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
+
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover * {
+        color:#073f78 !important;
+        text-decoration:none !important;
+    }
+
+
     .section-bar {
         background:#07518b;
         color:#ffffff;
@@ -666,7 +691,7 @@ def load_module(name):
     return filter_coke_oven(raw)
 
 
-def status_counts(df):
+def status_counts(df, preferred_status_columns=None):
     result = {
         "total": 0,
         "completed": 0,
@@ -682,17 +707,24 @@ def status_counts(df):
 
     result["total"] = len(df)
 
-    status_col = find_col(
-        df,
-        [
-            "Status",
-            "Current Status",
-            "Action Status",
-            "Completion Status",
-            "Investigation Status",
-            "Recommendation Status",
-        ],
-    )
+    # Use an explicit status column when a sheet contains multiple
+    # status-like fields.
+    if preferred_status_columns:
+        status_col = find_col(df, preferred_status_columns)
+    else:
+        status_col = find_col(
+            df,
+            [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
+                "Status",
+                "Current Status",
+                "Action Status",
+                "Completion Status",
+                "Investigation Status",
+                "Recommendation Status",
+            ],
+        )
 
     if status_col is None:
         return result
@@ -847,11 +879,33 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
+# ============================================================
+# MODULE PAGE LINKS
+# ============================================================
+
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "TRAINING": "pages/13_Training.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+}
+
 def show_module_title(number, icon, title):
-    st.markdown(
-        f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-        unsafe_allow_html=True,
-    )
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def show_metric_row(items):
@@ -1016,7 +1070,14 @@ with c:
             "PHA RECOMMENDATION"
         )
 
-        x = status_counts(rec)
+        x = status_counts(
+            rec,
+            [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
+                "Status",
+            ],
+        )
 
         show_metric_row([
             (
@@ -1049,9 +1110,11 @@ with c:
                 "Description"
             ],
             [
+                "Status (Open/Close)",
+                "Status (Open / Close)",
                 "Status",
                 "Action Status",
-                "Recommendation Status"
+                "Recommendation Status",
             ],
         )
 
@@ -2995,3 +3058,4 @@ with b:
                     "Upload the Audit Compliance PDF "
                     "to enable the View option."
                 )
+
