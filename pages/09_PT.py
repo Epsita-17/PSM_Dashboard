@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="PSM Dashboard - PT",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 
@@ -2540,5 +2540,4 @@ with p6:
 # The existing Month selector is retained. No Month column
 # exists in the requested PT parameters, so no artificial
 # month filter is applied.
-
 

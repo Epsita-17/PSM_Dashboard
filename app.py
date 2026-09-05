@@ -31,9 +31,9 @@ st.markdown(
     """
     <style>
 
-    /* ================================
+    /* ========================================================
        MAIN PAGE
-       ================================ */
+       ======================================================== */
 
     .stApp {
         background-color: #eef4f8;
@@ -47,18 +47,52 @@ st.markdown(
     }
 
 
-    /* ================================
+    /* ========================================================
        STREAMLIT HEADER
-       ================================ */
+       DO NOT HIDE THIS HEADER
+       Native sidebar reopen control is inside it.
+       ======================================================== */
 
-    header[data-testid="stHeader"] {
-        background-color: transparent;
+   header[data-testid="stHeader"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: transparent !important;
+    z-index: 999999 !important;
+}
+
+
+    /* ========================================================
+       SIDEBAR COLLAPSED CONTROL
+       ======================================================== */
+
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 1000000 !important;
+    }
+
+    [data-testid="stSidebarCollapsedControl"] button {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    button[aria-label="Open sidebar"],
+    button[aria-label="Close sidebar"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
     }
 
 
-    /* ================================
+    /* ========================================================
        SIDEBAR
-       ================================ */
+       ======================================================== */
 
     section[data-testid="stSidebar"] {
         background-color: #073f61 !important;
@@ -73,9 +107,9 @@ st.markdown(
     }
 
 
-    /* ================================
+    /* ========================================================
        SIDEBAR BRAND
-       ================================ */
+       ======================================================== */
 
     .psm-sidebar-brand {
         width: 100%;
@@ -110,9 +144,9 @@ st.markdown(
     }
 
 
-    /* ================================
+    /* ========================================================
        SIDEBAR NAVIGATION
-       ================================ */
+       ======================================================== */
 
     section[data-testid="stSidebar"]
     [data-testid="stSidebarNav"] {
@@ -139,18 +173,18 @@ st.markdown(
     }
 
 
-    /* ================================
+    /* ========================================================
        SIDEBAR DIVIDER
-       ================================ */
+       ======================================================== */
 
     section[data-testid="stSidebar"] hr {
         border-color: rgba(255,255,255,0.25);
     }
 
 
-    /* ================================
+    /* ========================================================
        METRIC CARDS
-       ================================ */
+       ======================================================== */
 
     [data-testid="stMetric"] {
         background: #ffffff;
@@ -165,9 +199,9 @@ st.markdown(
     }
 
 
-    /* ================================
+    /* ========================================================
        ALERTS
-       ================================ */
+       ======================================================== */
 
     [data-testid="stAlert"] {
         border-radius: 8px;
@@ -181,8 +215,6 @@ st.markdown(
 
 # ============================================================
 # SIDEBAR BRANDING
-# IMPORTANT:
-# Logo + PSM Dashboard appears ABOVE Home
 # ============================================================
 
 with st.sidebar:
@@ -192,9 +224,9 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    # ----------------------------
+    # --------------------------------------------------------
     # LOGO
-    # ----------------------------
+    # --------------------------------------------------------
 
     if LOGO_PATH.exists():
 
@@ -211,9 +243,9 @@ with st.sidebar:
         )
 
 
-    # ----------------------------
+    # --------------------------------------------------------
     # PSM HEADER
-    # ----------------------------
+    # --------------------------------------------------------
 
     st.markdown(
         """
@@ -232,21 +264,25 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True
+    )
 
     st.divider()
 
 
 # ============================================================
-# PAGE OBJECTS
+# MAIN DASHBOARD PAGES
 # ============================================================
+
 
 # ------------------------------------------------------------
 # 01 HOME
 # ------------------------------------------------------------
 
 home_page = st.Page(
-    "pages/01_Home.py",
+    str(BASE_DIR / "pages" / "01_Home.py"),
     title="Home",
     icon="🏠",
     default=True
@@ -258,7 +294,7 @@ home_page = st.Page(
 # ------------------------------------------------------------
 
 executive_page = st.Page(
-    "pages/02_Executive_Dashboard.py",
+    str(BASE_DIR / "pages" / "02_Executive_Dashboard.py"),
     title="Executive Dashboard",
     icon="📊"
 )
@@ -269,7 +305,7 @@ executive_page = st.Page(
 # ------------------------------------------------------------
 
 apex_page = st.Page(
-    "pages/03_Apex_Committee.py",
+    str(BASE_DIR / "pages" / "03_Apex_Committee.py"),
     title="Apex Committee",
     icon="👥"
 )
@@ -280,7 +316,7 @@ apex_page = st.Page(
 # ------------------------------------------------------------
 
 steering_page = st.Page(
-    "pages/04_Steering_Committee.py",
+    str(BASE_DIR / "pages" / "04_Steering_Committee.py"),
     title="Steering Committee",
     icon="🧭"
 )
@@ -291,7 +327,7 @@ steering_page = st.Page(
 # ------------------------------------------------------------
 
 sub_committee_chairman_page = st.Page(
-    "pages/05_Sub_Committee_Chairman.py",
+    str(BASE_DIR / "pages" / "05_Sub_Committee_Chairman.py"),
     title="Sub Committee Chairman",
     icon="👔"
 )
@@ -302,7 +338,7 @@ sub_committee_chairman_page = st.Page(
 # ------------------------------------------------------------
 
 psm_chairman_page = st.Page(
-    "pages/06_PSM_Chairman_Dashboard.py",
+    str(BASE_DIR / "pages" / "06_PSM_Chairman_Dashboard.py"),
     title="PSM Chairman Dashboard",
     icon="👤"
 )
@@ -313,147 +349,179 @@ psm_chairman_page = st.Page(
 # ------------------------------------------------------------
 
 all_departments_page = st.Page(
-    "pages/07_All_Departments.py",
+    str(BASE_DIR / "pages" / "07_All_Departments.py"),
     title="All Departments",
     icon="🏭"
 )
+
 
 # ============================================================
 # INDIVIDUAL DEPARTMENT PAGES
 # ============================================================
 
+
+# ------------------------------------------------------------
+# BLAST FURNACE
+# ------------------------------------------------------------
+
 blast_furnace_page = st.Page(
-    "departments/01_Blast_Furnace.py",
+    str(BASE_DIR / "departments" / "01_Blast_Furnace.py"),
     title="Blast Furnace",
     icon="🔥"
 )
 
+
+# ------------------------------------------------------------
+# COKE OVEN
+# ------------------------------------------------------------
+
 coke_oven_page = st.Page(
-    "departments/02_Coke_Oven.py",
+    str(BASE_DIR / "departments" / "02_Coke_Oven.py"),
     title="Coke Oven",
     icon="🏭"
 )
 
 
+# ------------------------------------------------------------
+# SMS-1
+# ------------------------------------------------------------
+
 sms_1_page = st.Page(
-    "departments/04_SMS_1.py",
+    str(BASE_DIR / "departments" / "04_SMS_1.py"),
     title="SMS-1",
     icon="🏭"
 )
 
+
+# ------------------------------------------------------------
+# SMS-2
+# ------------------------------------------------------------
+
 sms_2_page = st.Page(
-    "departments/05_SMS_2.py",
+    str(BASE_DIR / "departments" / "05_SMS_2.py"),
     title="SMS-2",
     icon="🏭"
 )
 
+
+# ------------------------------------------------------------
+# DRI
+# ------------------------------------------------------------
+
 dri_page = st.Page(
-    "departments/06_DRI.py",
+    str(BASE_DIR / "departments" / "06_DRI.py"),
     title="DRI",
     icon="⚙️"
 )
 
+
+# ------------------------------------------------------------
+# CENTRAL UTILITY
+# ------------------------------------------------------------
+
 cu_page = st.Page(
-    "departments/07_CU.py",
+    str(BASE_DIR / "departments" / "07_CU.py"),
     title="Central Utility",
     icon="💧"
 )
 
+
+# ------------------------------------------------------------
+# CRM
+# ------------------------------------------------------------
+
 crm_page = st.Page(
-    "departments/08_CRM.py",
+    str(BASE_DIR / "departments" / "08_CRM.py"),
     title="CRM",
     icon="⚙️"
 )
 
+
+# ------------------------------------------------------------
+# WRM
+# ------------------------------------------------------------
+
 wrm_page = st.Page(
-    "departments/09_WRM.py",
+    str(BASE_DIR / "departments" / "09_WRM.py"),
     title="WRM",
     icon="⚙️"
 )
 
+
+# ------------------------------------------------------------
+# CPP
+# ------------------------------------------------------------
+
 cpp_page = st.Page(
-    "departments/10_CPP.py",
+    str(BASE_DIR / "departments" / "10_CPP.py"),
     title="CPP",
     icon="⚡"
 )
 
+
+# ------------------------------------------------------------
+# SINTER
+# ------------------------------------------------------------
+
 sinter_page = st.Page(
-    "departments/11_Sinter.py",
+    str(BASE_DIR / "departments" / "11_Sinter.py"),
     title="Sinter",
     icon="🏭"
 )
 
+
+# ------------------------------------------------------------
+# TUBE MILL
+# ------------------------------------------------------------
+
 tube_mill_page = st.Page(
-    "departments/12_Tube_Mill.py",
+    str(BASE_DIR / "departments" / "12_Tube_Mill.py"),
     title="Tube Mill",
     icon="⚙️"
 )
 
+
+# ------------------------------------------------------------
+# CSP
+# ------------------------------------------------------------
+
 csp_page = st.Page(
-    "departments/13_CSP.py",
+    str(BASE_DIR / "departments" / "13_CSP.py"),
     title="CSP",
     icon="🏭"
 )
 
+
+# ------------------------------------------------------------
+# PELLET & BENEFICIATION
+# ------------------------------------------------------------
+
 pellet_beneficiation_page = st.Page(
-    "departments/14_Pellet_Beneficiation.py",
+    str(BASE_DIR / "departments" / "14_Pellet_Beneficiation.py"),
     title="Pellet & Beneficiation",
     icon="🏭"
 )
 
+
+# ------------------------------------------------------------
+# LCP
+# ------------------------------------------------------------
+
 lcp_page = st.Page(
-    "departments/15_LCP.py",
+    str(BASE_DIR / "departments" / "15_LCP.py"),
     title="LCP",
     icon="⚙️"
 )
 
-# ------------------------------------------------------------
-# 11 MOC
-# ------------------------------------------------------------
 
-moc_page = st.Page(
-    "pages/11_MOC.py",
-    title="MOC",
-    icon="🔄"
-)
-
-
-# ------------------------------------------------------------
-# 12 PSSR
-# NEW PAGE
-# ------------------------------------------------------------
-
-pssr_page = st.Page(
-    "pages/12_PSSR.py",
-    title="PSSR",
-    icon="✅"
-)
-
-
-# ------------------------------------------------------------
-# 13 TRAINING
-# NEW PAGE
-# ------------------------------------------------------------
-
-training_page = st.Page(
-    "pages/13_Training.py",
-    title="Training & Competency",
-    icon="🎓"
-)
-
-
-# ------------------------------------------------------------
-# 16 REPORTS
-# ------------------------------------------------------------
-
-reports_page = st.Page(
-    "pages/16_Reports.py",
-    title="Reports",
-    icon="📄"
-)
 # ============================================================
 # PSM MODULE PAGES
 # ============================================================
+
+
+# ------------------------------------------------------------
+# 09 PT
+# ------------------------------------------------------------
 
 pt_page = st.Page(
     str(BASE_DIR / "pages" / "09_PT.py"),
@@ -461,11 +529,21 @@ pt_page = st.Page(
     icon="🔍"
 )
 
+
+# ------------------------------------------------------------
+# 10 PHA
+# ------------------------------------------------------------
+
 pha_page = st.Page(
     str(BASE_DIR / "pages" / "10_PHA.py"),
     title="PHA",
     icon="⚠️"
 )
+
+
+# ------------------------------------------------------------
+# 11 MOC
+# ------------------------------------------------------------
 
 moc_page = st.Page(
     str(BASE_DIR / "pages" / "11_MOC.py"),
@@ -473,11 +551,21 @@ moc_page = st.Page(
     icon="🔄"
 )
 
+
+# ------------------------------------------------------------
+# 12 PSSR
+# ------------------------------------------------------------
+
 pssr_page = st.Page(
     str(BASE_DIR / "pages" / "12_PSSR.py"),
     title="PSSR",
     icon="✅"
 )
+
+
+# ------------------------------------------------------------
+# 13 TRAINING
+# ------------------------------------------------------------
 
 training_page = st.Page(
     str(BASE_DIR / "pages" / "13_Training.py"),
@@ -485,17 +573,28 @@ training_page = st.Page(
     icon="🎓"
 )
 
+
+# ------------------------------------------------------------
+# 14 PROCESS SAFETY INCIDENT
+# ------------------------------------------------------------
+
 psi_page = st.Page(
     str(BASE_DIR / "pages" / "14_PSI.py"),
     title="Process Safety Incident",
     icon="🚨"
 )
 
+
+# ============================================================
+# REPORTS
+# ============================================================
+
 reports_page = st.Page(
     str(BASE_DIR / "pages" / "16_Reports.py"),
     title="Reports",
     icon="📄"
 )
+
 
 # ============================================================
 # NAVIGATION
@@ -534,12 +633,12 @@ pg = st.navigation(
         ],
 
         "PSM MODULES": [
-         pt_page,
-         pha_page,
-         moc_page,
-         pssr_page,
-         training_page,
-         psi_page
+            pt_page,
+            pha_page,
+            moc_page,
+            pssr_page,
+            training_page,
+            psi_page
         ],
 
         "REPORTING": [

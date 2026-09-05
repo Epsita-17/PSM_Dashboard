@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Process Safety Incident Dashboard",
     page_icon="⚠️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # =========================================================
@@ -2985,5 +2985,4 @@ except Exception as exc:
     st.error(
         f"Unable to display PSI Google Sheet data: {exc}"
     )
-
 

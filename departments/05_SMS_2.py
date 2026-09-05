@@ -58,10 +58,7 @@ st.markdown(
         visibility:hidden;
     }
 
-    /* REMOVE STREAMLIT TOP BAR / DEPLOY SPACE */
-    header[data-testid="stHeader"] {
-        display:none !important;
-    }
+ 
 
    .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;

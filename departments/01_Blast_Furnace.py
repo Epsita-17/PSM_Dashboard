@@ -8,15 +8,8 @@ import streamlit as st
 import plotly.graph_objects as go
 
 
+# PAGE CONFIGURATION IS CONTROLLED BY app.py / st.navigation().
 # ============================================================
-# PAGE CONFIG
-# ============================================================
-st.set_page_config(
-    page_title="PSM Dashboard - Blast Furnace",
-    page_icon="🔥",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 
 # ============================================================
@@ -58,10 +51,6 @@ st.markdown(
         visibility:hidden;
     }
 
-    /* REMOVE STREAMLIT TOP BAR / DEPLOY SPACE */
-    header[data-testid="stHeader"] {
-        display:none !important;
-    }
 
    .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
@@ -196,13 +185,11 @@ div[data-testid="stMetricLabel"] p {
 
 
     /* ========================================================
-       REDUCE SPACE BETWEEN HEADER AND REFRESH BUTTON
+       REFRESH BUTTON
+       Do not apply negative margin globally.
+       A global stButton rule can move Streamlit's sidebar
+       collapse/reopen control after the page finishes rendering.
        ======================================================== */
-
-    div[data-testid="stButton"] {
-        margin-top:-35px !important;
-        margin-bottom:0px !important;
-    }
 
     </style>
     """,

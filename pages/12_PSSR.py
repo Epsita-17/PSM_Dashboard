@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="PSSR Dashboard",
     page_icon="⚠️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 if AUTO_REFRESH_AVAILABLE:
@@ -2690,5 +2690,4 @@ if not AUTO_REFRESH_AVAILABLE:
         "Install streamlit-autorefresh with: "
         "pip install streamlit-autorefresh"
     )
-
 
