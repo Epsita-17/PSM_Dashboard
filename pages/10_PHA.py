@@ -2,6 +2,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import os
+import base64
+import re
+import mimetypes
+from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
 
 # =========================================================
@@ -39,6 +43,9 @@ if "open_upload_dialog" not in st.session_state:
 
 if "view_pha_no" not in st.session_state:
     st.session_state.view_pha_no = ""
+
+if "open_view_dialog" not in st.session_state:
+    st.session_state.open_view_dialog = False
 
 # =========================================================
 # AUTO REFRESH
@@ -169,14 +176,79 @@ pha_recommendation_df = get_pha_recommendation_data()
 
 # =========================================================
 # DOCUMENT STORAGE
+# PT.PY IMPLEMENTATION ADAPTED ONLY FOR PHA
 # =========================================================
 
-DOCUMENT_FOLDER = "pha_documents"
+DOCUMENT_FOLDER = Path(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "pha_documents"
+    )
+)
 
-os.makedirs(
-    DOCUMENT_FOLDER,
+DOCUMENT_FOLDER.mkdir(
+    parents=True,
     exist_ok=True
 )
+
+
+def safe_pha_folder_name(pha_no):
+    value = str(pha_no).strip()
+    value = re.sub(r"[^A-Za-z0-9._-]+", "_", value)
+    return value or "unknown_pha"
+
+
+def get_pha_document_folder(pha_no):
+    folder = DOCUMENT_FOLDER / safe_pha_folder_name(pha_no)
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def get_pha_documents(pha_no):
+    folder = get_pha_document_folder(pha_no)
+    return sorted(
+        [p for p in folder.iterdir() if p.is_file()],
+        key=lambda p: p.name.lower()
+    )
+
+
+def save_pha_document(pha_no, uploaded_file):
+    folder = get_pha_document_folder(pha_no)
+
+    # Delete the previous document for this PHA.
+    for old_file in folder.iterdir():
+        if old_file.is_file():
+            try:
+                old_file.unlink()
+            except OSError:
+                pass
+
+    # Save only the newly uploaded document.
+    original_name = Path(uploaded_file.name).name
+    stem = Path(original_name).stem
+    suffix = Path(original_name).suffix
+
+    safe_stem = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "_",
+        stem
+    ).strip("._-")
+
+    safe_stem = safe_stem or "document"
+
+    target = folder / f"{safe_stem}{suffix}"
+
+    target.write_bytes(
+        uploaded_file.getbuffer()
+    )
+
+    return target
+
+
+def get_document_mime_type(path):
+    mime_type, _ = mimetypes.guess_type(str(path))
+    return mime_type or "application/octet-stream"
+
 
 # =========================================================
 # REQUIRED COLUMNS
@@ -1506,8 +1578,20 @@ div.stButton > button {
 )
 
 # =========================================================
-# INDUSTRIAL REFERENCE HEADER
+# PREMIUM 3D INDUSTRIAL HEADER — REFERENCE MATCH
 # =========================================================
+
+LOGO_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "jsw_jfe_logo.jpg"
+)
+
+if not os.path.exists(LOGO_PATH):
+    st.error(f"Logo file not found: {LOGO_PATH}")
+    st.stop()
+
+with open(LOGO_PATH, "rb") as f:
+    logo_base64 = base64.b64encode(f.read()).decode("utf-8")
 
 header_html = """
 <!DOCTYPE html>
@@ -1528,64 +1612,107 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
 body {
-    background: #06111f;
+    background: #ffffff;
 }
 
 
 /* =====================================================
-   MAIN HEADER FRAME
+   MAIN OUTER HEADER
+   — FULL CORNER CURVE LIKE REFERENCE
    ===================================================== */
 
 .header {
-
     position: relative;
 
-    width: 100%;
-    height: 100px;
+    width: calc(100% - 8px);
+    height: 150px;
+
+    /* Move the complete header slightly downward */
+    margin: 8px 4px 0;
 
     overflow: hidden;
 
     background:
-
         radial-gradient(
             ellipse at center,
-            rgba(15,91,150,.32) 0%,
-            rgba(5,29,52,.96) 48%,
-            #020b16 100%
+            #0a3552 0%,
+            #062239 35%,
+            #031421 67%,
+            #010910 100%
         );
 
-    border-top:
-        1px solid #238ed8;
+    border: 1px solid #51c7f5;
 
-    border-bottom:
-        2px solid #0a83d0;
+    border-radius: 20px;
 
     box-shadow:
-
-        0 0 0 1px rgba(0,153,255,.18),
-
-        0 5px 18px
-        rgba(0,0,0,.42),
-
-        inset 0 1px 0
-        rgba(255,255,255,.08);
+        0 0 0 2px rgba(4,34,52,.92),
+        0 4px 14px rgba(0,0,0,.40),
+        inset 0 1px 0 rgba(255,255,255,.12),
+        inset 0 -1px 0 rgba(48,194,241,.75);
 }
 
 
 /* =====================================================
-   SUBTLE TECH GRID
+   SECONDARY INNER CURVED FRAME
+   ===================================================== */
+
+.header-frame {
+    position: absolute;
+
+    inset: 5px;
+
+    z-index: 40;
+
+    border: 1px solid rgba(69,190,237,.48);
+
+    border-radius: 15px;
+
+    pointer-events: none;
+
+    box-shadow:
+        inset 0 0 18px rgba(0,151,220,.13);
+}
+
+
+/* =====================================================
+   TOP REFLECTIVE GLOW
+   ===================================================== */
+
+.header-glow {
+    position: absolute;
+
+    z-index: 6;
+
+    left: 17%;
+    right: 17%;
+    top: 2px;
+
+    height: 28px;
+
+    background:
+        radial-gradient(
+            ellipse,
+            rgba(170,235,255,.20) 0%,
+            rgba(65,194,242,.10) 35%,
+            transparent 72%
+        );
+
+    filter: blur(3px);
+
+    pointer-events: none;
+}
+
+
+/* =====================================================
+   TECHNICAL GRID
    ===================================================== */
 
 .header::before {
-
     content: "";
 
     position: absolute;
@@ -1593,47 +1720,19 @@ body {
     inset: 0;
 
     background:
-
         linear-gradient(
-            rgba(0,126,220,.055) 1px,
+            rgba(38,184,242,.045) 1px,
             transparent 1px
         ),
-
         linear-gradient(
             90deg,
-            rgba(0,126,220,.055) 1px,
+            rgba(38,184,242,.045) 1px,
             transparent 1px
         );
 
-    background-size: 26px 26px;
+    background-size: 28px 28px;
 
-    opacity: .75;
-}
-
-
-/* =====================================================
-   BLUE SIDE LIGHT
-   ===================================================== */
-
-.header::after {
-
-    content: "";
-
-    position: absolute;
-
-    inset: 0;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            rgba(0,137,255,.20),
-            transparent 14%,
-            transparent 86%,
-            rgba(0,137,255,.20)
-        );
-
-    pointer-events: none;
+    opacity: .9;
 }
 
 
@@ -1642,7 +1741,6 @@ body {
    ===================================================== */
 
 .industrial {
-
     position: absolute;
 
     left: 0;
@@ -1650,1450 +1748,833 @@ body {
     bottom: 0;
 
     width: 100%;
-    height: 100px;
+    height: 145px;
 
-    z-index: 1;
-
-    opacity: .72;
-}
-
-.industrial .steel {
-
-    fill: #102b43;
-
-    stroke: #2675a8;
-
-    stroke-width: 1.3;
-}
-
-.industrial .highlight {
-
-    fill: none;
-
-    stroke: #49b8ff;
-
-    stroke-width: 1.15;
-
-    opacity: .65;
-}
-
-.industrial .warm {
-
-    fill: #e9a63a;
-
-    opacity: .82;
-}
-
-.industrial .glass {
-
-    fill: #0b5c91;
-
-    stroke: #4cbcff;
-
-    stroke-width: .7;
+    z-index: 2;
 
     opacity: .55;
 }
 
-.tech {
+.industrial .steel {
+    fill: #12364e;
+    stroke: #2999c4;
+    stroke-width: 1.1;
+}
 
+.industrial .highlight {
     fill: none;
-
-    stroke: #238bd0;
-
+    stroke: #39c5f5;
     stroke-width: 1;
+    opacity: .58;
+}
 
-    opacity: .25;
+.industrial .warm {
+    fill: #f2ad23;
+    opacity: .78;
+}
+
+.industrial .glass {
+    fill: #0a5e92;
+    stroke: #53d4ff;
+    stroke-width: .7;
+    opacity: .45;
+}
+
+.tech {
+    fill: none;
+    stroke: #2ca6d8;
+    stroke-width: .8;
+    opacity: .18;
 }
 
 
 /* =====================================================
-   SIDE FADE
+   LOGO PANEL
+   — WIDE RECTANGULAR, NOT SQUARE
    ===================================================== */
 
-.side-fade {
+.logo-panel {
+    position: absolute;
+
+    z-index: 30;
+
+    left: 2.6%;
+    top: 50%;
+
+    transform: translateY(-50%);
+
+    width: 17.0%;
+    max-width: 325px;
+    min-width: 235px;
+
+    height: 108px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 6px 10px;
+
+    background:
+        linear-gradient(
+            145deg,
+            #ffffff 0%,
+            #f9fbfd 42%,
+            #e4edf3 100%
+        );
+
+    border: 1px solid #a5bccb;
+
+    border-radius: 14px;
+
+    box-shadow:
+        0 7px 15px rgba(0,0,0,.40),
+        0 0 0 2px rgba(20,63,86,.82),
+        inset 0 2px 0 rgba(255,255,255,.98),
+        inset 0 -4px 7px rgba(75,105,124,.14);
+}
+
+.logo-panel::before {
+    content: "";
 
     position: absolute;
 
-    z-index: 3;
+    inset: -4px;
 
-    top: 0;
-    bottom: 0;
+    border-radius: 17px;
 
-    width: 24%;
+    border: 1px solid rgba(84,202,247,.68);
 
     pointer-events: none;
 }
 
-.side-fade.left {
+.logo-panel::after {
+    content: "";
 
-    left: 0;
+    position: absolute;
+
+    left: 12%;
+    right: 12%;
+    top: -3px;
+
+    height: 3px;
+
+    border-radius: 50%;
 
     background:
         linear-gradient(
             90deg,
-            rgba(1,8,18,.74),
+            transparent,
+            #8fe6ff,
             transparent
         );
+
+    box-shadow:
+        0 0 8px rgba(72,204,250,.82);
 }
 
-.side-fade.right {
+.header-logo {
+    display: block;
 
-    right: 0;
+    width: 100%;
+    height: 100%;
 
-    background:
-        linear-gradient(
-            270deg,
-            rgba(1,8,18,.74),
-            transparent
-        );
+    object-fit: contain;
+    object-position: center;
+
+    border-radius: 6px;
 }
 
 
 /* =====================================================
-   CENTRAL 3D TITLE PLATE
+   CENTRAL TITLE FRAME
+   — LARGE 3D BEVELED PANEL
    ===================================================== */
 
-.title-plate {
-
+.title-frame {
     position: absolute;
 
-    z-index: 10;
+    z-index: 22;
 
     left: 50%;
     top: 50%;
 
-    transform:
-        translate(-50%, -50%);
+    /* Exact horizontal + vertical centering */
+    transform: translate(-50%, -50%);
 
-    width:
-        min(92%, 950px);
+    width: 53%;
+    max-width: 995px;
+    min-width: 600px;
 
-    height:
-        72px;
+    height: 112px;
 
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    background:
-
-        linear-gradient(
-            180deg,
-            #124e80 0%,
-            #07345f 45%,
-            #031e3d 100%
-        );
-
-    border:
-        2px solid #78cfff;
-
-    border-radius:
-        15px;
-
-    box-shadow:
-
-        0 0 0 3px rgba(6,36,65,.92),
-
-        0 0 0 5px rgba(105,183,229,.55),
-
-        0 8px 20px
-        rgba(0,0,0,.52),
-
-        0 0 22px
-        rgba(0,139,255,.42),
-
-        inset 0 2px 0
-        rgba(255,255,255,.28),
-
-        inset 0 -8px 15px
-        rgba(0,0,0,.24);
-}
-
-
-/* =====================================================
-   METALLIC BEVEL
-   ===================================================== */
-
-.title-plate::before {
-
-    content: "";
-
-    position: absolute;
-
-    inset: -10px;
-
-    z-index: -1;
-
-    border-radius:
-        20px;
-
-    border:
-        5px solid transparent;
-
-    background:
-
-        linear-gradient(
-            145deg,
-            #f5fbff 0%,
-            #7d9bad 16%,
-            #e7f0f5 28%,
-            #536d7e 48%,
-            #d8e7ef 68%,
-            #668092 82%,
-            #f5fbff 100%
-        ) border-box;
-
-    -webkit-mask:
-        linear-gradient(#fff 0 0) padding-box,
-        linear-gradient(#fff 0 0);
-
-    -webkit-mask-composite:
-        xor;
-
-    mask-composite:
-        exclude;
-
-    box-shadow:
-        0 0 10px rgba(112,199,255,.35);
-}
-
-
-/* =====================================================
-   BLUE INNER LIGHT
-   ===================================================== */
-
-.title-plate::after {
-
-    content: "";
-
-    position: absolute;
-
-    left: 13px;
-    right: 13px;
-    top: 6px;
-
-    height: 2px;
-
-    border-radius: 10px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #50c8ff 18%,
-            #d8f5ff 50%,
-            #50c8ff 82%,
-            transparent
-        );
-
-    box-shadow:
-        0 0 8px
-        rgba(55,190,255,.72);
-}
-
-
-/* =====================================================
-   TITLE
-   ===================================================== */
-
-.title-text {
-
-    position: relative;
-
-    z-index: 12;
-
-    color:
-        #ffc400;
-
-    font-size:
-        clamp(30px, 3.2vw, 54px);
-
-    font-weight:
-        950;
-
-    letter-spacing:
-        1px;
-
-    line-height:
-        1;
-
-    text-align:
-        center;
-
-    text-shadow:
-
-        0 2px 0 #8c5f00,
-
-        0 3px 5px
-        rgba(0,0,0,.65),
-
-        0 0 12px
-        rgba(255,194,0,.22);
-}
-
-
-/* =====================================================
-   NAVIGATION ARROWS
-   ===================================================== */
-
-.nav-arrow {
-
-    position:
-        absolute;
-
-    z-index:
-        13;
-
-    top:
-        50%;
-
-    transform:
-        translateY(-50%);
-
-    color:
-        #54c9ff;
-
-    font-size:
-        32px;
-
-    line-height:
-        1;
-
-    font-weight:
-        950;
-
-    text-shadow:
-
-        0 0 7px
-        rgba(40,187,255,.9),
-
-        0 2px 2px
-        rgba(0,0,0,.65);
-}
-
-.nav-left {
-    left: 28px;
-}
-
-.nav-right {
-    right: 28px;
-}
-
-
-/* =====================================================
-   CORNER ARMOUR
-   ===================================================== */
-
-.corner {
-
-    position:
-        absolute;
-
-    z-index:
-        9;
-
-    width:
-        180px;
-
-    height:
-        35px;
-
-    border:
-        2px solid #168bd4;
+    padding: 3px;
 
     background:
         linear-gradient(
             135deg,
-            rgba(11,82,135,.85),
-            rgba(4,27,49,.2)
+            #f0fbff 0%,
+            #7d9cac 8%,
+            #dcecf4 16%,
+            #254c63 29%,
+            #092337 48%,
+            #597f91 70%,
+            #eaf8ff 86%,
+            #617e8d 100%
         );
 
+    border-radius: 17px;
+
     box-shadow:
-        0 0 12px
-        rgba(0,133,255,.24),
-
-        inset 0 1px 0
-        rgba(255,255,255,.16);
-}
-
-.corner.left {
-
-    left:
-        -35px;
-
-    top:
-        4px;
-
-    transform:
-        skewX(-38deg);
-}
-
-.corner.right {
-
-    right:
-        -35px;
-
-    top:
-        4px;
-
-    transform:
-        skewX(38deg);
+        0 8px 20px rgba(0,0,0,.58),
+        0 0 22px rgba(0,160,245,.34);
 }
 
 
-/* =====================================================
-   TOP METAL RAIL
-   ===================================================== */
+/* INNER TITLE SURFACE */
 
-.top-rail {
+.title-inner {
+    position: relative;
 
-    position:
-        absolute;
+    width: 100%;
+    height: 100%;
 
-    z-index:
-        11;
+    display: flex;
+    flex-direction: column;
 
-    left:
-        31%;
-
-    right:
-        31%;
-
-    top:
-        3px;
-
-    height:
-        5px;
-
-    border-radius:
-        10px;
+    align-items: center;
+    justify-content: center;
 
     background:
+        radial-gradient(
+            ellipse at 50% 25%,
+            #174c6c 0%,
+            #0b304b 38%,
+            #041b2c 100%
+        );
 
+    border: 1px solid #67d4ff;
+
+    border-radius: 13px;
+
+    overflow: hidden;
+
+    box-shadow:
+        inset 0 3px 0 rgba(255,255,255,.22),
+        inset 0 -10px 18px rgba(0,0,0,.30),
+        0 0 15px rgba(28,183,242,.25);
+}
+
+
+/* TOP BLUE REFLECTION */
+
+.title-inner::before {
+    content: "";
+
+    position: absolute;
+
+    z-index: 1;
+
+    left: 12%;
+    right: 12%;
+    top: 5px;
+
+    height: 4px;
+
+    border-radius: 50%;
+
+    background:
         linear-gradient(
             90deg,
             transparent,
-            #7594a7 10%,
-            #eef8ff 35%,
-            #4c728b 50%,
-            #eef8ff 65%,
-            #7594a7 90%,
+            rgba(192,242,255,.95),
+            rgba(73,202,248,1),
+            rgba(192,242,255,.95),
             transparent
         );
 
     box-shadow:
-        0 0 9px
-        rgba(52,164,230,.55);
+        0 0 10px rgba(72,210,255,.90);
+}
+
+
+/* CENTRAL HIGHLIGHT */
+
+.title-inner::after {
+    content: "";
+
+    position: absolute;
+
+    z-index: 1;
+
+    left: 38%;
+    right: 38%;
+    top: 0;
+
+    height: 8px;
+
+    background:
+        radial-gradient(
+            ellipse,
+            rgba(128,228,255,.9),
+            transparent 70%
+        );
+
+    filter: blur(2px);
 }
 
 
 /* =====================================================
-   BOTTOM BLUE ENERGY LINE
+   3D TITLE TEXT
    ===================================================== */
 
-.energy-line {
+.title-text {
+    position: relative;
 
-    position:
-        absolute;
+    z-index: 5;
 
-    z-index:
-        15;
+    display: flex;
+    flex-direction: row;
 
-    left:
-        0;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 
-    bottom:
-        0;
+    width: 100%;
+    height: 100%;
 
-    width:
-        100%;
+    line-height: .88;
+    white-space: nowrap;
+    text-align: center;
 
-    height:
-        3px;
+    font-weight: 950;
+    letter-spacing: 1px;
+}
+
+
+/* PROCESS */
+
+.title-process {
+    font-size: clamp(25px, 2.55vw, 43px);
+
+    color: #ffffff;
 
     background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #ffffff 40%,
+            #f2fbff 65%,
+            #d4f1ff 100%
+        );
 
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+}
+
+
+/* TECHNOLOGY */
+
+.title-technology {
+    margin-top: 4px;
+
+    font-size: clamp(27px, 2.85vw, 48px);
+
+    color: #35c6ff;
+
+    color: #ffffff;
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #ffffff 40%,
+            #f2fbff 65%,
+            #d4f1ff 100%
+        );
+
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+}
+
+
+/* PT GOLD */
+
+.title-pt {
+    color: #ffc31b;
+
+    background:
+        linear-gradient(
+            180deg,
+            #fff39a 0%,
+            #ffc51c 38%,
+            #f09b00 70%,
+            #c66b00 100%
+        );
+
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+}
+
+
+/* =====================================================
+   TITLE BOTTOM ACCENT
+   ===================================================== */
+
+.title-line {
+    position: absolute;
+
+    z-index: 6;
+
+    left: 21%;
+    right: 21%;
+    bottom: 9px;
+
+    height: 2px;
+
+    background:
         linear-gradient(
             90deg,
-            #07548d 0%,
-            #0ca6ff 25%,
-            #ffffff 50%,
-            #0ca6ff 75%,
-            #07548d 100%
+            transparent,
+            #22baf3 18%,
+            #d3f7ff 50%,
+            #22baf3 82%,
+            transparent
         );
 
     box-shadow:
-
-        0 0 7px
-        #008dff,
-
-        0 0 18px
-        rgba(0,141,255,.75);
+        0 0 8px rgba(44,195,250,.85);
 }
 
 
 /* =====================================================
-   FINAL KPI STYLE MATCH
-   TOP 3 KPI + BOTTOM 6 KPI = SAME APPEARANCE
+   TITLE SIDE WINGS
    ===================================================== */
 
-/* Same card background, border, height, radius and shadow */
-.kpi-card,
-.pha-rec-kpi {
-    position: relative !important;
+.title-wing {
+    position: absolute;
 
-    height: 105px !important;
+    z-index: 19;
 
-    overflow: hidden !important;
+    top: 50%;
+
+    width: 43px;
+    height: 44px;
+
+    transform: translateY(-50%);
+
+    background:
+        linear-gradient(
+            135deg,
+            #1a4862,
+            #061d30
+        );
+
+    border-top: 1px solid #65d5ff;
+    border-bottom: 1px solid #176b91;
+
+    box-shadow:
+        0 5px 10px rgba(0,0,0,.44);
+}
+
+.title-wing.left {
+    left: 23.0%;
+
+    clip-path:
+        polygon(
+            25% 0,
+            100% 0,
+            100% 100%,
+            25% 100%,
+            0 50%
+        );
+}
+
+.title-wing.right {
+    right: 23.0%;
+
+    clip-path:
+        polygon(
+            0 0,
+            75% 0,
+            100% 50%,
+            75% 100%,
+            0 100%
+        );
+}
+
+
+/* =====================================================
+   TAGLINE
+   ===================================================== */
+
+.tagline {
+    position: absolute;
+
+    z-index: 27;
+
+    left: 50%;
+    bottom: 6px;
+
+    transform: translateX(-50%);
+
+    color: #a9ddec;
+
+    font-size: 8px;
+
+    font-weight: 900;
+
+    letter-spacing: 2px;
+
+    white-space: nowrap;
+}
+
+
+/* =====================================================
+   RIGHT DATE/TIME PANEL
+   — SAME WIDE RECTANGULAR PROPORTION AS LOGO
+   ===================================================== */
+
+.status-panel {
+    position: absolute;
+
+    z-index: 30;
+
+    right: 2.6%;
+    top: 50%;
+
+    transform: translateY(-50%);
+
+    width: 17.0%;
+    max-width: 325px;
+    min-width: 235px;
+
+    height: 108px;
+
+    padding: 8px 13px;
 
     background:
         linear-gradient(
             145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        ) !important;
+            #123c55 0%,
+            #08263b 45%,
+            #031522 100%
+        );
 
-    border:
-        1.5px solid #c2d3e4 !important;
+    border: 1px solid #55c7ee;
 
-    border-top:
-        4px solid #176fc1 !important;
-
-    border-radius:
-        8px !important;
-
-    padding:
-        17px 16px !important;
+    border-radius: 14px;
 
     box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98) !important;
+        0 7px 15px rgba(0,0,0,.48),
+        0 0 0 2px rgba(12,50,70,.92),
+        inset 0 2px 0 rgba(255,255,255,.13),
+        inset 0 -6px 12px rgba(0,0,0,.30);
 }
 
+.status-panel::before {
+    content: "";
 
-/* Remove different green/orange/red top borders */
-.kpi-card.completed,
-.kpi-card.ongoing,
-.pha-rec-kpi.total,
-.pha-rec-kpi.approved,
-.pha-rec-kpi.rejected,
-.pha-rec-kpi.overdue,
-.pha-rec-kpi.completed,
-.pha-rec-kpi.pending {
-    border-top:
-        4px solid #176fc1 !important;
+    position: absolute;
+
+    inset: -4px;
+
+    border-radius: 17px;
+
+    border: 1px solid rgba(83,202,246,.62);
+
+    pointer-events: none;
 }
 
+.status-panel::after {
+    content: "";
 
-/* Same centered content structure */
-.kpi-content,
-.pha-rec-kpi-content {
-    margin-left:
-        0 !important;
+    position: absolute;
 
-    width:
-        100% !important;
+    left: 12%;
+    right: 12%;
+    top: -3px;
 
-    height:
-        100% !important;
+    height: 3px;
 
-    display:
-        flex !important;
-
-    flex-direction:
-        column !important;
-
-    align-items:
-        center !important;
-
-    justify-content:
-        center !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* Same heading font */
-.kpi-label,
-.pha-rec-kpi-label {
-    color:
-        #092d5c !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        15px !important;
-
-    font-weight:
-        900 !important;
-
-    letter-spacing:
-        .15px !important;
-
-    line-height:
-        1.15 !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* Same number font */
-.kpi-value,
-.pha-rec-kpi-value {
-    color:
-        #0a4e91 !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        42px !important;
-
-    line-height:
-        1 !important;
-
-    font-weight:
-        900 !important;
-
-    margin-top:
-        6px !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* Same description font */
-.kpi-description,
-.pha-rec-kpi-description {
-    color:
-        #304d6d !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        700 !important;
-
-    margin-top:
-        7px !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* Remove status-specific text colors */
-.kpi-card.completed .kpi-label,
-.kpi-card.ongoing .kpi-label,
-.kpi-value.green,
-.kpi-value.orange,
-.pha-rec-kpi.approved .pha-rec-kpi-label,
-.pha-rec-kpi.completed .pha-rec-kpi-label,
-.pha-rec-kpi.rejected .pha-rec-kpi-label,
-.pha-rec-kpi.overdue .pha-rec-kpi-label,
-.pha-rec-kpi.pending .pha-rec-kpi-label {
-    color:
-        #092d5c !important;
-}
-
-
-/* All KPI numbers use the same blue */
-.kpi-card.completed .kpi-value,
-.kpi-card.ongoing .kpi-value,
-.pha-rec-kpi.approved .pha-rec-kpi-value,
-.pha-rec-kpi.completed .pha-rec-kpi-value,
-.pha-rec-kpi.rejected .pha-rec-kpi-value,
-.pha-rec-kpi.overdue .pha-rec-kpi-value,
-.pha-rec-kpi.pending .pha-rec-kpi-value {
-    color:
-        #0a4e91 !important;
-}
-
-
-/* Same hover appearance */
-.kpi-card:hover,
-.pha-rec-kpi:hover {
-    transform:
-        translateY(-2px) !important;
-
-    box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1) !important;
-}
-
-
-/* No icons/patterns/arrows in either KPI group */
-.kpi-icon,
-.kpi-pattern,
-.kpi-arrow,
-.pha-rec-kpi-icon,
-.pha-rec-kpi-pattern,
-.pha-rec-kpi-arrow {
-    display:
-        none !important;
-}
-
-
-/* =====================================================
-   FINAL KPI UNIFICATION
-   ALL 9 CARDS USE THE SAME COMPONENT
-   ===================================================== */
-
-.kpi-card {
-    height: 105px !important;
-    position: relative !important;
-    overflow: hidden !important;
+    border-radius: 50%;
 
     background:
         linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        ) !important;
-
-    border:
-        1.5px solid #c2d3e4 !important;
-
-    border-top:
-        4px solid #176fc1 !important;
-
-    border-radius:
-        8px !important;
-
-    padding:
-        17px 16px !important;
+            90deg,
+            transparent,
+            #8fe8ff,
+            transparent
+        );
 
     box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98) !important;
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease !important;
+        0 0 8px rgba(71,204,250,.82);
 }
 
-.kpi-card:hover {
-    transform:
-        translateY(-2px) !important;
+
+/* ONLINE */
+
+.status-top {
+    height: 20px;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    color: #a9ddec;
+
+    font-size: 8px;
+
+    font-weight: 900;
+
+    letter-spacing: 1.2px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+
+    border-radius: 50%;
+
+    background: #2de57f;
 
     box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1) !important;
-}
-
-.kpi-card .kpi-content {
-    margin-left:
-        0 !important;
-
-    width:
-        100% !important;
-
-    height:
-        100% !important;
-
-    display:
-        flex !important;
-
-    flex-direction:
-        column !important;
-
-    align-items:
-        center !important;
-
-    justify-content:
-        center !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-label {
-    color:
-        #092d5c !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        15px !important;
-
-    font-weight:
-        900 !important;
-
-    letter-spacing:
-        .15px !important;
-
-    line-height:
-        1.15 !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-value {
-    color:
-        #0a4e91 !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        42px !important;
-
-    line-height:
-        1 !important;
-
-    font-weight:
-        900 !important;
-
-    margin-top:
-        6px !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-description {
-    color:
-        #0a4e91 !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        700 !important;
-
-    margin-top:
-        7px !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-icon,
-.kpi-card .kpi-pattern,
-.kpi-card .kpi-arrow {
-    display:
-        none !important;
+        0 0 8px rgba(45,229,127,.95);
 }
 
 
-/* =====================================================
-   FINAL: ALL KPI ROWS SAME COLORS AS TOP ROW
-   ===================================================== */
+/* DIVIDER */
 
-.kpi-card .kpi-label,
-.kpi-card.completed .kpi-label,
-.kpi-card.ongoing .kpi-label {
-    color: #092d5c !important;
-}
+.status-divider {
+    height: 1px;
 
-.kpi-card .kpi-value,
-.kpi-card .kpi-value.green,
-.kpi-card .kpi-value.orange {
-    color: #0a4e91 !important;
-}
-
-.kpi-card .kpi-description {
-    color: #0a4e91 !important;
-}
-
-
-/* =====================================================
-   FINAL STATUS COLOR SYSTEM
-   SAME STATUS = SAME COLOR IN EVERY KPI ROW/COLUMN
-   ===================================================== */
-
-/* -----------------------------
-   BLUE — TOTAL
-   ----------------------------- */
-
-.kpi-card.total .kpi-label,
-.kpi-card.total .kpi-value,
-.kpi-card.total .kpi-description {
-    color: #0a4e91 !important;
-}
-
-.kpi-card.total {
-    border-top-color: #176fc1 !important;
-}
-
-
-/* -----------------------------
-   GREEN — COMPLETED + APPROVED
-   ----------------------------- */
-
-.kpi-card.completed .kpi-label,
-.kpi-card.completed .kpi-value,
-.kpi-card.completed .kpi-description,
-.pha-rec-kpi.completed .pha-rec-kpi-label,
-.pha-rec-kpi.completed .pha-rec-kpi-value,
-.pha-rec-kpi.completed .pha-rec-kpi-description,
-.pha-rec-kpi.approved .pha-rec-kpi-label,
-.pha-rec-kpi.approved .pha-rec-kpi-value,
-.pha-rec-kpi.approved .pha-rec-kpi-description {
-    color: #159447 !important;
-}
-
-.kpi-card.completed,
-.pha-rec-kpi.completed,
-.pha-rec-kpi.approved {
-    border-top-color: #19a657 !important;
-}
-
-
-/* -----------------------------
-   RED — REJECTED + OVERDUE
-   ----------------------------- */
-
-.pha-rec-kpi.rejected .pha-rec-kpi-label,
-.pha-rec-kpi.rejected .pha-rec-kpi-value,
-.pha-rec-kpi.rejected .pha-rec-kpi-description,
-.pha-rec-kpi.overdue .pha-rec-kpi-label,
-.pha-rec-kpi.overdue .pha-rec-kpi-value,
-.pha-rec-kpi.overdue .pha-rec-kpi-description {
-    color: #d9534f !important;
-}
-
-.pha-rec-kpi.rejected,
-.pha-rec-kpi.overdue {
-    border-top-color: #d9534f !important;
-}
-
-
-/* -----------------------------
-   ORANGE — ONGOING + PENDING
-   ----------------------------- */
-
-.kpi-card.ongoing .kpi-label,
-.kpi-card.ongoing .kpi-value,
-.kpi-card.ongoing .kpi-description,
-.pha-rec-kpi.pending .pha-rec-kpi-label,
-.pha-rec-kpi.pending .pha-rec-kpi-value,
-.pha-rec-kpi.pending .pha-rec-kpi-description {
-    color: #f0a000 !important;
-}
-
-.kpi-card.ongoing,
-.pha-rec-kpi.pending {
-    border-top-color: #f18d05 !important;
-}
-
-
-/* -----------------------------
-   IMPORTANT:
-   TOTAL RECOMMENDATION = BLUE
-   ----------------------------- */
-
-.pha-rec-kpi.total .pha-rec-kpi-label,
-.pha-rec-kpi.total .pha-rec-kpi-value,
-.pha-rec-kpi.total .pha-rec-kpi-description {
-    color: #0a4e91 !important;
-}
-
-.pha-rec-kpi.total {
-    border-top-color: #176fc1 !important;
-}
-
-
-/* =====================================================
-   FINAL FIX — COLUMN COLORS MATCH TOP ROW
-   ===================================================== */
-
-/* ALL 9 CARDS: identical physical appearance */
-.kpi-card {
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        ) !important;
-
-    border:
-        1.5px solid #c2d3e4 !important;
-
-    border-radius:
-        8px !important;
-
-    height:
-        105px !important;
-
-    padding:
-        17px 16px !important;
-
-    box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98) !important;
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease !important;
-}
-
-
-/* =====================================================
-   COLUMN 1 — BLUE
-   TOP: TOTAL PHA
-   LOWER: TOTAL RECOMMENDATION + OVERDUE
-   ===================================================== */
-
-.kpi-card.total {
-    border-top:
-        4px solid #176fc1 !important;
-}
-
-.kpi-card.total .kpi-label,
-.kpi-card.total .kpi-value,
-.kpi-card.total .kpi-description {
-    color:
-        #0a4e91 !important;
-}
-
-
-/* =====================================================
-   COLUMN 2 — GREEN
-   TOP: COMPLETED
-   LOWER: APPROVED + COMPLETED
-   ===================================================== */
-
-.kpi-card.completed,
-.kpi-card.approved {
-    border-top:
-        4px solid #19a657 !important;
-}
-
-.kpi-card.completed .kpi-label,
-.kpi-card.completed .kpi-value,
-.kpi-card.completed .kpi-description,
-.kpi-card.approved .kpi-label,
-.kpi-card.approved .kpi-value,
-.kpi-card.approved .kpi-description {
-    color:
-        #159447 !important;
-}
-
-
-/* =====================================================
-   COLUMN 3 — ORANGE
-   TOP: ONGOING
-   LOWER: REJECTED + PENDING
-   ===================================================== */
-
-.kpi-card.ongoing,
-.kpi-card.rejected,
-.kpi-card.pending {
-    border-top:
-        4px solid #f18d05 !important;
-}
-
-.kpi-card.ongoing .kpi-label,
-.kpi-card.ongoing .kpi-value,
-.kpi-card.ongoing .kpi-description,
-.kpi-card.rejected .kpi-label,
-.kpi-card.rejected .kpi-value,
-.kpi-card.rejected .kpi-description,
-.kpi-card.pending .kpi-label,
-.kpi-card.pending .kpi-value,
-.kpi-card.pending .kpi-description {
-    color:
-        #f0a000 !important;
-}
-
-
-/* =====================================================
-   SAME HOVER / MOVEMENT FOR ALL 9
-   ===================================================== */
-
-.kpi-card:hover {
-    transform:
-        translateY(-2px) !important;
-
-    box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1) !important;
-}
-
-
-/* =====================================================
-   SAME CONTENT ALIGNMENT FOR ALL 9
-   ===================================================== */
-
-.kpi-card .kpi-content {
-    margin-left:
-        0 !important;
-
-    width:
-        100% !important;
-
-    height:
-        100% !important;
-
-    display:
-        flex !important;
-
-    flex-direction:
-        column !important;
-
-    align-items:
-        center !important;
-
-    justify-content:
-        center !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* =====================================================
-   SAME TYPOGRAPHY
-   ===================================================== */
-
-.kpi-card .kpi-label {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        15px !important;
-
-    font-weight:
-        900 !important;
-
-    letter-spacing:
-        .15px !important;
-
-    line-height:
-        1.15 !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-value {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        42px !important;
-
-    line-height:
-        1 !important;
-
-    font-weight:
-        900 !important;
-
-    margin-top:
-        6px !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-card .kpi-description {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        700 !important;
-
-    margin-top:
-        7px !important;
-
-    text-align:
-        center !important;
-}
-
-
-/* No icon/pattern/arrow — exactly like the current top cards */
-.kpi-card .kpi-icon,
-.kpi-card .kpi-pattern,
-.kpi-card .kpi-arrow {
-    display:
-        none !important;
-}
-
-
-/* =====================================================
-   FINAL DASHBOARD KPI STYLE
-   TOP ROW IS THE COLOR REFERENCE
-   COLUMN 1 = BLUE | COLUMN 2 = GREEN | COLUMN 3 = ORANGE
-   ===================================================== */
-
-/* ---------- COMMON CARD LOOK ---------- */
-
-.kpi-card {
-    position: relative !important;
-    height: 105px !important;
-    overflow: hidden !important;
+    margin: 3px 8px 4px;
 
     background:
         linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        ) !important;
+            90deg,
+            transparent,
+            #3cc2ed,
+            transparent
+        );
+}
 
-    border:
-        1.5px solid #c2d3e4 !important;
 
-    border-radius:
-        8px !important;
+/* DATE/TIME ROW */
 
-    padding:
-        17px 16px !important;
+.status-row {
+    height: 29px;
+
+    display: flex;
+
+    align-items: center;
+    justify-content: flex-start;
+
+    gap: 9px;
+
+    padding-left: 16px;
+
+    color: #ffffff;
+
+    font-size: 15px;
+
+    font-weight: 900;
+
+    letter-spacing: .45px;
+
+    font-variant-numeric: tabular-nums;
+}
+
+.status-row.time {
+    color: #c4f2ff;
+}
+
+#current-date,
+#current-time {
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+}
+
+.status-icon {
+    width: 18px;
+
+    color: #20c3f7;
+
+    font-size: 15px;
+
+    text-align: center;
+}
+
+.status-label {
+    width: 39px;
+
+    color: #b9dfed;
+
+    font-size: 12px;
+
+    font-weight: 800;
+
+    letter-spacing: .25px;
+
+    text-align: left;
+}
+
+
+/* =====================================================
+   BOTTOM METALLIC RAIL
+   ===================================================== */
+
+.bottom-rail {
+    position: absolute;
+
+    z-index: 35;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    height: 7px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #063d64 0%,
+            #1399d0 20%,
+            #91e8ff 50%,
+            #1399d0 80%,
+            #063d64 100%
+        );
 
     box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98) !important;
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease !important;
+        0 0 9px rgba(35,194,249,.90);
 }
 
+.bottom-rail::before,
+.bottom-rail::after {
+    content: "";
 
-/* ---------- SAME HOVER FOR ALL BOXES ---------- */
+    position: absolute;
 
-.kpi-card:hover {
-    transform:
-        translateY(-2px) !important;
+    top: 1px;
 
-    box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1) !important;
+    width: 82px;
+    height: 5px;
+
+    background:
+        repeating-linear-gradient(
+            135deg,
+            transparent 0 8px,
+            rgba(255,255,255,.80) 8px 11px,
+            transparent 11px 18px
+        );
 }
 
-
-/* ---------- SAME CONTENT POSITION ---------- */
-
-.kpi-content {
-    margin-left:
-        0 !important;
-
-    width:
-        100% !important;
-
-    height:
-        100% !important;
-
-    display:
-        flex !important;
-
-    flex-direction:
-        column !important;
-
-    align-items:
-        center !important;
-
-    justify-content:
-        center !important;
-
-    text-align:
-        center !important;
+.bottom-rail::before {
+    left: 18%;
 }
 
-
-/* ---------- SAME FONT ---------- */
-
-.kpi-label {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        15px !important;
-
-    font-weight:
-        900 !important;
-
-    letter-spacing:
-        .15px !important;
-
-    line-height:
-        1.15 !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-value {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        42px !important;
-
-    line-height:
-        1 !important;
-
-    font-weight:
-        900 !important;
-
-    margin-top:
-        6px !important;
-
-    text-align:
-        center !important;
-}
-
-.kpi-description {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        700 !important;
-
-    margin-top:
-        7px !important;
-
-    text-align:
-        center !important;
+.bottom-rail::after {
+    right: 18%;
 }
 
 
 /* =====================================================
-   COLUMN 1 — BLUE
-   TOTAL PHA
-   TOTAL RECOMMENDATION
-   OVERDUE
+   RESPONSIVE
    ===================================================== */
 
-.kpi-card.total,
-.kpi-card.overdue {
-    border-top:
-        4px solid #176fc1 !important;
+@media (max-width: 1200px) {
+
+    .logo-panel,
+    .status-panel {
+        width: 18%;
+        min-width: 205px;
+        height: 94px;
+    }
+
+    .title-frame {
+        width: 49%;
+        min-width: 500px;
+        height: 100px;
+    }
+
+    .title-wing {
+        display: none;
+    }
+
+    .tagline {
+        font-size: 7px;
+    }
 }
 
-.kpi-card.total .kpi-label,
-.kpi-card.total .kpi-value,
-.kpi-card.total .kpi-description,
-.kpi-card.overdue .kpi-label,
-.kpi-card.overdue .kpi-value,
-.kpi-card.overdue .kpi-description {
-    color:
-        #0a4e91 !important;
-}
+@media (max-width: 900px) {
 
+    .header {
+        height: 125px;
+        border-radius: 16px;
+    }
 
-/* =====================================================
-   COLUMN 2 — GREEN
-   COMPLETED
-   APPROVED
-   COMPLETED
-   ===================================================== */
+    .industrial {
+        height: 120px;
+    }
 
-.kpi-card.completed,
-.kpi-card.approved {
-    border-top:
-        4px solid #19a657 !important;
-}
+    .logo-panel {
+        left: 1.5%;
+        width: 19%;
+        min-width: 150px;
+        height: 78px;
+        border-radius: 11px;
+    }
 
-.kpi-card.completed .kpi-label,
-.kpi-card.completed .kpi-value,
-.kpi-card.completed .kpi-description,
-.kpi-card.approved .kpi-label,
-.kpi-card.approved .kpi-value,
-.kpi-card.approved .kpi-description {
-    color:
-        #159447 !important;
-}
+    .title-frame {
+        width: 47%;
+        min-width: 280px;
+        height: 84px;
+        border-radius: 12px;
+    }
 
+    .title-inner {
+        border-radius: 9px;
+    }
 
-/* =====================================================
-   COLUMN 3 — ORANGE
-   ONGOING
-   REJECTED
-   PENDING
-   ===================================================== */
+    .title-process {
+        font-size: 21px;
+    }
 
-.kpi-card.ongoing,
-.kpi-card.rejected,
-.kpi-card.pending {
-    border-top:
-        4px solid #f18d05 !important;
-}
+    .title-technology {
+        font-size: 23px;
+    }
 
-.kpi-card.ongoing .kpi-label,
-.kpi-card.ongoing .kpi-value,
-.kpi-card.ongoing .kpi-description,
-.kpi-card.rejected .kpi-label,
-.kpi-card.rejected .kpi-value,
-.kpi-card.rejected .kpi-description,
-.kpi-card.pending .kpi-label,
-.kpi-card.pending .kpi-value,
-.kpi-card.pending .kpi-description {
-    color:
-        #f0a000 !important;
-}
+    .status-panel {
+        right: 1.5%;
+        width: 19%;
+        min-width: 150px;
+        height: 78px;
+        border-radius: 11px;
+        padding: 5px 7px;
+    }
 
+    .status-row {
+        font-size: 10px;
+        height: 22px;
+    }
 
-/* =====================================================
-   REMOVE OLD STATUS COLORS / ICONS
-   ===================================================== */
+    .status-top {
+        font-size: 6px;
+        height: 15px;
+    }
 
-.kpi-card .kpi-icon,
-.kpi-card .kpi-pattern,
-.kpi-card .kpi-arrow {
-    display:
-        none !important;
+    .tagline {
+        display: none;
+    }
 }
 
 </style>
@@ -3103,11 +2584,14 @@ body {
 
 <div class="header">
 
-    <div class="corner left"></div>
-    <div class="corner right"></div>
+    <!-- INNER CURVED FRAME -->
+    <div class="header-frame"></div>
 
-    <div class="top-rail"></div>
+    <!-- TOP GLOSS -->
+    <div class="header-glow"></div>
 
+
+    <!-- INDUSTRIAL BACKGROUND -->
 
     <svg
         class="industrial"
@@ -3115,7 +2599,7 @@ body {
         preserveAspectRatio="none"
         aria-hidden="true">
 
-        <!-- LEFT INDUSTRIAL PLANT -->
+        <!-- LEFT PLANT -->
 
         <g>
 
@@ -3205,7 +2689,7 @@ body {
         </g>
 
 
-        <!-- RIGHT INDUSTRIAL PLANT -->
+        <!-- RIGHT PLANT -->
 
         <g>
 
@@ -3340,42 +2824,226 @@ body {
     </svg>
 
 
-    <div class="side-fade left"></div>
-    <div class="side-fade right"></div>
+    <!-- LOGO -->
+
+    <div class="logo-panel">
+
+        <img
+            class="header-logo"
+            src="data:image/jpeg;base64,LOGO_BASE64"
+            alt="JSW JFE Steel Limited"
+        >
+
+    </div>
+
+
+    <!-- TITLE SIDE WINGS -->
+
+    <div class="title-wing left"></div>
+    <div class="title-wing right"></div>
 
 
     <!-- CENTRAL 3D TITLE -->
 
-    <div class="title-plate">
+    <div class="title-frame">
 
-        <div class="nav-arrow nav-left">
-            ◀◀
-        </div>
+        <div class="title-inner">
 
-        <div class="title-text">
-            Process Hazard Analysis (PHA)
-        </div>
+            <div class="title-text">
 
-        <div class="nav-arrow nav-right">
-            ▶▶
+                <div class="title-process">
+                    PROCESS
+                </div>
+
+                <div class="title-technology">
+                    HAZARD
+                </div>
+
+                <div class="title-technology">
+                    ANALYSIS
+                </div>
+
+                    <span class="title-pt">(PHA)</span>
+                </div>
+
+            </div>
+
+            <div class="title-line"></div>
+
         </div>
 
     </div>
 
 
-    <div class="energy-line"></div>
+    <!-- TAGLINE -->
+
+    <div class="tagline">
+        PROCESS SAFETY MANAGEMENT • DIGITAL OPERATIONS
+    </div>
+
+
+    <!-- RIGHT DATE / TIME PANEL -->
+
+    <div class="status-panel">
+
+        <div class="status-top">
+
+            <span class="status-dot"></span>
+
+            <span>SYSTEM ONLINE</span>
+
+        </div>
+
+        <div class="status-divider"></div>
+
+        <div class="status-row">
+
+            <span class="status-icon">▣</span>
+
+            <span class="status-label">Date:</span>
+
+            <span id="current-date">
+                03.09.2026
+            </span>
+
+        </div>
+
+        <div class="status-row time">
+
+            <span class="status-icon">◷</span>
+
+            <span class="status-label">Time:</span>
+
+            <span id="current-time">
+                00.00.00
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <!-- BOTTOM RAIL -->
+
+    <div class="bottom-rail"></div>
 
 </div>
+
+
+<script>
+
+function updateDateTime() {
+
+    const now = new Date();
+
+
+    /* =================================================
+       DATE — DD.MM.YYYY
+       ================================================= */
+
+    const dateParts = new Intl.DateTimeFormat(
+        "en-GB",
+        {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            timeZone: "Asia/Kolkata"
+        }
+    ).formatToParts(now);
+
+    let day = "";
+    let month = "";
+    let year = "";
+
+    dateParts.forEach(function(part) {
+
+        if (part.type === "day") {
+            day = part.value;
+        }
+
+        if (part.type === "month") {
+            month = part.value;
+        }
+
+        if (part.type === "year") {
+            year = part.value;
+        }
+
+    });
+
+    document.getElementById("current-date").textContent =
+        day + "." + month + "." + year;
+
+
+    /* =================================================
+       TIME — HH.MM.SS AM/PM
+       ================================================= */
+
+    const timeParts = new Intl.DateTimeFormat(
+        "en-GB",
+        {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true,
+            timeZone: "Asia/Kolkata"
+        }
+    ).formatToParts(now);
+
+    let hour = "";
+    let minute = "";
+    let second = "";
+    let dayPeriod = "";
+
+    timeParts.forEach(function(part) {
+
+        if (part.type === "hour") {
+            hour = part.value;
+        }
+
+        if (part.type === "minute") {
+            minute = part.value;
+        }
+
+        if (part.type === "second") {
+            second = part.value;
+        }
+
+        if (part.type === "dayPeriod") {
+            dayPeriod = part.value.toUpperCase();
+        }
+
+    });
+
+    document.getElementById("current-time").textContent =
+        hour + "." + minute + "." + second + " " + dayPeriod;
+}
+
+
+updateDateTime();
+
+setInterval(
+    updateDateTime,
+    1000
+);
+
+</script>
 
 </body>
 </html>
 """
 
+header_html = header_html.replace(
+    "LOGO_BASE64",
+    logo_base64
+)
+
 components.html(
     header_html,
-    height=100,
+    height=160,
     scrolling=False
 )
+
 
 # =========================================================
 # RESET FILTER CALLBACK
@@ -3390,6 +3058,12 @@ def reset_pha_filters():
 
     # Reset Department selectbox to All Departments
     st.session_state.department_selector = "All Departments"
+
+    # Clear document popup state
+    st.session_state.upload_pha_no = ""
+    st.session_state.view_pha_no = ""
+    st.session_state.open_upload_dialog = False
+    st.session_state.open_view_dialog = False
 
 
 # =========================================================
@@ -3784,7 +3458,7 @@ for row_start in range(
         0,
         len(recommendation_kpis),
         3
-    ):
+):
     if row_start == 3:
         st.markdown(
             "<div style='height:22px;'></div>",
@@ -3797,16 +3471,14 @@ for row_start in range(
     )
 
     for column, card in zip(
-        recommendation_row,
-        recommendation_kpis[
-            row_start:row_start + 3
-        ]
+            recommendation_row,
+            recommendation_kpis[
+                row_start:row_start + 3
+            ]
     ):
-
         icon, label, value, description, card_class = card
 
         with column:
-
             # SAME HTML COMPONENT AS THE TOP 3.
             # Only the color class changes according to the
             # TOP ROW COLUMN reference.
@@ -3911,10 +3583,12 @@ with refresh_col:
             "↻ Refresh Data",
             use_container_width=True
     ):
+        st.session_state.view_pha_no = ""
+        st.session_state.upload_pha_no = ""
+        st.session_state.open_view_dialog = False
+        st.session_state.open_upload_dialog = False
         st.cache_data.clear()
         st.rerun()
-
-
 
 # =========================================================
 # STATUS FILTER
@@ -3924,16 +3598,28 @@ if all_button:
 
     st.session_state.status_filter = "All"
     st.session_state.page_number = 1
+    st.session_state.view_pha_no = ""
+    st.session_state.upload_pha_no = ""
+    st.session_state.open_view_dialog = False
+    st.session_state.open_upload_dialog = False
 
 elif completed_button:
 
     st.session_state.status_filter = "Completed"
     st.session_state.page_number = 1
+    st.session_state.view_pha_no = ""
+    st.session_state.upload_pha_no = ""
+    st.session_state.open_view_dialog = False
+    st.session_state.open_upload_dialog = False
 
 elif ongoing_button:
 
     st.session_state.status_filter = "Ongoing"
     st.session_state.page_number = 1
+    st.session_state.view_pha_no = ""
+    st.session_state.upload_pha_no = ""
+    st.session_state.open_view_dialog = False
+    st.session_state.open_upload_dialog = False
 
 # =========================================================
 # DISPLAY DATA
@@ -4018,6 +3704,8 @@ page_df = display_df.iloc[
 # =========================================================
 # TABLE
 # Product / Process / Location intentionally removed
+# Upload / View implementation copied from PT.PY and
+# adapted only from PT names to PHA names.
 # =========================================================
 
 table_widths = [
@@ -4042,7 +3730,7 @@ table_headers = [
 
 header_columns = st.columns(
     table_widths,
-    gap="small"
+    gap=None
 )
 
 for column, header_text in zip(
@@ -4059,6 +3747,91 @@ for column, header_text in zip(
         )
 
 # =========================================================
+# PHA TABLE ACTION STYLE
+# SAME IMPLEMENTATION AS PT.PY
+# =========================================================
+
+st.html(
+    """
+<style>
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker) {
+    gap: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"] {
+    padding: 0 !important;
+}
+
+.pha-action-cell {
+    min-height: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    border-right: 1px solid #d5e0ea;
+    border-bottom: 1px solid #d5e0ea;
+    color: #243b57;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 5px 10px;
+}
+
+.pha-action-cell.alt {
+    background: #f5f8fb;
+}
+
+.pha-action-cell.left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button,
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(7) button {
+    height: 35px !important;
+    min-height: 35px !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    border-right: 1px solid #d5e0ea !important;
+    border-bottom: 1px solid #d5e0ea !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    transform: none !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button {
+    color: #e1262d !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(7) button {
+    color: #174b87 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button:hover,
+div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
+div[data-testid="stColumn"]:nth-child(7) button:hover {
+    background: #f5f8fb !important;
+    border-color: #d5e0ea !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+</style>
+"""
+)
+
+# =========================================================
 # TABLE ROWS
 # =========================================================
 
@@ -4066,203 +3839,92 @@ for row_number, (_, row) in enumerate(
         page_df.iterrows()
 ):
 
-    row_columns = st.columns(
-        table_widths,
-        gap="small"
-    )
-
     alternate = (
-        " alt"
+        "alt"
         if row_number % 2 == 1
         else ""
     )
 
-    # -----------------------------------------------------
-    # DATA CELLS
-    # -----------------------------------------------------
+    row_columns = st.columns(
+        table_widths,
+        gap=None
+    )
 
-    row_values = [
+    sr_no = str(row["Sr No"]).strip()
+    pha_no = str(row["PHA No"]).strip()
+    department = str(row["Department"]).strip()
+    name_pha = str(row["Name of PHA"]).strip()
+    status = str(row[STATUS_COLUMN]).strip()
 
-        row["Sr No"],
-        row["PHA No"],
-        row["Department"],
-        row["Name of PHA"]
+    if sr_no.lower() == "nan":
+        sr_no = ""
+    if pha_no.lower() == "nan":
+        pha_no = ""
+    if department.lower() == "nan":
+        department = ""
+    if name_pha.lower() == "nan":
+        name_pha = ""
 
-    ]
+    if status.lower() == "completed":
+        status_html = '<span class="status-completed">● COMPLETED</span>'
+    elif status.lower() == "ongoing":
+        status_html = '<span class="status-ongoing">● ONGOING</span>'
+    else:
+        status_html = '<span class="status-pill">—</span>'
 
-    row_positions = [
-        0, 1, 2, 3
-    ]
+    with row_columns[0]:
+        st.markdown(
+            f'<div class="pha-action-cell {alternate}"><span class="pha-action-row-marker"></span>{sr_no}</div>',
+            unsafe_allow_html=True
+        )
 
-    for position, value in zip(
-            row_positions,
-            row_values
-    ):
+    with row_columns[1]:
+        st.markdown(
+            f'<div class="pha-action-cell {alternate}">{pha_no}</div>',
+            unsafe_allow_html=True
+        )
 
-        with row_columns[position]:
+    with row_columns[2]:
+        st.markdown(
+            f'<div class="pha-action-cell {alternate} left">{department}</div>',
+            unsafe_allow_html=True
+        )
 
-            value_text = str(
-                value
-            ).strip()
-
-            if value_text.lower() == "nan":
-                value_text = ""
-
-            left_class = (
-                " left"
-                if position in [2, 3]
-                else ""
-            )
-
-            st.html(
-                f"""
-<div class="table-cell{alternate}{left_class}">
-    {value_text}
-</div>
-"""
-            )
-
-    # -----------------------------------------------------
-    # STATUS
-    # -----------------------------------------------------
+    with row_columns[3]:
+        st.markdown(
+            f'<div class="pha-action-cell {alternate} left">{name_pha}</div>',
+            unsafe_allow_html=True
+        )
 
     with row_columns[4]:
-
-        status = str(
-            row[STATUS_COLUMN]
-        ).strip().lower()
-
-        if status == "completed":
-
-            status_html = """
-<span class="status-pill status-completed">
-    ● COMPLETED
-</span>
-"""
-
-        elif status == "ongoing":
-
-            status_html = """
-<span class="status-pill status-ongoing">
-    ● ONGOING
-</span>
-"""
-
-        else:
-
-            status_html = """
-<span class="status-pill">
-    —
-</span>
-"""
-
-        st.html(
-            f"""
-<div class="table-cell{alternate}">
-    {status_html}
-</div>
-"""
+        st.markdown(
+            f'<div class="pha-action-cell {alternate}">{status_html}</div>',
+            unsafe_allow_html=True
         )
-
-    # -----------------------------------------------------
-    # UPLOAD
-    # -----------------------------------------------------
 
     with row_columns[5]:
-
         if st.button(
-                "📤 Upload",
-                key=(
-                        f"upload_{page_number}_"
-                        f"{row_number}_"
-                        f"{row['PHA No']}"
-                ),
+                "↑ Upload",
+                key=f"upload_{safe_pha_folder_name(pha_no)}_{row_number}",
                 use_container_width=True
         ):
-            st.session_state.upload_pha_no = str(
-                row["PHA No"]
-            )
-
+            st.session_state.upload_pha_no = pha_no
+            st.session_state.view_pha_no = ""
             st.session_state.open_upload_dialog = True
-
+            st.session_state.open_view_dialog = False
             st.rerun()
-
-    # -----------------------------------------------------
-    # VIEW
-    # -----------------------------------------------------
 
     with row_columns[6]:
-
         if st.button(
-                "📄 View",
-                key=(
-                        f"view_{page_number}_"
-                        f"{row_number}_"
-                        f"{row['PHA No']}"
-                ),
+                "◉ View",
+                key=f"view_{safe_pha_folder_name(pha_no)}_{row_number}",
                 use_container_width=True
         ):
-            st.session_state.view_pha_no = str(
-                row["PHA No"]
-            )
-
+            st.session_state.view_pha_no = pha_no
+            st.session_state.upload_pha_no = ""
+            st.session_state.open_view_dialog = True
+            st.session_state.open_upload_dialog = False
             st.rerun()
-
-# =========================================================
-# VIEW DOCUMENT
-# =========================================================
-
-view_pha = st.session_state.get(
-    "view_pha_no",
-    ""
-)
-
-if view_pha:
-
-    matching_files = []
-
-    if os.path.exists(DOCUMENT_FOLDER):
-
-        for filename in os.listdir(
-                DOCUMENT_FOLDER
-        ):
-
-            if filename.startswith(
-                    f"{view_pha}_"
-            ):
-                matching_files.append(
-                    filename
-                )
-
-    if matching_files:
-
-        st.info(
-            f"Documents available for {view_pha}: "
-            f"{len(matching_files)}"
-        )
-
-        for filename in matching_files:
-            file_path = os.path.join(
-                DOCUMENT_FOLDER,
-                filename
-            )
-
-            with open(
-                    file_path,
-                    "rb"
-            ) as document_file:
-                st.download_button(
-                    label=f"📄 {filename}",
-                    data=document_file.read(),
-                    file_name=filename,
-                    key=f"download_{filename}"
-                )
-
-    else:
-
-        st.caption(
-            f"No uploaded document found for {view_pha}."
-        )
 
 # =========================================================
 # RECORD COUNT + PAGINATION
@@ -4303,6 +3965,10 @@ with page_left:
             use_container_width=True
     ):
         st.session_state.page_number -= 1
+        st.session_state.view_pha_no = ""
+        st.session_state.upload_pha_no = ""
+        st.session_state.open_view_dialog = False
+        st.session_state.open_upload_dialog = False
         st.rerun()
 
 with page_center:
@@ -4324,6 +3990,10 @@ with page_right:
             use_container_width=True
     ):
         st.session_state.page_number += 1
+        st.session_state.view_pha_no = ""
+        st.session_state.upload_pha_no = ""
+        st.session_state.open_view_dialog = False
+        st.session_state.open_upload_dialog = False
         st.rerun()
 
 # =========================================================
@@ -4404,9 +4074,9 @@ else:
     recommendation_total_pages = max(
         1,
         (
-            total_recommendation_records
-            + recommendation_rows_per_page
-            - 1
+                total_recommendation_records
+                + recommendation_rows_per_page
+                - 1
         )
         // recommendation_rows_per_page
     )
@@ -4416,7 +4086,6 @@ else:
     )
 
     if recommendation_page_number > recommendation_total_pages:
-
         recommendation_page_number = (
             recommendation_total_pages
         )
@@ -4426,12 +4095,12 @@ else:
         )
 
     recommendation_start_index = (
-        recommendation_page_number - 1
-    ) * recommendation_rows_per_page
+                                         recommendation_page_number - 1
+                                 ) * recommendation_rows_per_page
 
     recommendation_end_index = (
-        recommendation_start_index
-        + recommendation_rows_per_page
+            recommendation_start_index
+            + recommendation_rows_per_page
     )
 
     recommendation_display_df = (
@@ -4456,7 +4125,6 @@ else:
 """
 
     for column in recommendation_register_columns:
-
         recommendation_register_html += (
             f"<th>{column}</th>"
         )
@@ -4549,14 +4217,13 @@ else:
     with recommendation_previous_col:
 
         if st.button(
-            "‹",
-            key="recommendation_previous_button",
-            disabled=(
-                recommendation_page_number <= 1
-            ),
-            use_container_width=True
+                "‹",
+                key="recommendation_previous_button",
+                disabled=(
+                        recommendation_page_number <= 1
+                ),
+                use_container_width=True
         ):
-
             st.session_state.recommendation_page_number -= 1
 
             st.rerun()
@@ -4577,114 +4244,172 @@ else:
     with recommendation_next_col:
 
         if st.button(
-            "›",
-            key="recommendation_next_button",
-            disabled=(
-                recommendation_page_number
-                >= recommendation_total_pages
-            ),
-            use_container_width=True
+                "›",
+                key="recommendation_next_button",
+                disabled=(
+                        recommendation_page_number
+                        >= recommendation_total_pages
+                ),
+                use_container_width=True
         ):
-
             st.session_state.recommendation_page_number += 1
 
             st.rerun()
 
-
 # =========================================================
-# UPLOAD DIALOG
-# =========================================================
-# =========================================================
-# UPLOAD DIALOG
+# UPLOAD DOCUMENT — VERY SMALL MODAL POPUP
+# SAME AS PT.PY, ADAPTED ONLY TO PHA
 # =========================================================
 
-if st.session_state.get(
-        "open_upload_dialog",
-        False
-):
+if st.session_state.open_upload_dialog and st.session_state.upload_pha_no:
 
-    @st.dialog("📤 Upload PHA Document")
+    upload_pha = st.session_state.upload_pha_no
+    st.session_state.open_upload_dialog = False
+
+
+    @st.dialog("Upload Document", width="small")
     def upload_document_dialog():
 
-        pha_no = st.session_state.get(
-            "upload_pha_no",
-            ""
+        st.caption(f"PHA No.  {upload_pha}")
+
+        uploaded_file = st.file_uploader(
+            "Choose file",
+            type=[
+                "pdf", "doc", "docx",
+                "xls", "xlsx", "csv",
+                "ppt", "pptx", "txt",
+                "png", "jpg", "jpeg"
+            ],
+            key=f"uploader_dialog_{safe_pha_folder_name(upload_pha)}"
         )
 
-        if pha_no:
+        c1, c2 = st.columns(2, gap="small")
 
-            st.write(
-                f"PHA No: **{pha_no}**"
+        with c1:
+            if st.button(
+                    "Save",
+                    key=f"save_dialog_{safe_pha_folder_name(upload_pha)}",
+                    use_container_width=True,
+                    disabled=uploaded_file is None
+            ):
+                save_pha_document(upload_pha, uploaded_file)
+                st.session_state.upload_pha_no = ""
+                st.session_state.open_upload_dialog = False
+                st.rerun()
+
+        with c2:
+            if st.button(
+                    "Cancel",
+                    key=f"cancel_dialog_{safe_pha_folder_name(upload_pha)}",
+                    use_container_width=True
+            ):
+                st.session_state.upload_pha_no = ""
+                st.session_state.open_upload_dialog = False
+                st.rerun()
+
+
+    upload_document_dialog()
+
+# =========================================================
+# VIEW DOCUMENT — SEPARATE MODAL POPUP
+# SHOW ONLY THE CURRENT / LATEST DOCUMENT
+# =========================================================
+
+if st.session_state.open_view_dialog and st.session_state.view_pha_no:
+
+    view_pha = st.session_state.view_pha_no
+    st.session_state.open_view_dialog = False
+
+
+    @st.dialog("View Document", width="large")
+    def view_document_dialog():
+
+        st.caption(f"PHA No.  {view_pha}")
+
+        documents = get_pha_documents(view_pha)
+
+        if not documents:
+            st.info(
+                "No document has been uploaded for this PHA yet."
+            )
+            return
+
+        # A new upload replaces the old file, so there
+        # should be only one current document.
+        selected_document = documents[-1]
+
+        file_bytes = selected_document.read_bytes()
+        mime_type = get_document_mime_type(
+            selected_document
+        )
+
+        st.download_button(
+            "↓ Download",
+            data=file_bytes,
+            file_name=selected_document.name,
+            mime=mime_type,
+            key=(
+                f"download_{safe_pha_folder_name(view_pha)}_"
+                f"{safe_pha_folder_name(selected_document.name)}"
+            )
+        )
+
+        if mime_type == "application/pdf":
+
+            pdf_base64 = (
+                base64.b64encode(
+                    file_bytes
+                ).decode("utf-8")
+            )
+
+            components.html(
+                f"""
+<iframe
+    src="data:application/pdf;base64,{pdf_base64}"
+    width="100%"
+    height="600"
+    style="border:1px solid #d5e0ea;">
+</iframe>
+""",
+                height=620,
+                scrolling=False
+            )
+
+        elif mime_type.startswith("image/"):
+
+            st.image(
+                file_bytes,
+                use_container_width=True
+            )
+
+        elif mime_type.startswith("text/"):
+
+            text_preview = file_bytes.decode(
+                "utf-8",
+                errors="replace"
+            )
+
+            st.text_area(
+                "Document preview",
+                text_preview,
+                height=450,
+                disabled=True,
+                key=(
+                    f"text_preview_"
+                    f"{safe_pha_folder_name(view_pha)}_"
+                    f"{safe_pha_folder_name(selected_document.name)}"
+                )
             )
 
         else:
 
             st.info(
-                "Enter the PHA number for this document."
+                "Preview is not available for this file type. "
+                "Use Download to open the file."
             )
 
-            pha_no = st.text_input(
-                "PHA No.",
-                key="dialog_pha_no"
-            )
 
-        uploaded_file = st.file_uploader(
-            "Select document from your computer",
-            type=[
-                "pdf",
-                "doc",
-                "docx",
-                "xls",
-                "xlsx",
-                "ppt",
-                "pptx",
-                "jpg",
-                "jpeg",
-                "png"
-            ],
-            key="pt_upload_file"
-        )
-
-        if uploaded_file is not None:
-
-            if not pha_no:
-
-                st.warning(
-                    "Please enter PHA No first."
-                )
-
-            else:
-
-                file_name = (
-                    f"{pha_no}_"
-                    f"{uploaded_file.name}"
-                )
-
-                file_path = os.path.join(
-                    DOCUMENT_FOLDER,
-                    file_name
-                )
-
-                with open(
-                        file_path,
-                        "wb"
-                ) as file:
-
-                    file.write(
-                        uploaded_file.getbuffer()
-                    )
-
-                st.success(
-                    f"Document uploaded successfully for {pha_no}"
-                )
-
-                st.session_state.open_upload_dialog = False
-                st.session_state.upload_pha_no = ""
-
-                st.rerun()
-
-
-    upload_document_dialog()
+    view_document_dialog()
 
 # =========================================================
 # FOOTER

@@ -5,6 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 import requests
+from openpyxl import load_workbook
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -824,41 +825,97 @@ class _AuditLinkParser(HTMLParser):
 
 
 def load_audit_with_links(gid):
-    """Load the Audit tab and preserve the real Compliance Report URLs."""
+    """Load Audit tab and dynamically extract the current Compliance Report hyperlinks.
+
+    The URL is NEVER hard-coded. Each refresh downloads the current Google Sheet
+    XLSX and reads the hyperlink attached to the Compliance Report cell.
+    This means a new monthly report/link is picked up automatically.
+    """
     df = load_google_sheet(gid)
-    if df.empty:
+    if df.empty or not gid:
         return df
 
-    # Google CSV export keeps only the displayed text of a HYPERLINK cell.
-    # Read the same public tab as HTML so the actual href is retained.
-    html_url = (
+    url_values = [""] * len(df)
+
+    xlsx_url = (
         f"https://docs.google.com/spreadsheets/d/"
-        f"{SPREADSHEET_ID}/gviz/tq?tqx=out:html&gid={gid}"
+        f"{SPREADSHEET_ID}/export?format=xlsx&gid={gid}"
     )
 
-    links = []
     try:
         response = requests.get(
-            html_url,
+            xlsx_url,
             timeout=30,
             headers={"User-Agent": "Mozilla/5.0"},
         )
         response.raise_for_status()
 
-        parser = _AuditLinkParser()
-        parser.feed(response.text)
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=False,
+            read_only=False,
+        )
 
-        # First row is the header. The Compliance Report column is E (index 4).
-        data_rows = parser.rows[1:] if parser.rows else []
-        links = [
-            row[4].strip() if len(row) > 4 and row[4] else ""
-            for row in data_rows
-        ]
+        # Google normally exports the requested GID as the active/first sheet.
+        ws = workbook.active
+
+        # Find the header row and Compliance Report column dynamically.
+        header_row = None
+        report_col = None
+
+        for row in ws.iter_rows():
+            for cell in row:
+                value = str(cell.value or "").strip().lower()
+                if value in {
+                    "compliance report",
+                    "compliance report link",
+                    "audit report",
+                    "report",
+                }:
+                    header_row = cell.row
+                    report_col = cell.column
+                    break
+            if report_col is not None:
+                break
+
+        if report_col is not None:
+            # Extract both direct cell hyperlinks and HYPERLINK formulas.
+            hyperlink_rows = []
+
+            for row_no in range((header_row or 1) + 1, ws.max_row + 1):
+                cell = ws.cell(row=row_no, column=report_col)
+                url = ""
+
+                if cell.hyperlink:
+                    try:
+                        url = str(cell.hyperlink.target or "").strip()
+                    except Exception:
+                        url = ""
+
+                # Also support =HYPERLINK("URL","Displayed Text")
+                if not url and isinstance(cell.value, str):
+                    formula = cell.value.strip()
+                    match = re.search(
+                        r'HYPERLINK\s*\(\s*["\'](https?://[^"\']+)["\']',
+                        formula,
+                        flags=re.IGNORECASE,
+                    )
+                    if match:
+                        url = match.group(1).strip()
+
+                hyperlink_rows.append(url)
+
+            # Map by row order to the CSV records.
+            for i in range(min(len(url_values), len(hyperlink_rows))):
+                url_values[i] = hyperlink_rows[i]
+
+        workbook.close()
+
     except Exception:
-        links = []
+        # Do not break the dashboard if XLSX hyperlink extraction fails.
+        pass
 
-    # Attach links by row order. If HTML parsing is unavailable, retain a
-    # directly entered URL when the sheet cell itself contains one.
+    # Last fallback: direct URL already present in CSV cell.
     fallback_col = find_col(
         df,
         [
@@ -869,14 +926,13 @@ def load_audit_with_links(gid):
         ],
     )
 
-    url_values = []
-    for i in range(len(df)):
-        href = links[i] if i < len(links) else ""
-        if not href and fallback_col:
+    if fallback_col:
+        for i in range(len(df)):
+            if url_values[i]:
+                continue
             value = str(df.iloc[i][fallback_col]).strip()
             if re.match(r"^https?://", value, re.I):
-                href = value
-        url_values.append(href)
+                url_values[i] = value
 
     df = df.copy()
     df["__COMPLIANCE_REPORT_URL"] = url_values
@@ -1377,7 +1433,10 @@ st.markdown(
 a, b, c, d = st.columns(4, gap="small")
 
 with a:
-    with st.container(border=True):
+    with st.container(
+            border=True,
+            height=460
+    ):
         # PT HEADER
         show_module_title(
             1,
@@ -1857,7 +1916,7 @@ with a:
 with b:
     with st.container(
             border=True,
-            height=365
+            height=460
     ):
 
         show_module_title(
@@ -2381,7 +2440,7 @@ with b:
 with c:
     with st.container(
             border=True,
-            height=365
+            height=460
     ):
 
         show_module_title(
@@ -3410,33 +3469,107 @@ with b:
             else:
                 register_df["Compliance Report"] = ""
 
-            st.dataframe(
-                register_df,
-                use_container_width=True,
-                hide_index=True,
-                height=250,
-                column_config={
-                    "S.No.": st.column_config.TextColumn(
-                        "S.No.",
-                        width="small",
-                    ),
-                    "Department": st.column_config.TextColumn(
-                        "Department",
-                        width="medium",
-                    ),
-                    "Audit Date": st.column_config.TextColumn(
-                        "Audit Date",
-                        width="small",
-                    ),
-                    "Audit Score": st.column_config.TextColumn(
-                        "Audit Score",
-                        width="small",
-                    ),
-                    "Compliance Report": st.column_config.LinkColumn(
-                        "Compliance Report",
-                        display_text="Open Audit Report ↗",
-                        validate="^https?://.+",
-                        width="medium",
-                    ),
-                },
+            # --------------------------------------------------------
+            # COMPLIANCE REPORT BUTTONS
+            # --------------------------------------------------------
+            # The button uses the live URL extracted from the Google Sheet.
+            # No report URL is fixed in this code.
+            rows_html = []
+
+            for _, row in register_df.iterrows():
+                report_url = str(row.get("Compliance Report", "")).strip()
+                if report_url.startswith("http://") or report_url.startswith("https://"):
+                    report_cell = (
+                        f'<a href="{report_url}" target="_blank" rel="noopener noreferrer" '
+                        'style="display:inline-block;padding:4px 10px;'
+                        'background:#07518b;color:#ffffff !important;border-radius:4px;'
+                        'text-decoration:none;font-weight:700;font-size:9px;">'
+                        'VIEW REPORT ↗</a>'
+                    )
+                else:
+                    report_cell = '<span style="color:#9aa7b3;font-size:9px;">Not attached</span>'
+
+                rows_html.append(
+                    f"""
+                    <tr>
+                        <td>{row['S.No.']}</td>
+                        <td>{row['Department']}</td>
+                        <td>{row['Audit Date']}</td>
+                        <td>{row['Audit Score']}</td>
+                        <td>{report_cell}</td>
+                    </tr>
+                    """
+                )
+
+            # Use a real HTML component so the live SharePoint/Google-sheet
+            # hyperlink remains an actual clickable button.
+            audit_table_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                html, body {{
+                    margin:0; padding:0; background:transparent;
+                    font-family:Arial, Helvetica, sans-serif;
+                }}
+                .audit-register-wrap {{
+                    width:100%; max-height:400px; overflow-y:auto;
+                    border:1px solid #d5e0e8; border-radius:4px;
+                    background:#ffffff;
+                }}
+                table {{
+                    width:100%; border-collapse:collapse; table-layout:fixed;
+                    font-size:9px; color:#173f70;
+                }}
+                th {{
+                    position:sticky; top:0; z-index:2;
+                    background:#f3f7fa; color:#627689;
+                    font-weight:800; text-align:left;
+                    padding:5px 8px; border-bottom:1px solid #d5e0e8;
+                    line-height:1.1;
+                }}
+                td {{
+                    padding:5px 8px; border-bottom:1px solid #e1e8ee;
+                    line-height:1.1;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                }}
+                th:nth-child(1), td:nth-child(1) {{ width:8%; }}
+                th:nth-child(2), td:nth-child(2) {{ width:24%; }}
+                th:nth-child(3), td:nth-child(3) {{ width:18%; }}
+                th:nth-child(4), td:nth-child(4) {{ width:17%; }}
+                th:nth-child(5), td:nth-child(5) {{ width:33%; }}
+                .report-btn {{
+                    display:inline-block; padding:4px 10px;
+                    background:#07518b; color:#ffffff !important;
+                    border-radius:4px; text-decoration:none !important;
+                    font-weight:700; font-size:9px; cursor:pointer;
+                }}
+                .report-btn:hover {{ background:#063e70; }}
+            </style>
+            </head>
+            <body>
+                <div class="audit-register-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>S.No.</th>
+                                <th>Department</th>
+                                <th>Audit Date</th>
+                                <th>Audit Score</th>
+                                <th>Compliance Report</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(rows_html)}
+                        </tbody>
+                    </table>
+                </div>
+            </body>
+            </html>
+            """
+
+            st.components.v1.html(
+                audit_table_html,
+                height=305,
+                scrolling=False,
             )
