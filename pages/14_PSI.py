@@ -1,7 +1,10 @@
+import base64
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
+from pathlib import Path
+from datetime import datetime
 
 # =========================================================
 # PAGE CONFIG
@@ -334,172 +337,151 @@ div[data-baseweb="select"] svg {
 
 
 /* =========================================================
-   KPI CARDS
+   KPI CARDS - SHINING STATUS COLORS
    ========================================================= */
-
 .kpi-card {
-
     position:relative;
-
     height:108px;
-
     overflow:hidden;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #f8fbfd 58%,
-            #edf5f9 100%
-        );
-
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    background:linear-gradient(145deg,#ffffff 0%,#fbfdff 55%,#eef6fa 100%);
     border:1px solid #c5dce9;
-
-    border-top:4px solid #159ee4;
-
+    border-top:5px solid #1686d9;
     border-radius:10px;
-
-    padding:14px 16px;
-
+    padding:10px 12px;
     box-shadow:
         0 4px 12px rgba(28,78,110,.12),
         0 1px 2px rgba(28,78,110,.08),
-        inset 0 1px 0 rgba(255,255,255,.95);
+        inset 0 1px 0 rgba(255,255,255,.98);
 }
 
-
+/* COMPLETED = GREEN */
 .kpi-card.completed {
-    border-top-color:#18a957;
+    border-top-color:#00c853;
+    box-shadow:
+        0 0 0 1px rgba(0,200,83,.10),
+        0 0 12px rgba(0,200,83,.20),
+        0 5px 14px rgba(28,78,110,.12),
+        inset 0 1px 0 rgba(255,255,255,.98);
 }
 
-
-.kpi-card.pending,
-.kpi-card.compliance {
-    border-top-color:#d9272e;
+/* PENDING = RED */
+.kpi-card.pending {
+    border-top-color:#ff1744;
+    box-shadow:
+        0 0 0 1px rgba(255,23,68,.10),
+        0 0 12px rgba(255,23,68,.20),
+        0 5px 14px rgba(28,78,110,.12),
+        inset 0 1px 0 rgba(255,255,255,.98);
 }
 
+/* ONGOING / STATUS = YELLOW */
+.kpi-card.ongoing {
+    border-top-color:#ffc400;
+    box-shadow:
+        0 0 0 1px rgba(255,196,0,.12),
+        0 0 14px rgba(255,196,0,.24),
+        0 5px 14px rgba(28,78,110,.12),
+        inset 0 1px 0 rgba(255,255,255,.98);
+}
 
-.kpi-icon {
+/* TOTAL + COMPLIANCE = BLUE */
+.kpi-card.compliance,
+.kpi-card.total {
+    border-top-color:#1686ff;
+    box-shadow:
+        0 0 0 1px rgba(22,134,255,.08),
+        0 0 10px rgba(22,134,255,.14),
+        0 5px 14px rgba(28,78,110,.12),
+        inset 0 1px 0 rgba(255,255,255,.98);
+}
 
+/* Shining highlight on every KPI top strip */
+.kpi-card::before {
+    content:"";
     position:absolute;
-
-    left:17px;
-
-    top:18px;
-
-    width:54px;
-
-    height:54px;
-
-    border-radius:50%;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    color:#123f7a;
-
-    background:#ffffff;
-
-    border:3px solid #123f7a;
-
-    font-size:29px;
-
-    font-weight:900;
+    left:0;
+    top:0;
+    width:100%;
+    height:5px;
+    pointer-events:none;
+    opacity:.95;
+    background:linear-gradient(
+        90deg,
+        rgba(255,255,255,.18),
+        rgba(255,255,255,.95),
+        rgba(255,255,255,.18)
+    );
 }
 
-
-.kpi-card.completed .kpi-icon {
-
-    color:#149c53;
-
-    border-color:#149c53;
+.kpi-card::after {
+    content:"";
+    position:absolute;
+    left:8%;
+    right:8%;
+    top:5px;
+    height:1px;
+    pointer-events:none;
+    opacity:.75;
+    background:linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,.95),
+        transparent
+    );
 }
 
-
-.kpi-card.pending .kpi-icon,
-.kpi-card.compliance .kpi-icon {
-
-    color:#d9272e;
-
-    border-color:#d9272e;
-}
-
+.kpi-icon { display:none !important; }
 
 .kpi-content {
-    margin-left:70px;
+    margin-left:0 !important;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
 }
-
 
 .kpi-label {
-
     color:#087bc1;
-
-    font-size:11px;
-
+    font-size:13px;
     font-weight:950;
-
     letter-spacing:.45px;
-
     line-height:1.1;
-
-    margin-top:1px;
+    margin:0 !important;
 }
 
-
-.kpi-card.completed .kpi-label {
-    color:#11984e;
-}
-
-
-.kpi-card.pending .kpi-label,
-.kpi-card.compliance .kpi-label {
-    color:#c9232b;
-}
-
+.kpi-card.completed .kpi-label { color:#00a844; }
+.kpi-card.pending .kpi-label { color:#e6002d; }
+.kpi-card.ongoing .kpi-label { color:#d99f00; }
+.kpi-card.compliance .kpi-label,
+.kpi-card.total .kpi-label { color:#0876d1; }
 
 .kpi-value {
-
-    font-size:37px;
-
+    font-size:38px;
     line-height:1;
-
     font-weight:950;
-
-    margin-top:8px;
-
+    margin:7px 0 0 0 !important;
     color:#173b5a;
 }
 
+.kpi-value.green { color:#00ad4f; }
+.kpi-value.red { color:#ed1738; }
+.kpi-value.yellow { color:#e5a900; }
+.kpi-value.blue { color:#1267d5; }
 
-.kpi-value.green {
-    color:#149c53;
+
+/* Compliance KPI value follows the blue compliance top-line color */
+.kpi-card.compliance .kpi-value {
+    color:#1267d5 !important;
+    text-shadow:0 0 8px rgba(18,103,213,.16);
 }
 
-
-.kpi-value.red {
-    color:#d9272e;
-}
-
-
-.kpi-value.blue {
-    color:#164b91;
-}
-
-
-.kpi-description {
-
-    color:#5c7181;
-
-    font-size:12px;
-
-    margin-top:7px;
-
-    line-height:1.1;
-}
-
+.kpi-description { display:none !important; }
 
 /* =========================================================
    PANELS
@@ -667,770 +649,1146 @@ div[data-baseweb="select"] svg {
     unsafe_allow_html=True
 )
 
-# =========================================================
-# HEADER
-# =========================================================
+# ============================================================
+
+# BASE DIRECTORY
+
+# ============================================================
+
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+
+# IMAGE TO BASE64
+
+# ============================================================
+
+
+def image_to_base64(file_path):
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path,
+                  "rb") as file:
+
+            return base64.b64encode(
+
+                file.read()
+
+            ).decode("utf-8")
+
+
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+
+# COMPANY LOGO
+
+# ============================================================
+
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+# ============================================================
+
+# FILE CHECK
+
+# ============================================================
+
+
+if not logo_base64:
+    st.error(
+
+        "jsw_jfe_logo.jpg not found.\n"
+
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+
+    )
+
+# ============================================================
+
+# DATE AND TIME
+
+# ============================================================
+
+
+now = datetime.now()
+
+current_date = now.strftime(
+
+    "%d %b %Y"
+
+).upper()
+
+current_time = now.strftime(
+
+    "%I:%M %p"
+
+)
+
+# ============================================================
+
+# HEADER HTML
+
+# ============================================================
+
+
 header_html = """
+
+
+
 <!DOCTYPE html>
+
+
 
 <html>
 
+
+
 <head>
+
+
 
 <meta charset="UTF-8">
 
+
+
 <style>
 
-* {
-    box-sizing:border-box;
+
+
+
+
+/* ============================================================
+
+   MAIN HEADER
+
+
+============================================================ */
+
+
+
+.psm-header {
+
+
+
+    position: relative;
+
+
+
+    width: 100%;
+
+
+
+    height: 90px;
+
+
+
+    overflow: hidden;
+
+
+
+    background:
+
+        linear-gradient(
+
+            90deg,
+
+            #031d34 0%,
+
+            #052b49 42%,
+
+            #07385c 74%,
+
+            #052b49 100%
+
+        );
+
+
+
+    border-radius: 7px;
+
+
+
+    box-shadow:
+
+        0 3px 9px
+
+        rgba(0,0,0,0.18);
+
+
+
 }
 
 
-html,
-body {
 
-    margin:0;
 
-    padding:0;
 
-    width:100%;
+/* ============================================================
 
-    height:100%;
+   LEFT LOGO AREA
 
-    overflow:hidden;
+
+============================================================ */
+
+
+
+.psm-left {
+
+
+
+    position: absolute;
+
+
+
+    left: 0;
+
+
+
+    top: 0;
+
+
+
+    width: 100%;
+
+
+
+    height: 95px;
+
+
+
+    display: flex;
+
+
+
+    align-items: center;
+
+
+
+    padding-left: 4px;
+
+
+
+    box-sizing: border-box;
+
+
+
+    z-index: 20;
+
+
+
+    pointer-events: none;
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   LOGO PANEL
+
+   ONLY VERTICAL POSITION CHANGED
+
+
+============================================================ */
+
+
+
+.logo-panel {
+    width: 195px;
+    height: 68px;
+    background: #ffffff;
+    border-radius: 5px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    box-shadow:
+
+        0 3px 9px
+
+        rgba(0,0,0,0.20);
+    position: relative;
+    top: -6px;
+    left: 5px;
+
+}
+
+
+
+
+
+/* ============================================================
+
+   COMPANY LOGO
+
+
+============================================================ */
+
+
+
+.company-logo {
+
+
+
+    width: 100%;
+
+
+
+    height: 100%;
+
+
+
+    object-fit: contain;
+
+
+
+    object-position: center;
+
+
+
+    display: block;
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   LEFT VERTICAL DIVIDER
+
+
+============================================================ */
+
+
+
+.vertical-line {
+
+
+
+    width: 2px;
+
+
+
+    height: 83px;
+
+
+
+    background:
+
+        rgba(255,255,255,0.65);
+
+
+
+    margin-left: 18px;
+
+
+
+    margin-right: 20px;
+
+
+
+    flex-shrink: 0;
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   CENTER TITLE AREA
+
+
+============================================================ */
+
+
+
+.title-area {
+
+
+
+    position: absolute;
+
+
+
+    left: 50%;
+
+
+
+    top: 0;
+
+
+
+    height: 95px;
+
+
+
+    display: flex;
+
+
+
+    flex-direction: column;
+
+
+
+    justify-content: center;
+
+
+
+    align-items: center;
+
+
+
+    text-align: center;
+
+
+
+    min-width: max-content;
+
+
+
+    box-sizing: border-box;
+
+
+
+    transform: translateX(-50%);
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   MAIN TITLE
+
+
+============================================================ */
+
+
+
+.main-title {
+
+
+
+    color: #ffffff;
+
+
 
     font-family:
+
+        "Arial Narrow",
+
+        "Roboto Condensed",
+
         Arial,
-        Helvetica,
+
         sans-serif;
+
+
+
+    font-size: 27px;
+
+
+
+    font-weight: 900;
+
+
+
+    line-height: 1;
+
+
+
+    letter-spacing: 0.3px;
+
+
+
+    white-space: nowrap;
+
+
+
+    margin: 0;
+
+
+
+    padding: 0;
+
+
+
 }
 
 
-body {
-    background:#f4f9fc;
+
+
+
+/* ============================================================
+
+   ORANGE TITLE PART
+
+
+============================================================ */
+
+
+
+.main-title-orange {
+
+
+
+    color: #f28c00;
+
+
+
 }
 
 
-.header {
 
-    position:relative;
 
-    width:100%;
 
-    height:72px;
+/* ============================================================
 
-    overflow:hidden;
+   SUBTITLE
 
-    display:flex;
 
-    align-items:center;
+============================================================ */
 
-    justify-content:center;
+
+
+.subtitle {
+
+
+
+    color: #ffffff;
+
+
+
+    font-family:
+
+        Arial,
+
+        sans-serif;
+
+
+
+    font-size: 12px;
+
+
+
+    font-weight: 400;
+
+
+
+    letter-spacing: 3.6px;
+
+
+
+    margin-top: 8px;
+
+
+
+    line-height: 1;
+
+
+
+    white-space: nowrap;
+
+
+
+}
+
+
+
+/* ============================================================
+
+   SUB-SUBTITLE / TAGLINE
+
+
+============================================================ */
+
+
+
+.tagline {
+
+
+
+    color:
+
+        rgba(255,255,255,0.82);
+
+
+
+    font-family:
+
+        Arial,
+
+        sans-serif;
+
+
+
+    font-size: 7px;
+
+
+
+    font-weight: 500;
+
+
+
+    letter-spacing: 2.2px;
+
+
+
+    margin-top: 6px;
+
+
+
+    line-height: 1;
+
+
+
+    white-space: nowrap;
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   RIGHT DATE / TIME AREA
+
+
+============================================================ */
+
+
+
+.psm-right {
+
+
+
+    position: absolute;
+
+
+
+    right: 16px;
+
+
+
+    top: 0;
+
+
+
+    width: 15%;
+
+
+
+    height: 95px;
+
+
+
+    display: flex;
+
+
+
+    flex-direction: column;
+
+
+
+    justify-content: center;
+
+
+
+    align-items: flex-end;
+
+
+
+    text-align: right;
+
+
+
+    color: #ffffff;
+
+
+
+    z-index: 30;
+
+
+
+    padding-left: 18px;
+
+
+
+    box-sizing: border-box;
+
+
+
+}
+
+
+
+
+
+/* ============================================================
+
+   RIGHT VERTICAL DIVIDER
+
+
+============================================================ */
+
+
+
+.psm-right::before {
+
+
+
+    content: "";
+
+
+
+    position: absolute;
+    left: 15px;
+    top: 6px;
+    width: 2px;
+    height: 83px;
+    background:
+        rgba(255,255,255,0.65);
+}
+/* ============================================================
+   DATE
+============================================================ */
+.date {
+
+    color:
+        rgba(255,255,255,0.95);
+    font-family:
+       Arial,
+        sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.7px;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+}
+
+/* ============================================================
+   TIME
+============================================================ */
+.time {
+    color: #ffffff;
+    font-family:
+
+        "Arial Narrow",
+
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    margin-top: 4px;
+    line-height: 1;
+    padding: 0;
+}
+
+/* ============================================================
+
+   RIGHT HORIZONTAL LINE
+
+
+============================================================ */
+
+
+
+.right-line {
+
+
+
+    width: 80px;
+
+
+
+    height: 2px;
+
+
 
     background:
 
-        radial-gradient(
-            ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
+        rgba(255,255,255,0.75);
 
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
-        );
 
-    border-top:2px solid #0b91d1;
 
-    border-bottom:3px solid #1487c2;
+    margin-top: 7px;
 
-    box-shadow:
-        0 4px 12px rgba(21,92,130,.18);
+
+
+    flex-shrink: 0;
+
+
+
 }
 
 
-.header::before {
 
-    content:"";
 
-    position:absolute;
 
-    inset:0;
-
-    background-image:
-
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17) 1.2px,
-            transparent 1.5px
-        );
-
-    background-size:15px 15px;
-
-    opacity:.65;
-}
-
-
-.header::after {
-
-    content:"";
-
-    position:absolute;
-
-    inset:0;
-
-    background:
-
-        linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        ),
-
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        );
-}
-
-
-.industrial {
-
-    position:absolute;
-
-    left:0;
-
-    right:0;
-
-    bottom:0;
-
-    width:100%;
-
-    height:72px;
-
-    opacity:.38;
-
-    z-index:1;
-}
-
-
-.industrial .steel {
-
-    fill:#a8c9da;
-
-    stroke:#5791af;
-
-    stroke-width:1.5;
-}
-
-
-.industrial .light {
-
-    fill:none;
-
-    stroke:#2e8bb9;
-
-    stroke-width:1.2;
-
-    opacity:.70;
-}
-
-
-.industrial .window {
-
-    fill:#2787b5;
-
-    opacity:.65;
-}
-
-
-.hex {
-
-    fill:none;
-
-    stroke:#278abd;
-
-    stroke-width:1;
-
-    opacity:.28;
-}
-
-
-.content {
-
-    position:relative;
-
-    z-index:8;
-
-    width:100%;
-
-    height:100%;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-}
-
-
-.pillar {
-
-    position:relative;
-
-    width:840px;
-
-    height:48px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    background:
-
-        linear-gradient(
-            180deg,
-            #197fbd 0%,
-            #07538d 48%,
-            #032f5b 100%
-        );
-
-    border:1px solid #0877ba;
-
-    border-radius:14px;
-
-    color:#ffd21a;
-
-    font-size:32px;
-
-    font-weight:950;
-
-    letter-spacing:1px;
-
-    white-space:nowrap;
-
-    box-shadow:
-
-        0 7px 16px rgba(11,83,130,.30),
-
-        inset 0 1px 0 rgba(255,255,255,.32),
-
-        inset 0 -5px 12px rgba(0,35,75,.18);
-}
-
-
-.pillar::before,
-.pillar::after {
-
-    position:absolute;
-
-    top:50%;
-
-    transform:translateY(-50%);
-
-    color:#51c5ff;
-
-    font-size:20px;
-
-    font-weight:950;
-
-    letter-spacing:-5px;
-}
-
-
-.pillar::before {
-
-    content:"◀◀";
-
-    left:17px;
-}
-
-
-.pillar::after {
-
-    content:"▶▶";
-
-    right:17px;
-}
-
-
-.top-line {
-
-    position:absolute;
-
-    top:0;
-
-    left:24%;
-
-    width:52%;
-
-    height:3px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00a9ff 18%,
-            #ffffff 50%,
-            #00a9ff 82%,
-            transparent
-        );
-}
-
-
-.scan {
-
-    position:absolute;
-
-    z-index:12;
-
-    bottom:0;
-
-    left:-16%;
-
-    width:16%;
-
-    height:4px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00b5ff,
-            #ffffff,
-            #00b5ff,
-            transparent
-        );
-
-    animation:
-        scanline 3s linear infinite;
-}
-
-
-@keyframes scanline {
-
-    0% {
-        left:-16%;
-    }
-
-    100% {
-        left:100%;
-    }
-}
-
-
-.corner-light {
-
-    position:absolute;
-
-    z-index:10;
-
-    width:110px;
-
-    height:3px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00baff,
-            transparent
-        );
-}
-
-
-.corner-left {
-
-    left:7%;
-
-    top:7px;
-}
-
-
-.corner-right {
-
-    right:7%;
-
-    top:7px;
+/* ============================================================
+   ORANGE BOTTOM BAR
+============================================================ */
+.orange-bar {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 7px;
+    background: #f28c00;
+    z-index: 50;
 }
 
 </style>
-
 </head>
-
-
 <body>
+<!-- ============================================================
+     MAIN HEADER
+============================================================ -->
+<div class="psm-header">
 
-<div class="header">
+<!--========================================================
+         LEFT LOGO AREA
+======================================================== -->
+    <div
+class="psm-left">
 
-    <div class="top-line"></div>
+<!--====================================================
+LOGO
+==================================================== -->
 
-    <div class="corner-light corner-left"></div>
+        <div
+class="logo-panel">
 
-    <div class="corner-light corner-right"></div>
+            <img
 
 
-    <svg
-        class="industrial"
-        viewBox="0 0 1672 145"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-    >
+class="company-logo"
 
-        <g>
 
-            <rect
-                class="steel"
-                x="85"
-                y="24"
-                width="34"
-                height="116"
-                rx="4"
-            />
+src="data:image/jpeg;base64,LOGO_IMAGE_BASE64"
 
-            <rect
-                class="steel"
-                x="91"
-                y="9"
-                width="22"
-                height="18"
-            />
+                alt="JSW JFE Steel
+Limited"
 
-            <rect
-                class="steel"
-                x="96"
-                y="0"
-                width="12"
-                height="12"
-            />
+            >
 
-            <path
-                class="light"
-                d="
-                    M102 0 L102 140
-                    M87 55 L117 55
-                    M87 78 L117 78
-                    M87 103 L117 103
-                "
-            />
 
-            <circle
-                class="window"
-                cx="102"
-                cy="43"
-                r="3"
-            />
 
-            <circle
-                class="window"
-                cx="102"
-                cy="67"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="102"
-                cy="91"
-                r="3"
-            />
-
-        </g>
-
-
-        <g>
-
-            <rect
-                class="steel"
-                x="150"
-                y="52"
-                width="17"
-                height="88"
-            />
-
-            <rect
-                class="steel"
-                x="146"
-                y="48"
-                width="25"
-                height="8"
-            />
-
-            <path
-                class="light"
-                d="M158 52 L158 140"
-            />
-
-        </g>
-
-
-        <g class="light">
-
-            <path d="M55 113 H245 V85 H320"/>
-
-            <path d="M120 125 H260 V105 H355"/>
-
-            <path d="M180 96 H285 V65 H340"/>
-
-            <path d="M215 130 V70 H280"/>
-
-        </g>
-
-
-        <g>
-
-            <rect
-                class="steel"
-                x="260"
-                y="64"
-                width="58"
-                height="76"
-                rx="26"
-            />
-
-            <path
-                class="light"
-                d="M260 82 H318 M260 107 H318"
-            />
-
-            <circle
-                class="window"
-                cx="289"
-                cy="95"
-                r="4"
-            />
-
-        </g>
-
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1512"
-                y="25"
-                width="36"
-                height="115"
-                rx="4"
-            />
-
-            <rect
-                class="steel"
-                x="1518"
-                y="9"
-                width="24"
-                height="18"
-            />
-
-            <rect
-                class="steel"
-                x="1523"
-                y="0"
-                width="14"
-                height="12"
-            />
-
-            <path
-                class="light"
-                d="
-                    M1530 0 L1530 140
-                    M1514 54 L1546 54
-                    M1514 79 L1546 79
-                    M1514 103 L1546 103
-                "
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="42"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="66"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="90"
-                r="3"
-            />
-
-        </g>
-
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1450"
-                y="54"
-                width="18"
-                height="86"
-            />
-
-            <rect
-                class="steel"
-                x="1446"
-                y="49"
-                width="26"
-                height="8"
-            />
-
-            <path
-                class="light"
-                d="M1459 54 L1459 140"
-            />
-
-        </g>
-
-
-        <g class="light">
-
-            <path d="M1620 112 H1425 V85 H1350"/>
-
-            <path d="M1575 125 H1410 V104 H1330"/>
-
-            <path d="M1500 95 H1390 V65 H1335"/>
-
-            <path d="M1465 130 V70 H1390"/>
-
-        </g>
-
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1350"
-                y="64"
-                width="58"
-                height="76"
-                rx="26"
-            />
-
-            <path
-                class="light"
-                d="M1350 82 H1408 M1350 107 H1408"
-            />
-
-            <circle
-                class="window"
-                cx="1379"
-                cy="95"
-                r="4"
-            />
-
-        </g>
-
-
-        <g class="light">
-
-            <path d="M0 137 H1672"/>
-
-            <path d="M0 126 H420 V116 H650"/>
-
-            <path d="M1672 126 H1250 V116 H1020"/>
-
-        </g>
-
-
-        <g class="hex">
-
-            <path
-                d="
-                    M250 25
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M282 54
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M1335 25
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M1370 54
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-        </g>
-
-    </svg>
-
-
-    <div class="content">
-
-        <div class="pillar">
-            PILLAR: PROCESS SAFETY INCIDENT
         </div>
+
+
+
+
+
+        <!--
+====================================================
+
+             LEFT VERTICAL LINE
+
+
+==================================================== -->
+
+
+
+        <div
+class="vertical-line"></div>
+
+
+
+
+
+        <!--
+====================================================
+
+             CENTER TITLE GROUP
+
+
+==================================================== -->
+
+
+
+        <div
+class="title-area">
+
+
+
+
+
+            <!-- MAIN TITLE -->
+
+
+
+            <div
+class="main-title">
+
+
+
+                PROCESS SAFETY ANALYSIS (PSI)
+
+
+
+                <span
+class="main-title-orange"></span>
+
+
+
+            </div>
+
+
+
+
+
+            <!-- SUBTITLE -->
+
+
+
+            <div
+class="subtitle">
+
+
+
+                PSM DIGITAL DASHBOARD
+
+
+
+            </div>
+
+
+
+
+
+            <!-- SUB-SUBTITLE -->
+
+
+
+            <div
+class="tagline">
+
+
+
+                PEOPLE
+
+                &nbsp; | &nbsp;
+
+                PROCESS
+
+                &nbsp; | &nbsp;
+
+                RISK
+
+                &nbsp; | &nbsp;
+
+                COMPLIANCE
+
+
+
+            </div>
+
+
+
+
+
+        </div>
+
+
+
+
 
     </div>
 
 
-    <div class="scan"></div>
+
+
+
+    <!--
+========================================================
+
+         RIGHT DATE / TIME
+
+
+======================================================== -->
+
+
+
+    <div
+class="psm-right">
+
+
+
+
+
+        <div
+class="date">
+
+
+
+            CURRENT_DATE_VALUE
+
+
+
+        </div>
+
+
+
+
+
+        <div
+class="time">
+
+
+
+            CURRENT_TIME_VALUE
+
+
+
+        </div>
+
+
+
+
+
+        <div
+class="right-line"></div>
+
+
+
+
+
+    </div>
+
+
+
+
+
+    <!--
+========================================================
+
+         ORANGE BOTTOM BAR
+
+
+======================================================== -->
+
+
+
+    <div
+class="orange-bar"></div>
+
+
+
+
 
 </div>
 
+
+
+
+
 </body>
 
+
+
 </html>
+
+
+
 """
 
+# ============================================================
+
+# INSERT LOGO
+
+# ============================================================
+
+
+header_html = header_html.replace(
+
+    "LOGO_IMAGE_BASE64",
+
+    logo_base64
+
+)
+
+# ============================================================
+
+# INSERT DATE
+
+# ============================================================
+
+
+header_html = header_html.replace(
+
+    "CURRENT_DATE_VALUE",
+
+    current_date
+
+)
+
+# ============================================================
+
+# INSERT TIME
+
+# ============================================================
+
+
+header_html = header_html.replace(
+
+    "CURRENT_TIME_VALUE",
+
+    current_time
+
+)
+
+# ============================================================
+
+# DISPLAY HEADER
+
+# ============================================================
+
+
 components.html(
+
     header_html,
-    height=78,
+
+    height=114,
+
     scrolling=False
+
 )
 
 # =========================================================
@@ -1639,13 +1997,8 @@ with k1:
     st.html(
 
         f"""
-        <div class="kpi-card">
-
-            <div class="kpi-icon">
-                ▣
-            </div>
-
-            <div class="kpi-content">
+        <div class="kpi-card total">
+<div class="kpi-content">
 
                 <div class="kpi-label">
                     TOTAL INCIDENTS
@@ -1654,12 +2007,7 @@ with k1:
                 <div class="kpi-value blue">
                     {total_pssr}
                 </div>
-
-                <div class="kpi-description">
-                    100% of total
-                </div>
-
-            </div>
+</div>
 
         </div>
         """
@@ -1683,12 +2031,7 @@ with k2:
 
         f"""
         <div class="kpi-card completed">
-
-            <div class="kpi-icon">
-                ✓
-            </div>
-
-            <div class="kpi-content">
+<div class="kpi-content">
 
                 <div class="kpi-label">
                     INVESTIGATION COMPLETED
@@ -1697,12 +2040,7 @@ with k2:
                 <div class="kpi-value green">
                     {completed}
                 </div>
-
-                <div class="kpi-description">
-                    {completed_pct:.1f}% completed
-                </div>
-
-            </div>
+</div>
 
         </div>
         """
@@ -1726,12 +2064,7 @@ with k3:
 
         f"""
         <div class="kpi-card pending">
-
-            <div class="kpi-icon">
-                ◷
-            </div>
-
-            <div class="kpi-content">
+<div class="kpi-content">
 
                 <div class="kpi-label">
                     INVESTIGATION PENDING
@@ -1740,12 +2073,7 @@ with k3:
                 <div class="kpi-value red">
                     {pending_overdue}
                 </div>
-
-                <div class="kpi-description">
-                    {pending_pct:.1f}% of total
-                </div>
-
-            </div>
+</div>
 
         </div>
         """
@@ -1757,12 +2085,7 @@ with k4:
 
         f"""
         <div class="kpi-card compliance">
-
-            <div class="kpi-icon">
-                ◔
-            </div>
-
-            <div class="kpi-content">
+<div class="kpi-content">
 
                 <div class="kpi-label">
                     COMPLIANCE
@@ -1771,12 +2094,7 @@ with k4:
                 <div class="kpi-value red">
                     {compliance:.1f}%
                 </div>
-
-                <div class="kpi-description">
-                    Completed %
-                </div>
-
-            </div>
+</div>
 
         </div>
         """
@@ -1802,7 +2120,7 @@ with k5:
 
         f"""
         <div
-            class="kpi-card compliance"
+            class="kpi-card ongoing"
             style="height:108px;"
         >
 
@@ -1969,17 +2287,12 @@ with c1:
             textposition="outside",
 
             marker=dict(
-
-                color="#123f7a",
-
-                line=dict(
-
-                    color="#0a2d5a",
-
-                    width=1
-
-                )
-
+                color=[
+                    "#00E5FF", "#7C4DFF", "#FF4081", "#FFC400",
+                    "#00E676", "#448AFF", "#FF6D00", "#D500F9",
+                    "#00BFA5", "#FF1744", "#76FF03", "#536DFE"
+                ][:len(dept)],
+                line=dict(color="rgba(255,255,255,0.95)", width=1.5)
             ),
 
             hovertemplate=(
@@ -2327,17 +2640,8 @@ with c3:
             cliponaxis=False,
 
             marker=dict(
-
-                color="#123f7a",
-
-                line=dict(
-
-                    color="#0a2d5a",
-
-                    width=1
-
-                )
-
+                color=["#00E5FF", "#FF4081", "#FFC400"][:len(values_plot)],
+                line=dict(color="rgba(255,255,255,0.95)", width=1.5)
             ),
 
             hovertemplate=(
@@ -2356,7 +2660,7 @@ with c3:
 
         dict(
 
-            x=-1.30,
+            x=-1.05,
 
             y=2,
 
@@ -2388,7 +2692,7 @@ with c3:
 
         dict(
 
-            x=-1.30,
+            x=-1.05,
 
             y=1,
 
@@ -2420,7 +2724,7 @@ with c3:
 
         dict(
 
-            x=-1.30,
+            x=-1.05,
 
             y=0,
 
@@ -2621,10 +2925,45 @@ with r3_left:
 
     level_values = [
 
-        6,
-        8,
-        5,
-        5
+        int(
+            (
+                    filtered_df[COL["level"]]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    == "LEVEL 1"
+            ).sum()
+        ),
+
+        int(
+            (
+                    filtered_df[COL["level"]]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    == "LEVEL 2"
+            ).sum()
+        ),
+
+        int(
+            (
+                    filtered_df[COL["level"]]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    == "LEVEL 3"
+            ).sum()
+        ),
+
+        int(
+            (
+                    filtered_df[COL["level"]]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    == "LEVEL 4"
+            ).sum()
+        )
 
     ]
 
@@ -2837,29 +3176,53 @@ with r3_right:
 
         (
             "LEVEL 1",
-            6,
-            25.0,
+            level_values[0],
+            (
+                level_values[0]
+                / level_total
+                * 100
+                if level_total
+                else 0
+            ),
             "#15984d"
         ),
 
         (
             "LEVEL 2",
-            8,
-            33.3,
+            level_values[1],
+            (
+                level_values[1]
+                / level_total
+                * 100
+                if level_total
+                else 0
+            ),
             "#2455a4"
         ),
 
         (
             "LEVEL 3",
-            5,
-            20.8,
+            level_values[2],
+            (
+                level_values[2]
+                / level_total
+                * 100
+                if level_total
+                else 0
+            ),
             "#d99c00"
         ),
 
         (
             "LEVEL 4",
-            5,
-            20.8,
+            level_values[3],
+            (
+                level_values[3]
+                / level_total
+                * 100
+                if level_total
+                else 0
+            ),
             "#d9272e"
         )
 
@@ -2968,21 +3331,182 @@ st.markdown(
 )
 
 # ---------------------------------------------------------
-# PSI SHEET DATA
+# GOOGLE SHEET DATA
+# 5 ROWS AT A TIME
 # ---------------------------------------------------------
 
-try:
+PSI_PAGE_SIZE = 5
+
+if "psi_google_sheet_page" not in st.session_state:
+    st.session_state.psi_google_sheet_page = 0
+
+psi_total_rows = len(df)
+
+psi_total_pages = max(
+    1,
+    (psi_total_rows + PSI_PAGE_SIZE - 1)
+    // PSI_PAGE_SIZE
+)
+
+psi_current_page = st.session_state.psi_google_sheet_page
+
+if psi_current_page >= psi_total_pages:
+    psi_current_page = psi_total_pages - 1
+    st.session_state.psi_google_sheet_page = psi_current_page
+
+if psi_current_page < 0:
+    psi_current_page = 0
+    st.session_state.psi_google_sheet_page = 0
+
+psi_start = psi_current_page * PSI_PAGE_SIZE
+
+psi_end = min(
+    psi_start + PSI_PAGE_SIZE,
+    psi_total_rows
+)
+
+psi_page_df = df.iloc[
+    psi_start:psi_end
+].copy()
+
+# ---------------------------------------------------------
+# ALIGNMENT
+# Sr No = CENTER
+# All other columns = LEFT
+# ---------------------------------------------------------
+
+if not psi_page_df.empty:
+
+    # Convert ONLY Sr No to text so Streamlit does not
+    # automatically right-align the numeric values.
+    first_column = psi_page_df.columns[0]
+
+    psi_page_df[first_column] = (
+        psi_page_df[first_column]
+        .fillna("")
+        .astype(str)
+    )
+
+    psi_styled_df = psi_page_df.style
+
+    # All Google Sheet parameters LEFT aligned
+    psi_styled_df = psi_styled_df.set_properties(
+        subset=list(psi_page_df.columns),
+        **{
+            "text-align": "left",
+            "vertical-align": "middle"
+        }
+    )
+
+    # ONLY Sr No CENTER aligned
+    psi_styled_df = psi_styled_df.set_properties(
+        subset=[first_column],
+        **{
+            "text-align": "center",
+            "vertical-align": "middle"
+        }
+    )
 
     st.dataframe(
-        df,
+        psi_styled_df,
         use_container_width=True,
-        height=500,
+        height=255,
         hide_index=True
     )
 
-except Exception as exc:
+else:
 
-    st.error(
-        f"Unable to display PSI Google Sheet data: {exc}"
+    st.info("No PSI data found in Google Sheet.")
+
+# ---------------------------------------------------------
+# PAGINATION INFORMATION
+# Use st.html so <div> is NOT shown as text.
+# ---------------------------------------------------------
+
+psi_showing_from = (
+    psi_start + 1
+    if psi_total_rows > 0
+    else 0
+)
+
+psi_showing_to = psi_end
+
+st.html(
+    f"""
+    <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        height:34px;
+        padding:0 10px;
+        background:#ffffff;
+        border:1px solid #dfe7eb;
+        border-top:none;
+        font-family:Arial,sans-serif;
+        font-size:9px;
+        color:#586b7b;
+    ">
+        <div>
+            Showing {psi_showing_from}
+            to {psi_showing_to}
+            of {psi_total_rows} entries
+        </div>
+
+        <div>
+            Page {psi_current_page + 1}
+            of {psi_total_pages}
+        </div>
+    </div>
+    """
+)
+
+# ---------------------------------------------------------
+# PREVIOUS / NEXT BUTTONS
+# ---------------------------------------------------------
+
+psi_previous_col, psi_next_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+with psi_previous_col:
+    psi_previous_clicked = st.button(
+        "← Previous",
+        key="psi_google_sheet_previous",
+        disabled=(
+                psi_current_page == 0
+        ),
+        use_container_width=True
     )
+
+with psi_next_col:
+    psi_next_clicked = st.button(
+        "Next →",
+        key="psi_google_sheet_next",
+        disabled=(
+                psi_current_page
+                >= psi_total_pages - 1
+        ),
+        use_container_width=True
+    )
+
+# ---------------------------------------------------------
+# CHANGE PAGE
+# ---------------------------------------------------------
+
+if psi_previous_clicked:
+    st.session_state.psi_google_sheet_page = max(
+        0,
+        psi_current_page - 1
+    )
+
+    st.rerun()
+
+if psi_next_clicked:
+    st.session_state.psi_google_sheet_page = min(
+        psi_total_pages - 1,
+        psi_current_page + 1
+    )
+
+    st.rerun()
 

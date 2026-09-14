@@ -1,5 +1,7 @@
 import io
 import re
+import base64
+from pathlib import Path
 from html.parser import HTMLParser
 from datetime import datetime
 
@@ -7,6 +9,7 @@ import pandas as pd
 import requests
 from openpyxl import load_workbook
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
 # ============================================================
@@ -37,9 +40,11 @@ SHEETS = {
     "PS Incident": "354502422",  # corrected: Incident
     "Training": "1071736559",  # corrected: Training
     "SOC-SOL": "510439154",
-    "Critical Equipment": None,
-    "Alarm": None,
-    "Barrier Audit": "1790395364",
+    "Interlock ": 1552637895,
+    "PSM CE ": 1552637895,
+    "Failure Data": 1071263265,
+    "Barrier Audit": "1741048982",
+    "Audit Compliance": "1790395364",
 }
 
 # ============================================================
@@ -59,8 +64,9 @@ st.markdown(
 
 
 
-   .block-container {
+.block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-35px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -273,320 +279,694 @@ div[data-testid="stMetricLabel"] p {
     unsafe_allow_html=True,
 )
 
-# ALL DEPARTMENTS HEADER
-# Same tested header design; only department title is changed
+# BASE DIRECTORY
 # ============================================================
 
-header_html = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-
-<style>
-
-* {
-    box-sizing: border-box;
-}
-
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, Helvetica, sans-serif;
-}
-
-body {
-    background: #f4f9fc;
-}
-
-.header {
-    position: relative;
-    width: 100%;
-    height: 145px;
-    overflow: hidden;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        radial-gradient(
-            ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
-        );
-
-    border-top: 2px solid #0b91d1;
-    border-bottom: 3px solid #1487c2;
-
-    box-shadow:
-        0 4px 12px rgba(21,92,130,.18);
-}
-
-.header::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-
-    background-image:
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17) 1.2px,
-            transparent 1.5px
-        );
-
-    background-size: 15px 15px;
-    opacity: .65;
-}
-
-.header::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-
-    background:
-        linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        ),
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        );
-}
-
-.content {
-    position: relative;
-    z-index: 8;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
+BASE_DIR = Path(__file__).resolve().parent
 
-    text-align: center;
-}
-
-.title {
-    color: #153e68;
-    font-size: 24px;
-    font-weight: 950;
-    letter-spacing: 5px;
-    line-height: 1;
-    margin-bottom: 5px;
-
-    text-shadow:
-        0 1px 1px rgba(255,255,255,.9);
-}
 
-.pillar {
-    position: relative;
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
 
-    width: 560px;
-    height: 66px;
+def image_to_base64(file_path):
+    file_path = Path(file_path)
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #176ca5 0%,
-            #07518b 55%,
-            #063e70 100%
-        );
-
-    border: 1px solid #0877ba;
-    border-radius: 14px;
-
-    color: #ffd21a;
-
-    font-size: 42px;
-    font-weight: 950;
-    letter-spacing: 1px;
-
-    box-shadow:
-        0 7px 16px rgba(11,83,130,.25),
-        inset 0 1px 0 rgba(255,255,255,.28),
-        inset 0 -5px 12px rgba(0,35,75,.16);
-}
-
-.pillar::before,
-.pillar::after {
-    position: absolute;
-
-    top: 50%;
-    transform: translateY(-50%);
-
-    color: #51c5ff;
-    font-size: 21px;
-    font-weight: 950;
-    letter-spacing: -5px;
-
-    text-shadow:
-        0 1px 5px rgba(0,100,160,.5);
-}
-
-.pillar::before {
-    content: "◀◀";
-    left: 17px;
-}
-
-.pillar::after {
-    content: "▶▶";
-    right: 17px;
-}
-
-.subtitle {
-    margin-top: 7px;
+    if not file_path.exists():
+        return ""
 
-    height: 25px;
-    min-width: 700px;
+    try:
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
+        with open(file_path, "rb") as file:
 
-    padding: 4px 30px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #075b8e,
-            #1188c4,
-            #075b8e
-        );
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
 
-    border: 1px solid #078fd2;
-    border-radius: 7px;
+    except Exception:
 
-    color: #ffffff;
+        return ""
 
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 1.8px;
+    # ============================================================
 
-    box-shadow:
-        0 4px 9px rgba(10,93,140,.20),
-        inset 0 1px 0 rgba(255,255,255,.25);
-}
 
-.top-line {
-    position: absolute;
+# COMPANY LOGO
+# ============================================================
 
-    top: 0;
-    left: 24%;
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
 
-    width: 52%;
-    height: 3px;
+logo_base64 = image_to_base64(logo_path)
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #00a9ff 18%,
-            #ffffff 50%,
-            #00a9ff 82%,
-            transparent
-        );
+# ============================================================
+# FILE CHECK
+# ============================================================
 
-    box-shadow:
-        0 0 8px rgba(0,169,255,.55);
-}
+if not logo_base64:
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
 
-.corner-light {
-    position: absolute;
-    z-index: 10;
+# ============================================================
+# DATE AND TIME
+# ============================================================
 
-    width: 110px;
-    height: 3px;
+now = datetime.now()
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #00baff,
-            transparent
-        );
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
 
-    box-shadow:
-        0 0 8px rgba(0,186,255,.55);
-}
+current_time = now.strftime(
+    "%I:%M %p"
+)
 
-.corner-left {
-    left: 7%;
-    top: 7px;
-}
+# ============================================================
+# HEADER HTML
+# ============================================================
 
-.corner-right {
-    right: 7%;
-    top: 7px;
-}
+header_html = """ 
 
-</style>
-</head>
+<!DOCTYPE html> 
 
-<body>
+<html> 
 
-<div class="header">
+<head> 
 
-    <div class="top-line"></div>
+<meta charset="UTF-8"> 
 
-    <div class="corner-light corner-left"></div>
-    <div class="corner-light corner-right"></div>
+<style> 
 
-    <div class="content">
 
-        <div class="title">
-            PSM DASHBOARD
-        </div>
+/* ============================================================ 
+   MAIN HEADER 
+   ============================================================ */ 
 
-        <div class="pillar">
-            ALL DEPARTMENTS
-        </div>
+.psm-header { 
 
-        <div class="subtitle">
-            PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL
-        </div>
+    position: relative; 
 
-    </div>
+    width: 100%; 
 
-</div>
+    height: 90px; 
 
-</body>
-</html>
+    overflow: hidden; 
+
+    background: 
+        linear-gradient( 
+            90deg, 
+            #031d34 0%, 
+            #052b49 42%, 
+            #07385c 74%, 
+            #052b49 100% 
+        ); 
+
+    border-radius: 7px; 
+
+    box-shadow: 
+        0 3px 9px 
+        rgba(0,0,0,0.18); 
+
+} 
+
+
+/* ============================================================ 
+   LEFT LOGO AREA 
+   ============================================================ */ 
+
+.psm-left { 
+
+    position: absolute; 
+
+    left: 0; 
+
+    top: 0; 
+
+    width: 100%; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    align-items: center; 
+
+    padding-left: 4px; 
+
+    box-sizing: border-box; 
+
+    z-index: 20; 
+
+    pointer-events: none; 
+
+} 
+
+
+/* ============================================================ 
+   LOGO PANEL 
+   ONLY VERTICAL POSITION CHANGED 
+   ============================================================ */ 
+
+.logo-panel { 
+
+    width: 195px; 
+
+    height: 68px; 
+
+    background: #ffffff; 
+
+    border-radius: 5px; 
+
+    padding: 4px; 
+
+    display: flex; 
+
+    align-items: center; 
+
+    justify-content: center; 
+
+    flex-shrink: 0; 
+
+    box-sizing: border-box; 
+
+    box-shadow: 
+        0 3px 9px 
+        rgba(0,0,0,0.20); 
+
+    position: relative; 
+
+    top: -6px; 
+
+    left: 6px; 
+
+} 
+
+
+/* ============================================================ 
+   COMPANY LOGO 
+   ============================================================ */ 
+
+.company-logo { 
+
+    width: 100%; 
+
+    height: 100%; 
+
+    object-fit: contain; 
+
+    object-position: center; 
+
+    display: block; 
+
+} 
+
+
+/* ============================================================ 
+   LEFT VERTICAL DIVIDER 
+   ============================================================ */ 
+
+.vertical-line { 
+
+    width: 2px; 
+
+    height: 83px; 
+
+    background: 
+        rgba(255,255,255,0.65); 
+
+    margin-left: 18px; 
+
+    margin-right: 20px; 
+
+    flex-shrink: 0; 
+
+} 
+
+
+/* ============================================================ 
+   CENTER TITLE AREA 
+   ============================================================ */ 
+
+.title-area { 
+
+    position: absolute; 
+
+    left: 50%; 
+
+    top: 0; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    flex-direction: column; 
+
+    justify-content: center; 
+
+    align-items: center; 
+
+    text-align: center; 
+
+    min-width: max-content; 
+
+    box-sizing: border-box; 
+
+    transform: translateX(-50%); 
+
+} 
+
+
+/* ============================================================ 
+   MAIN TITLE 
+   ============================================================ */ 
+
+.main-title { 
+
+    color: #ffffff; 
+
+    font-family: 
+        "Arial Narrow", 
+        "Roboto Condensed", 
+        Arial, 
+        sans-serif; 
+
+    font-size: 27px; 
+
+    font-weight: 900; 
+
+    line-height: 1; 
+
+    letter-spacing: 0.3px; 
+
+    white-space: nowrap; 
+
+    margin: 0; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   ORANGE TITLE PART 
+   ============================================================ */ 
+
+.main-title-orange { 
+
+    color: #f28c00; 
+
+} 
+
+
+/* ============================================================ 
+   SUBTITLE 
+   ============================================================ */ 
+
+.subtitle { 
+
+    color: #ffffff; 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 12px; 
+
+    font-weight: 400; 
+
+    letter-spacing: 3.6px; 
+
+    margin-top: 8px; 
+
+    line-height: 1; 
+
+    white-space: nowrap; 
+
+} 
+
+/* ============================================================ 
+   SUB-SUBTITLE / TAGLINE 
+   ============================================================ */ 
+
+.tagline { 
+
+    color: 
+        rgba(255,255,255,0.82); 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 7px; 
+
+    font-weight: 500; 
+
+    letter-spacing: 2.2px; 
+
+    margin-top: 6px; 
+
+    line-height: 1; 
+
+    white-space: nowrap; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT DATE / TIME AREA 
+   ============================================================ */ 
+
+.psm-right { 
+
+    position: absolute; 
+
+    right: 16px; 
+
+    top: 0; 
+
+    width: 15%; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    flex-direction: column; 
+
+    justify-content: center; 
+
+    align-items: flex-end; 
+
+    text-align: right; 
+
+    color: #ffffff; 
+
+    z-index: 30; 
+
+    padding-left: 18px; 
+
+    box-sizing: border-box; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT VERTICAL DIVIDER 
+   ============================================================ */ 
+
+.psm-right::before { 
+
+    content: ""; 
+
+    position: absolute; 
+
+    left: 0; 
+
+    top: 6px; 
+
+    width: 2px; 
+
+    height: 83px; 
+
+    background: 
+        rgba(255,255,255,0.65); 
+
+} 
+
+
+/* ============================================================ 
+   DATE 
+   ============================================================ */ 
+
+.date { 
+
+    color: 
+        rgba(255,255,255,0.95); 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 11px; 
+
+    font-weight: 400; 
+
+    letter-spacing: 0.7px; 
+
+    line-height: 1; 
+
+    margin: 0; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   TIME 
+   ============================================================ */ 
+
+.time { 
+
+    color: #ffffff; 
+
+    font-family: 
+        "Arial Narrow", 
+        "Roboto Condensed", 
+        Arial, 
+        sans-serif; 
+
+    font-size: 22px; 
+
+    font-weight: 800; 
+
+    margin-top: 4px; 
+
+    line-height: 1; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT HORIZONTAL LINE 
+   ============================================================ */ 
+
+.right-line { 
+
+    width: 80px; 
+
+    height: 2px; 
+
+    background: 
+        rgba(255,255,255,0.75); 
+
+    margin-top: 7px; 
+
+    flex-shrink: 0; 
+
+} 
+
+
+/* ============================================================ 
+   ORANGE BOTTOM BAR 
+   ============================================================ */ 
+
+.orange-bar { 
+
+    position: absolute; 
+
+    left: 0; 
+
+    bottom: 0; 
+
+    width: 100%; 
+
+    height: 4px; 
+
+    background: #f28c00; 
+
+    z-index: 50; 
+
+} 
+
+
+</style> 
+
+</head> 
+
+
+<body> 
+
+
+<!-- ============================================================ 
+     MAIN HEADER 
+     ============================================================ --> 
+
+<div class="psm-header"> 
+
+
+    <!-- ======================================================== 
+         LEFT LOGO AREA 
+         ======================================================== --> 
+
+    <div class="psm-left"> 
+
+
+        <!-- ==================================================== 
+             LOGO 
+             ==================================================== --> 
+
+        <div class="logo-panel"> 
+
+            <img 
+                class="company-logo" 
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64" 
+                alt="JSW JFE Steel Limited" 
+            > 
+
+        </div> 
+
+
+        <!-- ==================================================== 
+             LEFT VERTICAL LINE 
+             ==================================================== --> 
+
+        <div class="vertical-line"></div> 
+
+
+        <!-- ==================================================== 
+             CENTER TITLE GROUP 
+             ==================================================== --> 
+
+        <div class="title-area"> 
+
+
+            <!-- MAIN TITLE --> 
+
+            <div class="main-title"> 
+
+                ALL DEPARTMENTS 
+
+                <span class="main-title-orange"></span> 
+
+            </div> 
+
+
+            <!-- SUBTITLE --> 
+
+            <div class="subtitle"> 
+
+                PSM DIGITAL DASHBOARD 
+
+            </div> 
+
+
+            <!-- SUB-SUBTITLE --> 
+
+            <div class="tagline"> 
+
+                PEOPLE 
+                &nbsp; | &nbsp; 
+                PROCESS 
+                &nbsp; | &nbsp; 
+                RISK 
+                &nbsp; | &nbsp; 
+                COMPLIANCE 
+
+            </div> 
+
+
+        </div> 
+
+
+    </div> 
+
+
+    <!-- ======================================================== 
+         RIGHT DATE / TIME 
+         ======================================================== --> 
+
+    <div class="psm-right"> 
+
+
+        <div class="date"> 
+
+            CURRENT_DATE_VALUE 
+
+        </div> 
+
+
+        <div class="time"> 
+
+            CURRENT_TIME_VALUE 
+
+        </div> 
+
+
+        <div class="right-line"></div> 
+
+
+    </div> 
+
+
+    <!-- ======================================================== 
+         ORANGE BOTTOM BAR 
+         ======================================================== --> 
+
+    <div class="orange-bar"></div> 
+
+
+</div> 
+
+
+</body> 
+
+</html> 
+
 """
 
-st.components.v1.html(
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
+header_html = header_html.replace(
+    "LOGO_IMAGE_BASE64",
+    logo_base64
+)
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
+)
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
+
+components.html(
     header_html,
-    height=170,
+    height=114,
     scrolling=False
 )
 
+st.markdown(
+    "<div style='height:12px;'></div>",
+    unsafe_allow_html=True
+)
 
-# ============================================================
 # HELPERS
 # ============================================================
 def norm(value):
@@ -790,33 +1170,147 @@ def load_google_sheet(gid):
             return pd.DataFrame()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def load_interlock_sheet():
+    """
+    Find and load the real Interlock tab from the Google workbook.
+
+    The Interlock tab is identified by its actual register headers rather
+    than a hard-coded GID. This prevents the dashboard from accidentally
+    reading another tab when the GID is incorrect.
+    """
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        required_headers = {
+            "sno",
+            "department",
+            "interlockdescription",
+            "datebypassed",
+            "presentstatusactionrequired",
+        }
+
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+
+            # Look through the first 10 rows for the register header.
+            header_found = None
+            buffered = []
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                normalized_headers = {
+                    re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+                    for value in row
+                    if value is not None
+                }
+
+                if required_headers.issubset(normalized_headers):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            data_rows = all_rows[header_found + 1:]
+
+            # Remove completely blank columns from the header.
+            valid_columns = [
+                i for i, value in enumerate(headers)
+                if value is not None and str(value).strip() != ""
+            ]
+
+            if not valid_columns:
+                continue
+
+            clean_headers = [str(headers[i]).strip() for i in valid_columns]
+            records = []
+
+            for row in data_rows:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    value is not None and str(value).strip() != ""
+                    for value in values
+                ):
+                    records.append(values)
+
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+    except Exception:
+        return pd.DataFrame()
+
+    return pd.DataFrame()
+
+
 class _AuditLinkParser(HTMLParser):
-    """Extract hyperlinks from the Compliance Report column of gviz HTML."""
+    """Extract cell text and real hyperlinks from Google Sheets GViz HTML."""
+
     def __init__(self):
         super().__init__()
         self.rows = []
         self._row = None
-        self._cell = None
-        self._cell_href = None
+        self._cell_open = False
+        self._cell_href = ""
+        self._cell_text = []
         self._in_table = False
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        tag = tag.lower()
+
         if tag == "table":
             self._in_table = True
         elif self._in_table and tag == "tr":
             self._row = []
         elif self._in_table and tag in ("td", "th") and self._row is not None:
-            self._cell = True
-            self._cell_href = None
-        elif self._in_table and tag == "a" and self._cell:
-            self._cell_href = attrs.get("href")
+            self._cell_open = True
+            self._cell_href = ""
+            self._cell_text = []
+        elif self._in_table and tag == "a" and self._cell_open:
+            self._cell_href = attrs.get("href", "") or ""
+
+    def handle_data(self, data):
+        if self._cell_open:
+            self._cell_text.append(data)
 
     def handle_endtag(self, tag):
-        if tag in ("td", "th") and self._cell:
-            self._row.append(self._cell_href or "")
-            self._cell = None
-            self._cell_href = None
+        tag = tag.lower()
+
+        if tag in ("td", "th") and self._cell_open:
+            self._row.append({
+                "text": " ".join(self._cell_text).strip(),
+                "href": self._cell_href.strip(),
+            })
+            self._cell_open = False
+            self._cell_href = ""
+            self._cell_text = []
         elif tag == "tr" and self._row is not None:
             self.rows.append(self._row)
             self._row = None
@@ -825,18 +1319,29 @@ class _AuditLinkParser(HTMLParser):
 
 
 def load_audit_with_links(gid):
-    """Load Audit tab and dynamically extract the current Compliance Report hyperlinks.
+    """Load Audit tab and recover the live Audit Report hyperlinks.
 
-    The URL is NEVER hard-coded. Each refresh downloads the current Google Sheet
-    XLSX and reads the hyperlink attached to the Compliance Report cell.
-    This means a new monthly report/link is picked up automatically.
+    The Google Sheet uses rich-text hyperlinks in the Audit Report column.
+    We first try XLSX hyperlinks, then GViz HTML, and finally create a
+    row-specific Google Sheet link so a report is never incorrectly shown
+    as 'Not attached' when the report name exists.
     """
     df = load_google_sheet(gid)
     if df.empty or not gid:
         return df
 
+    df = clean_dataframe(df).copy()
     url_values = [""] * len(df)
 
+    # Identify the actual Audit Report column from the loaded sheet.
+    audit_report_col = find_col(
+        df,
+        ["Audit Report", "Audit Report Link", "Compliance Report", "Report"],
+    )
+
+    # ------------------------------------------------------------
+    # METHOD 1: XLSX cell hyperlinks
+    # ------------------------------------------------------------
     xlsx_url = (
         f"https://docs.google.com/spreadsheets/d/"
         f"{SPREADSHEET_ID}/export?format=xlsx&gid={gid}"
@@ -855,35 +1360,30 @@ def load_audit_with_links(gid):
             data_only=False,
             read_only=False,
         )
-
-        # Google normally exports the requested GID as the active/first sheet.
         ws = workbook.active
 
-        # Find the header row and Compliance Report column dynamically.
         header_row = None
-        report_col = None
+        report_col_num = None
 
         for row in ws.iter_rows():
             for cell in row:
-                value = str(cell.value or "").strip().lower()
+                value = norm(cell.value)
                 if value in {
-                    "compliance report",
-                    "compliance report link",
-                    "audit report",
+                    "auditreport",
+                    "auditreportlink",
+                    "compliancereport",
+                    "compliancereportlink",
                     "report",
                 }:
                     header_row = cell.row
-                    report_col = cell.column
+                    report_col_num = cell.column
                     break
-            if report_col is not None:
+            if report_col_num is not None:
                 break
 
-        if report_col is not None:
-            # Extract both direct cell hyperlinks and HYPERLINK formulas.
-            hyperlink_rows = []
-
+        if report_col_num is not None:
             for row_no in range((header_row or 1) + 1, ws.max_row + 1):
-                cell = ws.cell(row=row_no, column=report_col)
+                cell = ws.cell(row=row_no, column=report_col_num)
                 url = ""
 
                 if cell.hyperlink:
@@ -892,52 +1392,229 @@ def load_audit_with_links(gid):
                     except Exception:
                         url = ""
 
-                # Also support =HYPERLINK("URL","Displayed Text")
                 if not url and isinstance(cell.value, str):
-                    formula = cell.value.strip()
                     match = re.search(
                         r'HYPERLINK\s*\(\s*["\'](https?://[^"\']+)["\']',
-                        formula,
+                        cell.value,
                         flags=re.IGNORECASE,
                     )
                     if match:
                         url = match.group(1).strip()
 
-                hyperlink_rows.append(url)
-
-            # Map by row order to the CSV records.
-            for i in range(min(len(url_values), len(hyperlink_rows))):
-                url_values[i] = hyperlink_rows[i]
+                idx = row_no - (header_row or 1) - 1
+                if 0 <= idx < len(url_values) and url:
+                    url_values[idx] = url
 
         workbook.close()
-
     except Exception:
-        # Do not break the dashboard if XLSX hyperlink extraction fails.
         pass
 
-    # Last fallback: direct URL already present in CSV cell.
-    fallback_col = find_col(
-        df,
-        [
-            "Compliance Report",
-            "Compliance Report Link",
-            "Audit Report",
-            "Report",
-        ],
-    )
+    # ------------------------------------------------------------
+    # METHOD 2: GViz HTML - preserves rich-text hyperlinks
+    # ------------------------------------------------------------
+    try:
+        gviz_html_url = (
+            f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/gviz/tq?"
+            f"tqx=out:html&gid={gid}"
+        )
 
-    if fallback_col:
+        gviz_response = requests.get(
+            gviz_html_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        gviz_response.raise_for_status()
+
+        parser = _AuditLinkParser()
+        parser.feed(gviz_response.text)
+
+        if parser.rows and audit_report_col:
+            report_index = list(df.columns).index(audit_report_col)
+            source_rows = parser.rows[1:]  # first row is the header
+
+            for i, parsed_row in enumerate(source_rows):
+                if i >= len(url_values) or url_values[i]:
+                    continue
+
+                if report_index < len(parsed_row):
+                    href = parsed_row[report_index].get("href", "").strip()
+                    if href:
+                        url_values[i] = href
+    except Exception:
+        pass
+
+    # ------------------------------------------------------------
+    # METHOD 3: if the rich-text URL cannot be exposed by Google,
+    # link directly to the corresponding Audit Report cell.
+    # This keeps the report accessible instead of showing Not attached.
+    # ------------------------------------------------------------
+    if audit_report_col:
         for i in range(len(df)):
             if url_values[i]:
                 continue
-            value = str(df.iloc[i][fallback_col]).strip()
-            if re.match(r"^https?://", value, re.I):
-                url_values[i] = value
 
-    df = df.copy()
+            report_name = str(df.iloc[i][audit_report_col]).strip()
+            if report_name and report_name.lower() not in {"nan", "none"}:
+                sheet_row = i + 2  # header is row 1
+                url_values[i] = (
+                    f"https://docs.google.com/spreadsheets/d/"
+                    f"{SPREADSHEET_ID}/edit?gid={gid}"
+                    f"&range=E{sheet_row}"
+                )
+
     df["__COMPLIANCE_REPORT_URL"] = url_values
     return df
 
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_psm_ce_sheet():
+    """
+    Find and load the real PSM CE tab from the Google workbook.
+
+    The PSM CE tab is identified from its actual headers so it does not
+    depend on a possibly incorrect/hard-coded GID.
+    """
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        required_headers = {
+            "slno",
+            "month",
+            "department",
+            "noofpsmcefailedbreakdown",
+            "complianceofpsmcemo–mechanical–generated",
+            "complianceofpsmcemo–mechanical–completed",
+            "complianceofpsmcemo–e&i–generated",
+            "complianceofpsmcemo–e&i–completed",
+        }
+
+        def normalized_header(value):
+            text = str(value).strip().lower()
+            text = text.replace("–", "-").replace("—", "-")
+            text = text.replace("&", "and")
+            return re.sub(r"[^a-z0-9]+", "", text)
+
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+            buffered = []
+            header_found = None
+
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                normalized_headers = {
+                    normalized_header(value)
+                    for value in row
+                    if value is not None
+                }
+
+                # Use the distinctive PSM CE headers.  The exact wording
+                # can vary slightly in punctuation, so use key fragments.
+                has_slno = "slno" in normalized_headers
+                has_month = "month" in normalized_headers
+                has_department = "department" in normalized_headers
+                has_failed = any(
+                    "noofpsmcefailedbreakdown" in h
+                    for h in normalized_headers
+                )
+                has_mech_generated = any(
+                    "complianceofpsmcemo" in h
+                    and "mechanical" in h
+                    and "generated" in h
+                    for h in normalized_headers
+                )
+                has_mech_completed = any(
+                    "complianceofpsmcemo" in h
+                    and "mechanical" in h
+                    and "completed" in h
+                    for h in normalized_headers
+                )
+                has_ei_generated = any(
+                    "complianceofpsmcemo" in h
+                    and ("ei" in h or "eandl" in h or "eandi" in h)
+                    and "generated" in h
+                    for h in normalized_headers
+                )
+                has_ei_completed = any(
+                    "complianceofpsmcemo" in h
+                    and ("ei" in h or "eandl" in h or "eandi" in h)
+                    and "completed" in h
+                    for h in normalized_headers
+                )
+
+                if (
+                    has_slno
+                    and has_month
+                    and has_department
+                    and has_failed
+                    and has_mech_generated
+                    and has_mech_completed
+                    and has_ei_generated
+                    and has_ei_completed
+                ):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            valid_columns = [
+                i for i, value in enumerate(headers)
+                if value is not None and str(value).strip() != ""
+            ]
+
+            if not valid_columns:
+                continue
+
+            clean_headers = [
+                str(headers[i]).strip()
+                for i in valid_columns
+            ]
+            records = []
+
+            for row in all_rows[header_found + 1:]:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    value is not None and str(value).strip() != ""
+                    for value in values
+                ):
+                    records.append(values)
+
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+    except Exception:
+        return pd.DataFrame()
+
+    return pd.DataFrame()
 
 def load_module(name):
     """Load the complete module data for all departments."""
@@ -1124,7 +1801,6 @@ def show_register(title, df, id_names, description_names, status_names):
         )
 
 
-
 def make_moc_register(df):
     """Build the compact MOC register: MOC No., Description, Type, Status, Remarks."""
     if df is None or df.empty:
@@ -1259,7 +1935,6 @@ def show_moc_register(df):
     )
 
 
-
 # ============================================================
 # MODULE PAGE LINKS
 # ============================================================
@@ -1272,6 +1947,8 @@ MODULE_PAGE_LINKS = {
     "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
     "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
     "TRAINING": "pages/13_Training.py",
+    "INTERLOCK BYPASS": "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
+    "PSM CE": "pages/20_PSM CE & BARRIER HEALTH.py",
 }
 
 
@@ -1314,10 +1991,6 @@ def get_date_column(df):
 # ============================================================
 # LOAD DATA
 # ============================================================
-if st.button("↻ Refresh Data", key="refresh_data"):
-    st.cache_data.clear()
-    st.rerun()
-
 loaded = {}
 
 for module_name in SHEETS:
@@ -1331,7 +2004,11 @@ pssr = loaded["PSSR"]
 training = loaded["Training"]
 soc = loaded["SOC-SOL"]
 incident = loaded["PS Incident"]
-audit = load_audit_with_links(SHEETS["Barrier Audit"])
+interlock = load_interlock_sheet()
+psm_ce = load_psm_ce_sheet()
+loaded["PSM CE "] = psm_ce
+audit = load_audit_with_links(SHEETS["Audit Compliance"])
+failure_data = loaded["Failure Data"]
 
 # ============================================================
 # COMMON DEPARTMENT SELECTOR
@@ -1402,6 +2079,18 @@ soc = filter_selected_department(
 
 incident = filter_selected_department(
     incident,
+    selected_department
+)
+
+interlock = filter_selected_department(
+    interlock,
+    selected_department
+)
+
+# Apply the same department selector to PSM CE so that KPI values
+# and department-wise progress show the selected department only.
+psm_ce = filter_selected_department(
+    psm_ce,
     selected_department
 )
 # ============================================================
@@ -1874,27 +2563,97 @@ a, b, c = st.columns(
 
 with a:
     with st.container(border=True):
+
         show_module_title(
             5,
             "",
             "PRE-STARTUP SAFETY REVIEW (PSSR)"
         )
 
-        x = status_counts(pssr)
+        # --------------------------------------------------------
+        # FIND PSSR STATUS COLUMN
+        # --------------------------------------------------------
+        pssr_status_col = find_col(
+            pssr,
+            [
+                "Overdue/Pending/Completed",
+                "Overdue / Pending / Completed",
+                "Overdue Pending Completed",
+                "Status",
+                "Current Status"
+            ]
+        )
 
+        # --------------------------------------------------------
+        # CALCULATE PSSR STATUS COUNTS
+        # --------------------------------------------------------
+        if pssr is None or pssr.empty:
+
+            total_pssr = 0
+            completed_pssr = 0
+            pending_pssr = 0
+            overdue_pssr = 0
+
+        else:
+
+            total_pssr = len(pssr)
+
+            if pssr_status_col is not None:
+
+                pssr_status = (
+                    pssr[pssr_status_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.casefold()
+                )
+
+                completed_pssr = int(
+                    pssr_status.str.contains(
+                        "completed",
+                        na=False
+                    ).sum()
+                )
+
+                pending_pssr = int(
+                    pssr_status.str.contains(
+                        "pending",
+                        na=False
+                    ).sum()
+                )
+
+                overdue_pssr = int(
+                    pssr_status.str.contains(
+                        "overdue",
+                        na=False
+                    ).sum()
+                )
+
+            else:
+
+                completed_pssr = 0
+                pending_pssr = 0
+                overdue_pssr = 0
+
+        # --------------------------------------------------------
+        # KPI CARDS
+        # --------------------------------------------------------
         show_metric_row([
-            ("TOTAL PSSR", x["total"]),
-            ("COMPLETED", x["completed"]),
-            ("PENDING", x["pending"]),
-            ("OVERDUE", x["overdue"]),
+            ("TOTAL PSSR", total_pssr),
+            ("COMPLETED", completed_pssr),
+            ("PENDING", pending_pssr),
+            ("OVERDUE", overdue_pssr),
         ])
 
+        # --------------------------------------------------------
+        # PSSR REGISTER
+        # --------------------------------------------------------
         show_register(
             "PSSR REGISTER",
             pssr,
             [
-                "PSSR No",
                 "PSSR No.",
+                "PSSR No",
                 "PSSR ID",
                 "ID"
             ],
@@ -1904,6 +2663,8 @@ with a:
                 "PSSR Name"
             ],
             [
+                "Overdue/Pending/Completed",
+                "Overdue / Pending / Completed",
                 "Status",
                 "Current Status"
             ],
@@ -2872,29 +3633,26 @@ with c:
                     styled_df,
                     use_container_width=True,
                     hide_index=True,
-                    height=245,
+                    height=380,
                     key="bf_training_heatmap",
                 )
 
 # ============================================================
 # ROW 3 — SOC / SOL + AUDIT
 # ============================================================
-
 a, b = st.columns(
-    [1.35, 1.65],
+    [1, 1],
     gap="small"
 )
-
-# ============================================================
-# 8 — SOC / SOL DEVIATION
-# ============================================================
-
 # ============================================================
 # 8 — SOC / SOL DEVIATION
 # ============================================================
 
 with a:
-    with st.container(border=True):
+    with st.container(
+        border=True,
+        height=430
+    ):
 
         show_module_title(
             8,
@@ -2902,208 +3660,116 @@ with a:
             "SOC / SOL DEVIATION"
         )
 
-        if soc is None or soc.empty:
+        soc_data = clean_dataframe(soc) if soc is not None else pd.DataFrame()
 
-            st.info(
-                "No SOC / SOL data available."
-            )
+        if soc_data.empty:
+            st.info("No SOC / SOL data available.")
 
         else:
 
-            # ====================================================
-            # COLUMN MAPPING
-            # ====================================================
-
+            # ----------------------------------------------------
+            # FIND COLUMNS
+            # ----------------------------------------------------
             month_col = find_col(
-                soc,
-                [
-                    "Month",
-                    "MONTH",
-                    "month"
-                ]
+                soc_data,
+                ["Month"]
             )
 
-            department_col = find_col(
-                soc,
-                [
-                    "Department",
-                    "DEPARTMENT",
-                    "department"
-                ]
+            dept_col = find_col(
+                soc_data,
+                ["Department", "Dept"]
             )
 
             soc_col = find_col(
-                soc,
+                soc_data,
                 [
+                    "SOC Deviation",
                     "SOC Deviation Nos.",
                     "SOC Deviation No.",
-                    "SOC Deviation",
                     "SOC"
                 ]
             )
 
             sol_col = find_col(
-                soc,
+                soc_data,
                 [
+                    "SOL Deviation",
                     "SOL Deviation Nos.",
                     "SOL Deviation No.",
-                    "SOL Deviation",
                     "SOL"
                 ]
             )
 
-            if month_col is None:
+            if month_col is None or soc_col is None or sol_col is None:
 
                 st.error(
-                    "Month column not found in SOC / SOL Google Sheet."
+                    "SOC / SOL columns not found in the sheet."
                 )
 
             else:
 
-                df_socsol = soc.copy()
+                df_socsol = soc_data.copy()
 
-                # =================================================
-                # CLEAN MONTH
-                # =================================================
+                # ------------------------------------------------
+                # DEPARTMENT FILTER
+                # ------------------------------------------------
+                if (
+                    selected_department != "All Departments"
+                    and dept_col is not None
+                ):
 
-                df_socsol["_MONTH"] = (
-                    df_socsol[month_col]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
-                )
-
-                df_socsol = df_socsol[
-                    df_socsol["_MONTH"] != ""
-                    ].copy()
-
-                # =================================================
-                # DEPARTMENT CLEANING
-                # =================================================
-
-                if department_col is not None:
-
-                    df_socsol["_DEPARTMENT"] = (
-                        df_socsol[department_col]
-                        .fillna("")
-                        .astype(str)
-                        .str.strip()
+                    df_socsol = filter_selected_department(
+                        df_socsol,
+                        selected_department
                     )
 
-                else:
+                # ------------------------------------------------
+                # CONVERT NUMERIC VALUES
+                # ------------------------------------------------
+                df_socsol["_SOC_VALUE"] = pd.to_numeric(
+                    df_socsol[soc_col],
+                    errors="coerce"
+                ).fillna(0)
 
-                    df_socsol["_DEPARTMENT"] = "Unknown"
+                df_socsol["_SOL_VALUE"] = pd.to_numeric(
+                    df_socsol[sol_col],
+                    errors="coerce"
+                ).fillna(0)
 
-                # =================================================
-                # SOC VALUE
-                # =================================================
-
-                if soc_col is not None:
-
-                    df_socsol["_SOC_VALUE"] = (
-                        pd.to_numeric(
-                            df_socsol[soc_col],
-                            errors="coerce"
-                        )
-                        .fillna(0)
-                    )
-
-                else:
-
-                    df_socsol["_SOC_VALUE"] = 0
-
-                # =================================================
-                # SOL VALUE
-                # =================================================
-
-                if sol_col is not None:
-
-                    df_socsol["_SOL_VALUE"] = (
-                        pd.to_numeric(
-                            df_socsol[sol_col],
-                            errors="coerce"
-                        )
-                        .fillna(0)
-                    )
-
-                else:
-
-                    df_socsol["_SOL_VALUE"] = 0
-
-                # =================================================
-                # DEPARTMENT LIST
-                # =================================================
-
-                departments = sorted(
-                    [
-                        x
-                        for x in
-                        df_socsol["_DEPARTMENT"]
-                        .dropna()
-                        .unique()
-                        if str(x).strip() != ""
-                    ]
-                )
-
-                department_options = [
-                                         "All Departments"
-                                     ] + departments
-
-                # =================================================
-                # FILTER DATA
-                # =================================================
-
-                if selected_department == "All Departments":
-
-                    selected_socsol = df_socsol.copy()
-
-                else:
-
-                    selected_socsol = df_socsol[
-                        df_socsol["_DEPARTMENT"]
-                        .astype(str)
-                        .str.strip()
-                        == selected_department
-                        ].copy()
-
-                # =================================================
-                # TOTAL SOC / SOL
-                # =================================================
-
+                # ------------------------------------------------
+                # KPI TOTALS
+                # ------------------------------------------------
                 total_soc = int(
-                    selected_socsol["_SOC_VALUE"].sum()
+                    df_socsol["_SOC_VALUE"].sum()
                 )
 
                 total_sol = int(
-                    selected_socsol["_SOL_VALUE"].sum()
+                    df_socsol["_SOL_VALUE"].sum()
                 )
 
-                # =================================================
-                # KPI CARDS
-                # =================================================
-
-                k1, k2 = st.columns(
-                    2,
-                    gap="small"
-                )
-
-                with k1:
-
-                    st.metric(
-                        "TOTAL SOC",
-                        total_soc
-                    )
-
-                with k2:
-
-                    st.metric(
-                        "TOTAL SOL",
-                        total_sol
-                    )
+                show_metric_row([
+                    ("TOTAL SOC", total_soc),
+                    ("TOTAL SOL", total_sol),
+                ])
 
                 # =================================================
-                # FY MONTHS
+                # MONTH-WISE DATA
                 # =================================================
+
+                month_map = {
+                    "Apr-26": "April-26",
+                    "May-26": "May-26",
+                    "Jun-26": "June-26",
+                    "Jul-26": "July-26",
+                    "Aug-26": "August-26",
+                    "Sep-26": "September-26",
+                    "Oct-26": "October-26",
+                    "Nov-26": "November-26",
+                    "Dec-26": "December-26",
+                    "Jan-27": "January-27",
+                    "Feb-27": "February-27",
+                    "Mar-27": "March-27",
+                }
 
                 fy_months = [
                     "April-26",
@@ -3120,85 +3786,62 @@ with a:
                     "March-27",
                 ]
 
-                # =================================================
-                # MONTH-WISE SOC
-                # =================================================
+                df_socsol["_MONTH"] = (
+                    df_socsol[month_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .replace(month_map)
+                )
 
-                soc_monthly = (
-                    selected_socsol
-                    .groupby(
-                        "_MONTH",
-                        as_index=False
-                    )["_SOC_VALUE"]
+                # ------------------------------------------------
+                # GROUP MONTH-WISE
+                # ------------------------------------------------
+                monthly = (
+                    df_socsol
+                    .groupby("_MONTH", as_index=False)
+                    [
+                        [
+                            "_SOC_VALUE",
+                            "_SOL_VALUE"
+                        ]
+                    ]
                     .sum()
                 )
 
-                # =================================================
-                # MONTH-WISE SOL
-                # =================================================
-
-                sol_monthly = (
-                    selected_socsol
-                    .groupby(
-                        "_MONTH",
-                        as_index=False
-                    )["_SOL_VALUE"]
-                    .sum()
+                # ------------------------------------------------
+                # KEEP FY MONTH ORDER
+                # ------------------------------------------------
+                monthly["_ORDER"] = monthly["_MONTH"].apply(
+                    lambda x:
+                    fy_months.index(x)
+                    if x in fy_months
+                    else 999
                 )
 
-                # =================================================
-                # CREATE FY TABLE
-                # =================================================
-
-                monthly = pd.DataFrame(
-                    {
-                        "_MONTH": fy_months
-                    }
-                )
-
-                monthly = monthly.merge(
-                    soc_monthly,
-                    on="_MONTH",
-                    how="left"
-                )
-
-                monthly = monthly.merge(
-                    sol_monthly,
-                    on="_MONTH",
-                    how="left"
-                )
-
-                monthly["_SOC_VALUE"] = (
-                    monthly["_SOC_VALUE"]
-                    .fillna(0)
-                )
-
-                monthly["_SOL_VALUE"] = (
-                    monthly["_SOL_VALUE"]
-                    .fillna(0)
+                monthly = (
+                    monthly
+                    .sort_values("_ORDER")
+                    .drop(columns="_ORDER")
                 )
 
                 # =================================================
                 # GRAPH
                 # =================================================
 
-                fig = go.Figure()
+                fig_socsol = go.Figure()
 
-                # -------------------------------------------------
-                # SOC
-                # -------------------------------------------------
-
-                fig.add_trace(
+                fig_socsol.add_trace(
                     go.Scatter(
                         x=monthly["_MONTH"],
                         y=monthly["_SOC_VALUE"],
                         mode="lines+markers+text",
                         name="SOC Deviation",
 
-                        text=(
-                            monthly["_SOC_VALUE"]
-                            .astype(int)
-                        ),
+                        text=[
+                            str(int(v)) if v > 0 else ""
+                            for v in monthly["_SOC_VALUE"]
+                        ],
 
                         textposition="top center",
 
@@ -3211,35 +3854,30 @@ with a:
                         ),
 
                         hovertemplate=(
-                            "<b>SOC</b><br>"
+                            "<b>SOC Deviation</b><br>"
                             "Month: %{x}<br>"
-                            "Deviation: %{y}"
+                            "Count: %{y}"
                             "<extra></extra>"
                         )
                     )
                 )
 
-                # -------------------------------------------------
-                # SOL
-                # -------------------------------------------------
-
-                fig.add_trace(
+                fig_socsol.add_trace(
                     go.Scatter(
                         x=monthly["_MONTH"],
                         y=monthly["_SOL_VALUE"],
                         mode="lines+markers+text",
                         name="SOL Deviation",
 
-                        text=(
-                            monthly["_SOL_VALUE"]
-                            .astype(int)
-                        ),
+                        text=[
+                            str(int(v)) if v > 0 else ""
+                            for v in monthly["_SOL_VALUE"]
+                        ],
 
-                        textposition="bottom center",
+                        textposition="top center",
 
                         line=dict(
-                            width=3,
-                            dash="solid"
+                            width=3
                         ),
 
                         marker=dict(
@@ -3247,27 +3885,41 @@ with a:
                         ),
 
                         hovertemplate=(
-                            "<b>SOL</b><br>"
+                            "<b>SOL Deviation</b><br>"
                             "Month: %{x}<br>"
-                            "Deviation: %{y}"
+                            "Count: %{y}"
                             "<extra></extra>"
                         )
                     )
                 )
 
-                # =================================================
-                # GRAPH FORMAT
-                # =================================================
+                # ------------------------------------------------
+                # DYNAMIC Y-AXIS
+                # ------------------------------------------------
+                max_value = max(
+                    monthly["_SOC_VALUE"].max(),
+                    monthly["_SOL_VALUE"].max(),
+                    1
+                )
 
-                fig.update_layout(
+                if max_value <= 10:
+                    y_dtick = 1
+                elif max_value <= 50:
+                    y_dtick = 5
+                elif max_value <= 100:
+                    y_dtick = 10
+                else:
+                    y_dtick = 20
 
-                    height=280,
+                fig_socsol.update_layout(
+
+                    height=300,
 
                     margin=dict(
-                        l=45,
+                        l=50,
                         r=20,
-                        t=45,
-                        b=45
+                        t=55,
+                        b=60
                     ),
 
                     title=dict(
@@ -3278,8 +3930,8 @@ with a:
                         x=0.5,
                         xanchor="center",
                         font=dict(
-                            size=12,
-                            color="#173f73"
+                            size=14,
+                            color="#173f70"
                         )
                     ),
 
@@ -3294,18 +3946,20 @@ with a:
                     yaxis=dict(
                         title="No. of Deviations",
                         rangemode="tozero",
+                        dtick=y_dtick,
+                        range=[0, max_value + (y_dtick * 1.5)],
                         showgrid=True,
-                        dtick=1
+                        gridcolor="#e1e8ef",
+                        automargin=True
                     ),
 
                     legend=dict(
                         orientation="v",
-                        x=0.78,
-                        y=1.28,
+                        x=0.80,
+                        y=1.08,
                         xanchor="left",
                         yanchor="top",
-                        font=dict(size=9),
-                        bgcolor="rgba(255,255,255,0)"
+                        font=dict(size=9)
                     ),
 
                     plot_bgcolor="white",
@@ -3314,17 +3968,13 @@ with a:
                     hovermode="x unified"
                 )
 
-                # =================================================
-                # DISPLAY GRAPH
-                # =================================================
-
                 st.plotly_chart(
-                    fig,
+                    fig_socsol,
                     use_container_width=True,
                     config={
                         "displayModeBar": False
                     },
-                    key="all_department_soc_sol_chart"
+                    key="soc_sol_monthwise_graph"
                 )
 
 # ============================================================
@@ -3434,6 +4084,17 @@ with b:
                 ],
             )
 
+            # The live Google Sheet stores the uploaded audit files in the
+            # separate "Audit Report" column (column E).
+            audit_report_col = find_col(
+                audit,
+                [
+                    "Audit Report",
+                    "Audit Report Link",
+                    "Report",
+                ],
+            )
+
             register_df = pd.DataFrame(index=audit.index)
 
             if audit_sno_col:
@@ -3457,34 +4118,53 @@ with b:
                 register_df["Audit Score"] = ""
 
             # IMPORTANT:
-            # Use the real URL extracted from Google Sheet HTML.
-            # Do not use the displayed report name as a URL.
+            # The sheet screenshot shows the uploaded files under "Audit Report",
+            # not under "Compliance Report". Keep the displayed file name from
+            # the sheet and use the extracted live URL when one is available.
+            if audit_report_col:
+                register_df["Audit Report"] = (
+                    audit[audit_report_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["Audit Report"] = ""
+
             if "__COMPLIANCE_REPORT_URL" in audit.columns:
-                register_df["Compliance Report"] = (
+                register_df["__REPORT_URL"] = (
                     audit["__COMPLIANCE_REPORT_URL"]
                     .fillna("")
                     .astype(str)
                     .str.strip()
                 )
             else:
-                register_df["Compliance Report"] = ""
+                register_df["__REPORT_URL"] = ""
 
             # --------------------------------------------------------
-            # COMPLIANCE REPORT BUTTONS
+            # AUDIT REPORT BUTTONS / FILE NAMES
             # --------------------------------------------------------
-            # The button uses the live URL extracted from the Google Sheet.
-            # No report URL is fixed in this code.
             rows_html = []
 
             for _, row in register_df.iterrows():
-                report_url = str(row.get("Compliance Report", "")).strip()
-                if report_url.startswith("http://") or report_url.startswith("https://"):
+                report_name = str(row.get("Audit Report", "")).strip()
+                report_url = str(row.get("__REPORT_URL", "")).strip()
+
+                if report_url.startswith(("http://", "https://")):
                     report_cell = (
                         f'<a href="{report_url}" target="_blank" rel="noopener noreferrer" '
                         'style="display:inline-block;padding:4px 10px;'
                         'background:#07518b;color:#ffffff !important;border-radius:4px;'
                         'text-decoration:none;font-weight:700;font-size:9px;">'
-                        'VIEW REPORT ↗</a>'
+                        'VIEW AUDIT REPORT ↗</a>'
+                    )
+                elif report_name and report_name.lower() not in {"nan", "none"}:
+                    # Rich-text links from Google Sheets can sometimes lose the URL
+                    # during export. Still show the actual report name instead of
+                    # incorrectly displaying "Not attached".
+                    report_cell = (
+                        f'<span style="color:#0067c5;font-weight:700;font-size:9px;">'
+                        f'{report_name}</span>'
                     )
                 else:
                     report_cell = '<span style="color:#9aa7b3;font-size:9px;">Not attached</span>'
@@ -3556,7 +4236,7 @@ with b:
                                 <th>Department</th>
                                 <th>Audit Date</th>
                                 <th>Audit Score</th>
-                                <th>Compliance Report</th>
+                                <th>Audit Report</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3572,4 +4252,851 @@ with b:
                 audit_table_html,
                 height=305,
                 scrolling=False,
+            )
+
+
+# ============================================================
+# 10 — INTERLOCK BYPASS
+# ============================================================
+
+with st.container(border=True):
+
+    show_module_title(
+        10,
+        "",
+        "INTERLOCK BYPASS"
+    )
+
+    # ------------------------------------------------------------
+    # PREPARE LIVE INTERLOCK REGISTER
+    # ------------------------------------------------------------
+    interlock_data = clean_dataframe(interlock)
+
+    sno_col = find_col(
+        interlock_data,
+        ["S.No.", "S No", "S.No", "Serial No", "Sr No", "Sr. No."]
+    )
+    department_col = find_col(
+        interlock_data,
+        ["Department", "Departments", "Dept", "Department Name"]
+    )
+    description_col = find_col(
+        interlock_data,
+        ["Interlock Description", "Interlock Details", "Description"]
+    )
+    bypassed_date_col = find_col(
+        interlock_data,
+        ["Date Bypassed", "Bypassed Date", "Date of Bypass"]
+    )
+    status_col = find_col(
+        interlock_data,
+        [
+            "Present Status / Action Required",
+            "Present Status",
+            "Status / Action Required",
+            "Status",
+        ]
+    )
+
+    if interlock_data.empty:
+        pending_interlock = pd.DataFrame()
+
+    else:
+        # Keep only actual register rows using S.No.
+        if sno_col:
+            sno_numeric = pd.to_numeric(
+                interlock_data[sno_col],
+                errors="coerce",
+            )
+            valid_rows = sno_numeric.notna()
+            interlock_data = interlock_data.loc[valid_rows].copy()
+
+            # Protect against accidental duplicate rows from the source.
+            interlock_data["__sno_numeric"] = sno_numeric.loc[valid_rows]
+            interlock_data = (
+                interlock_data
+                .drop_duplicates(subset=["__sno_numeric"], keep="first")
+                .drop(columns=["__sno_numeric"])
+            )
+
+        # Only records currently due for normalization are pending.
+        if status_col:
+            status_values = (
+                interlock_data[status_col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+
+            pending_mask = status_values.str.contains(
+                r"due\s*for\s*normalization|normalization\s*pending",
+                case=False,
+                regex=True,
+                na=False,
+            )
+            pending_interlock = interlock_data.loc[pending_mask].copy()
+        else:
+            pending_interlock = interlock_data.copy()
+
+    pending_count = len(pending_interlock)
+
+    # ------------------------------------------------------------
+    # KPI
+    # ------------------------------------------------------------
+    st.metric(
+        "Normalization Pending",
+        f"{pending_count:,}",
+    )
+
+    # ------------------------------------------------------------
+    # CHART + REGISTER SIDE BY SIDE
+    # ------------------------------------------------------------
+    chart_col, register_col = st.columns([1.05, 1.95], gap="small")
+
+    with chart_col:
+        st.markdown(
+            '<div class="section-bar">'
+            'Pending for Normalization by Department'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        if pending_interlock.empty:
+            st.info("No interlock is pending for normalization.")
+
+        else:
+            if department_col:
+                department_values = (
+                    pending_interlock[department_col]
+                    .fillna("Unknown")
+                    .astype(str)
+                    .str.strip()
+                    .replace("", "Unknown")
+                )
+
+                department_counts = (
+                    pd.DataFrame({"Department": department_values})
+                    .groupby("Department", as_index=False)
+                    .size()
+                    .rename(columns={"size": "Pending"})
+                )
+            else:
+                department_counts = pd.DataFrame(
+                    {
+                        "Department": ["Unknown"],
+                        "Pending": [pending_count],
+                    }
+                )
+
+            fig_interlock = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=department_counts["Department"],
+                        values=department_counts["Pending"],
+                        hole=0.56,
+                        textinfo="value",
+                        textposition="inside",
+                        domain=dict(x=[0.00, 0.58], y=[0.00, 1.00]),
+                        insidetextorientation="horizontal",
+                    )
+                ]
+            )
+
+            fig_interlock.update_layout(
+                height=394,
+                margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor="white",
+                plot_bgcolor="white",
+                legend=dict(
+                    orientation="v",
+                    x=0.62,
+                    y=0.5,
+                    xanchor="left",
+                    yanchor="middle",
+                    font=dict(size=9),
+                ),
+                annotations=[
+                    dict(
+                        text=f"<b>{pending_count}</b><br>Pending",
+                        x=0.29,
+                        y=0.50,
+                        xref="paper",
+                        yref="paper",
+                        xanchor="center",
+                        yanchor="middle",
+                        showarrow=False,
+                        font=dict(size=16),
+                    )
+                ],
+            )
+
+            st.plotly_chart(
+                fig_interlock,
+                use_container_width=True,
+                config={"displayModeBar": False},
+                key="all_department_interlock_donut",
+            )
+
+    with register_col:
+        st.markdown(
+            '<div class="section-bar">'
+            'Interlock Bypass Register - Normalization Pending'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        if pending_interlock.empty:
+            st.info("No interlock bypass is pending for normalization.")
+
+        else:
+            register_df = pd.DataFrame(index=pending_interlock.index)
+
+            if sno_col:
+                register_df["S.No."] = pd.to_numeric(
+                    pending_interlock[sno_col],
+                    errors="coerce",
+                ).astype("Int64")
+            else:
+                register_df["S.No."] = range(1, len(pending_interlock) + 1)
+
+            if department_col:
+                register_df["Department"] = (
+                    pending_interlock[department_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["Department"] = ""
+
+            if description_col:
+                register_df["Interlock Description"] = (
+                    pending_interlock[description_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["Interlock Description"] = ""
+
+            if bypassed_date_col:
+                raw_dates = pd.to_datetime(
+                    pending_interlock[bypassed_date_col],
+                    errors="coerce",
+                    dayfirst=True,
+                )
+            else:
+                raw_dates = pd.Series(
+                    pd.NaT,
+                    index=pending_interlock.index,
+                )
+
+            today = pd.Timestamp(datetime.now().date())
+            days_open = (today - raw_dates.dt.normalize()).dt.days
+
+            register_df["Date Bypassed"] = (
+                raw_dates.dt.strftime("%d-%b-%Y").fillna("-")
+            )
+            register_df["Days Open"] = days_open.fillna(0).astype(int)
+
+            register_df = register_df.sort_values(
+                "Days Open",
+                ascending=False,
+            )
+
+            st.dataframe(
+                register_df,
+                use_container_width=True,
+                hide_index=True,
+                height=394,
+                column_config={
+                    "S.No.": st.column_config.NumberColumn(
+                        "S.No.",
+                        format="%d",
+                    ),
+                    "Department": st.column_config.TextColumn(
+                        "Department"
+                    ),
+                    "Interlock Description": st.column_config.TextColumn(
+                        "Interlock Description"
+                    ),
+                    "Date Bypassed": st.column_config.TextColumn(
+                        "Date Bypassed"
+                    ),
+                    "Days Open": st.column_config.NumberColumn(
+                        "Days Open",
+                        format="%d",
+                    ),
+                },
+            )
+
+# ============================================================
+# 11 — PSM CE
+# ============================================================
+
+with st.container(border=True):
+
+    show_module_title(
+        11,
+        "",
+        "PSM CE NOTIFICATION"
+    )
+
+    psm_ce_data = clean_dataframe(psm_ce)
+
+    # Actual Google Sheet columns.
+    failed_col = find_col(
+        psm_ce_data,
+        [
+            "No. of PSM CE failed (Breakdown)",
+            "No. Of PSM CE Failed (Breakdown)",
+            "PSM CE Failed",
+            "PSM CE Failed (Breakdown)",
+        ],
+    )
+    mech_generated_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – Mechanical – Generated",
+            "Compliance of PSM CE MO - Mechanical - Generated",
+            "PSM CE MO Mechanical Generated",
+        ],
+    )
+    mech_completed_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – Mechanical – Completed",
+            "Compliance of PSM CE MO - Mechanical - Completed",
+            "PSM CE MO Mechanical Completed",
+        ],
+    )
+    ei_generated_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – E&I – Generated",
+            "Compliance of PSM CE MO - E&I - Generated",
+            "PSM CE MO E&I Generated",
+        ],
+    )
+    ei_completed_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – E&I – Completed",
+            "Compliance of PSM CE MO - E&I - Completed",
+            "PSM CE MO E&I Completed",
+        ],
+    )
+
+    def numeric_total(df, column):
+        if column is None or df.empty:
+            return 0
+        return int(
+            pd.to_numeric(df[column], errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+
+    total_psm_ce_failed = numeric_total(psm_ce_data, failed_col)
+    mech_generated = numeric_total(psm_ce_data, mech_generated_col)
+    mech_completed = numeric_total(psm_ce_data, mech_completed_col)
+    ei_generated = numeric_total(psm_ce_data, ei_generated_col)
+    ei_completed = numeric_total(psm_ce_data, ei_completed_col)
+
+    # Short dashboard labels.
+    show_metric_row([
+        ("TOTAL PSM CE FAILED", total_psm_ce_failed),
+        ("M-MO GEN", mech_generated),
+        ("M-MO COMP", mech_completed),
+        ("E&I-MO GEN", ei_generated),
+        ("E&I-MO COMP", ei_completed),
+    ])
+
+    # --------------------------------------------------------
+    # DEPARTMENT-WISE PSM CE COMPLETION PROGRESS
+    # --------------------------------------------------------
+    dept_col_progress = find_col(psm_ce_data, ["Department", "Dept"])
+    if not psm_ce_data.empty and dept_col_progress is not None:
+        progress_df = pd.DataFrame({
+            "Department": psm_ce_data[dept_col_progress].fillna("").astype(str).str.strip(),
+            "M Generated": pd.to_numeric(psm_ce_data[mech_generated_col], errors="coerce").fillna(0) if mech_generated_col else 0,
+            "M Completed": pd.to_numeric(psm_ce_data[mech_completed_col], errors="coerce").fillna(0) if mech_completed_col else 0,
+            "E&I Generated": pd.to_numeric(psm_ce_data[ei_generated_col], errors="coerce").fillna(0) if ei_generated_col else 0,
+            "E&I Completed": pd.to_numeric(psm_ce_data[ei_completed_col], errors="coerce").fillna(0) if ei_completed_col else 0,
+        })
+        progress_df = (
+            progress_df.groupby("Department", as_index=False)[
+                ["M Generated", "M Completed", "E&I Generated", "E&I Completed"]
+            ].sum()
+        )
+        progress_df = progress_df[progress_df["Department"].str.strip() != ""]
+
+        if not progress_df.empty:
+            st.markdown(
+                '<div class="section-bar">PSM CE Completion Progress by Department</div>',
+                unsafe_allow_html=True,
+            )
+
+            def progress_color(pct):
+                # Completion status: red < 50%, amber 50-79%, green >= 80%.
+                if pct < 50:
+                    return "#e53935"
+                if pct < 80:
+                    return "#f5a623"
+                return "#2e9d50"
+
+            progress_rows = []
+            for _, r in progress_df.iterrows():
+                m_gen = float(r["M Generated"])
+                m_comp = float(r["M Completed"])
+                ei_gen = float(r["E&I Generated"])
+                ei_comp = float(r["E&I Completed"])
+
+                m_pct = (100.0 if m_gen <= 0 and m_comp > 0 else
+                         0.0 if m_gen <= 0 else min(100.0, max(0.0, m_comp / m_gen * 100.0)))
+                ei_pct = (100.0 if ei_gen <= 0 and ei_comp > 0 else
+                          0.0 if ei_gen <= 0 else min(100.0, max(0.0, ei_comp / ei_gen * 100.0)))
+
+                m_color = progress_color(m_pct)
+                ei_color = progress_color(ei_pct)
+
+                progress_rows.append(
+                    f'<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;margin:5px 0;font-family:Arial,sans-serif;font-size:10px;color:#173f70;">'
+                    f'<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r["Department"]}</div>'
+                    f'<div style="height:9px;background:#e8eef3;border-radius:8px;overflow:hidden;"><div style="width:{m_pct:.1f}%;height:100%;background:{m_color};border-radius:8px;"></div></div>'
+                    f'<div style="font-weight:700;text-align:right;color:{m_color};">M {m_pct:.0f}%</div>'
+                    f'<div style="height:9px;background:#e8eef3;border-radius:8px;overflow:hidden;"><div style="width:{ei_pct:.1f}%;height:100%;background:{ei_color};border-radius:8px;"></div></div>'
+                    f'<div style="font-weight:700;text-align:right;color:{ei_color};">E&I {ei_pct:.0f}%</div>'
+                    f'</div>'
+                )
+
+            progress_html = (
+                '<div style="background:#fff;border:1px solid #d5e0e8;border-radius:5px;padding:8px 12px;">'
+                '<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;'
+                'font-family:Arial,sans-serif;font-size:9px;font-weight:800;color:#627689;margin-bottom:6px;">'
+                '<div>Department</div><div>Mechanical MO</div><div></div><div>E&I MO</div><div></div>'
+                '</div>'
+                + ''.join(progress_rows)
+                + '</div>'
+            )
+            st.markdown(progress_html, unsafe_allow_html=True)
+
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# 12 — BARRIER AUDIT
+# ============================================================
+
+with barrier_col:
+    with st.container(border=True, height=520):
+
+        show_module_title(
+            12,
+            "",
+            "(C4/C5)BARRIER AUDIT"
+        )
+
+        barrier_data = (
+            clean_dataframe(loaded.get("Barrier Audit"))
+            if loaded.get("Barrier Audit") is not None
+            else pd.DataFrame()
+        )
+
+        if barrier_data.empty:
+            st.info("No Barrier Audit data available.")
+
+        else:
+            # ----------------------------------------------------
+            # COLUMN DETECTION
+            # ----------------------------------------------------
+            month_col = find_col(
+                barrier_data,
+                ["Month"]
+            )
+
+            dept_col = find_col(
+                barrier_data,
+                ["Department", "Dept"]
+            )
+
+            plan_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Audit Conducted (Plan)",
+                    "Barrier Audit Conducted Plan",
+                ],
+            )
+
+            actual_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Audit Conducted (Actual)",
+                    "Barrier Audit Conducted Actual",
+                ],
+            )
+
+            assessed_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Health (C4/C5) (Number) Assessed",
+                    "Assessed",
+                ],
+            )
+
+            unacceptable_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Health (C4/C5) (Number) Unacceptable",
+                    "Unacceptable Barrier",
+                    "Unacceptable",
+                ],
+            )
+
+            # ----------------------------------------------------
+            # APPLY EXISTING GLOBAL DEPARTMENT SELECTION
+            # No separate filter is created inside this module.
+            # ----------------------------------------------------
+            barrier_display = barrier_data.copy()
+
+            if selected_department != "All Departments":
+                barrier_display = filter_selected_department(
+                    barrier_display,
+                    selected_department
+                )
+
+            # ----------------------------------------------------
+            # TOTAL ASSESSED / UNACCEPTABLE
+            # ----------------------------------------------------
+            total_assessed = (
+                int(
+                    pd.to_numeric(
+                        barrier_display[assessed_col],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                if assessed_col and not barrier_display.empty
+                else 0
+            )
+
+            total_unacceptable = (
+                int(
+                    pd.to_numeric(
+                        barrier_display[unacceptable_col],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                if unacceptable_col and not barrier_display.empty
+                else 0
+            )
+
+            # ----------------------------------------------------
+            # KPI — BARRIER HEALTH
+            # ----------------------------------------------------
+            show_metric_row([
+                (
+                    "BARRIER HEALTH ASSESSED",
+                    total_assessed
+                ),
+                (
+                    "BARRIER HEALTH UNACCEPTABLE",
+                    total_unacceptable
+                ),
+            ])
+
+            # ====================================================
+            # GRAPH — BARRIER AUDIT CONDUCTED
+            # MONTH-WISE PLAN VS ACTUAL
+            # ====================================================
+            if month_col and not barrier_display.empty:
+
+                monthly_audit = pd.DataFrame()
+
+                monthly_audit["Month"] = (
+                    barrier_display[month_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+
+                monthly_audit["Plan"] = (
+                    pd.to_numeric(
+                        barrier_display[plan_col],
+                        errors="coerce"
+                    ).fillna(0)
+                    if plan_col
+                    else 0
+                )
+
+                monthly_audit["Actual"] = (
+                    pd.to_numeric(
+                        barrier_display[actual_col],
+                        errors="coerce"
+                    ).fillna(0)
+                    if actual_col
+                    else 0
+                )
+
+                monthly_audit = monthly_audit[
+                    monthly_audit["Month"] != ""
+                ]
+
+                # Sum values month-wise
+                monthly_audit = (
+                    monthly_audit
+                    .groupby("Month", as_index=False)[
+                        ["Plan", "Actual"]
+                    ]
+                    .sum()
+                )
+
+                if not monthly_audit.empty:
+
+                    # Keep chronological month order where possible
+                    month_order = [
+                        "Jan-26", "Feb-26", "Mar-26",
+                        "Apr-26", "May-26", "Jun-26",
+                        "Jul-26", "Aug-26", "Sep-26",
+                        "Oct-26", "Nov-26", "Dec-26"
+                    ]
+
+                    monthly_audit["_sort"] = (
+                        monthly_audit["Month"]
+                        .apply(
+                            lambda x:
+                            month_order.index(x)
+                            if x in month_order
+                            else 999
+                        )
+                    )
+
+                    monthly_audit = (
+                        monthly_audit
+                        .sort_values("_sort")
+                        .drop(columns="_sort")
+                    )
+
+                    # ------------------------------------------------
+                    # PLOTLY BAR CHART
+                    # ------------------------------------------------
+                    fig_monthly = go.Figure()
+
+                    fig_monthly.add_trace(
+                        go.Bar(
+                            x=monthly_audit["Month"],
+                            y=monthly_audit["Plan"],
+                            name="Plan",
+                            marker_color="#4f97d1",
+                            text=monthly_audit["Plan"].astype(int),
+                            textposition="outside",
+                            cliponaxis=False,
+                        )
+                    )
+
+                    fig_monthly.add_trace(
+                        go.Bar(
+                            x=monthly_audit["Month"],
+                            y=monthly_audit["Actual"],
+                            name="Actual",
+                            marker_color="#f5c542",
+                            text=monthly_audit["Actual"].astype(int),
+                            textposition="outside",
+                            cliponaxis=False,
+                        )
+                    )
+
+                    fig_monthly.update_layout(
+                        title=dict(
+                            text="BARRIER AUDIT CONDUCTED (PLAN VS ACTUAL)",
+                            x=0,
+                            xanchor="left",
+                            font=dict(
+                                size=15,
+                                color="#173f70"
+                            ),
+                        ),
+
+                        barmode="group",
+
+                        height=300,
+
+                        margin=dict(
+                            l=45,
+                            r=20,
+                            t=55,
+                            b=50
+                        ),
+
+                        font=dict(
+                            size=9,
+                            color="#173f70"
+                        ),
+
+                        legend=dict(
+                            orientation="h",
+                            y=1.08,
+                            x=1,
+                            xanchor="right",
+                            yanchor="bottom",
+                            font=dict(size=9),
+                        ),
+
+                        xaxis=dict(
+                            title="Month",
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9),
+                            showgrid=False,
+                        ),
+
+                        yaxis=dict(
+                            title="Number of Audits",
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9),
+                            rangemode="tozero",
+                            gridcolor="#e5edf4",
+                            dtick=5,
+                        ),
+
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                    )
+
+                    st.plotly_chart(
+                        fig_monthly,
+                        use_container_width=True,
+                        config={
+                            "displayModeBar": False
+                        },
+                    )
+
+                else:
+                    st.info(
+                        "No monthly Barrier Audit data available."
+                    )
+
+
+# ============================================================
+# 13 — FAILURE DATA
+# ============================================================
+
+with failure_col:
+    with st.container(border=True, height=520):
+
+        show_module_title(
+            13,
+            "",
+            "PSM CE/BARRIER (C4/C5)FAILURE DETAILS"
+        )
+
+        failure_df = clean_dataframe(failure_data)
+
+        if failure_df.empty:
+            st.info("No Failure Data available.")
+        else:
+            f_dept_col = find_col(failure_df, ["Department", "Dept"])
+            f_month_col = find_col(failure_df, ["Month"])
+            f_type_col = find_col(
+                failure_df,
+                ["PSM CE/Barrier", "PSM CE / Barrier", "PSM CE-Barriers"],
+            )
+            f_name_col = find_col(failure_df, ["Name"])
+            f_reason_col = find_col(
+                failure_df,
+                ["Reason of Failure", "Failure Reason"],
+            )
+
+            failure_register = pd.DataFrame(index=failure_df.index)
+            failure_register["Department"] = failure_df[f_dept_col] if f_dept_col else "-"
+            failure_register["Month"] = failure_df[f_month_col] if f_month_col else "-"
+            failure_register["PSM CE/Barrier"] = failure_df[f_type_col] if f_type_col else "-"
+            failure_register["Name"] = failure_df[f_name_col] if f_name_col else "-"
+            failure_register["Reason of Failure"] = failure_df[f_reason_col] if f_reason_col else "-"
+
+            # ----------------------------------------------------
+            # TOTAL FAILURE COUNTS — KEEP AT TOP
+            # ----------------------------------------------------
+            type_counts = {"PSM CE": 0, "Barrier": 0}
+            if f_type_col:
+                type_series = failure_df[f_type_col].astype(str).str.strip().str.lower()
+                type_counts["PSM CE"] = int((type_series == "psm ce").sum())
+                type_counts["Barrier"] = int((type_series == "barrier").sum())
+
+            total_psm_ce = type_counts["PSM CE"]
+            total_barrier = type_counts["Barrier"]
+            total_psm_col, total_barrier_col = st.columns(2, gap="small")
+            with total_psm_col:
+                st.metric("PSM CE", total_psm_ce)
+            with total_barrier_col:
+                st.metric("BARRIER", total_barrier)
+
+            # ----------------------------------------------------
+            # GRAPHICAL REPRESENTATION — FAILURE COUNT
+            # ----------------------------------------------------
+            failure_chart_col_1, failure_chart_col_2 = st.columns([0.88, 1.12], gap="small")
+
+
+
+            def highlight_failure_type(value):
+                text = str(value).strip().lower()
+                if text == "psm ce":
+                    return "background-color: #dbeafe; color: #173f70; font-weight: 700;"
+                if text == "barrier":
+                    return "background-color: #fff1cc; color: #8a5a00; font-weight: 700;"
+                return ""
+
+            failure_styled = failure_register.style.map(
+                highlight_failure_type,
+                subset=["PSM CE/Barrier"],
+            )
+
+            st.markdown(
+                '<div class="section-bar">Failure Data Register</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Keep the table only as tall as its actual rows so there is no
+            # unnecessary blank area inside the Failure Data table.
+            failure_table_height = min(330, max(100, 38 * (len(failure_register) + 1) + 8))
+
+            st.dataframe(
+                failure_styled,
+                use_container_width=True,
+                hide_index=True,
+                height=failure_table_height,
+                column_config={
+                    "Department": st.column_config.TextColumn("Department"),
+                    "Month": st.column_config.TextColumn("Month"),
+                    "PSM CE/Barrier": st.column_config.TextColumn("PSM CE/Barrier"),
+                    "Name": st.column_config.TextColumn("Name"),
+                    "Reason of Failure": st.column_config.TextColumn("Reason of Failure"),
+                },
             )

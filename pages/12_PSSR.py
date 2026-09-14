@@ -1,16 +1,23 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+import os
+import base64
+import re
+import mimetypes
+from pathlib import Path
 import plotly.graph_objects as go
+from datetime import datetime
+
 # =========================================================
 # OPTIONAL AUTO REFRESH
 # =========================================================
 try:
     from streamlit_autorefresh import st_autorefresh
+
     AUTO_REFRESH_AVAILABLE = True
 except ImportError:
     AUTO_REFRESH_AVAILABLE = False
-
 
 # =========================================================
 # PAGE CONFIG
@@ -22,12 +29,28 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# =========================================================
+# ACTION STATE
+# Upload / View use Streamlit modal dialogs exactly like PT.
+# =========================================================
+
+if "upload_pssr_no" not in st.session_state:
+    st.session_state.upload_pssr_no = ""
+
+if "view_pssr_no" not in st.session_state:
+    st.session_state.view_pssr_no = ""
+
+if "open_upload_pssr_dialog" not in st.session_state:
+    st.session_state.open_upload_pssr_dialog = False
+
+if "open_view_pssr_dialog" not in st.session_state:
+    st.session_state.open_view_pssr_dialog = False
+
 if AUTO_REFRESH_AVAILABLE:
     st_autorefresh(
         interval=60 * 1000,
         key="pssr_auto_refresh"
     )
-
 
 # =========================================================
 # GOOGLE SHEET SETTINGS
@@ -51,7 +74,6 @@ PSSR_CSV_URL = (
 # =========================================================
 @st.cache_data(ttl=30)
 def get_pssr_data():
-
     try:
 
         data = pd.read_csv(PSSR_CSV_URL)
@@ -67,7 +89,6 @@ def get_pssr_data():
         for col in data.columns:
 
             if data[col].dtype == "object":
-
                 data[col] = (
                     data[col]
                     .astype(str)
@@ -96,14 +117,135 @@ def get_pssr_data():
 
 df = get_pssr_data()
 
-
 if df.empty:
-
     st.error(
         "No data found in the PSSR Google Sheet."
     )
 
     st.stop()
+
+# =========================================================
+# DOCUMENT STORAGE
+# Same working upload/view mechanism as pt.py,
+# adapted only for PSSR reports.
+# =========================================================
+
+DOCUMENT_FOLDER = Path(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "pssr_documents"
+    )
+)
+
+DOCUMENT_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+def safe_pssr_folder_name(pssr_no):
+    value = str(pssr_no).strip()
+
+    value = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "_",
+        value
+    )
+
+    return value or "unknown_pssr"
+
+
+def get_pssr_document_folder(pssr_no):
+    folder = (
+            DOCUMENT_FOLDER
+            / safe_pssr_folder_name(pssr_no)
+    )
+
+    folder.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    return folder
+
+
+def get_pssr_documents(pssr_no):
+    folder = get_pssr_document_folder(
+        pssr_no
+    )
+
+    return sorted(
+        [
+            p
+            for p in folder.iterdir()
+            if p.is_file()
+        ],
+        key=lambda p: p.name.lower()
+    )
+
+
+def save_pssr_document(
+        pssr_no,
+        uploaded_file
+):
+    folder = get_pssr_document_folder(
+        pssr_no
+    )
+
+    original_name = Path(
+        uploaded_file.name
+    ).name
+
+    stem = Path(
+        original_name
+    ).stem
+
+    suffix = Path(
+        original_name
+    ).suffix
+
+    safe_stem = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "_",
+        stem
+    ).strip("._-")
+
+    safe_stem = (
+            safe_stem
+            or "document"
+    )
+
+    target = (
+            folder
+            / f"{safe_stem}{suffix}"
+    )
+
+    counter = 1
+
+    while target.exists():
+        target = (
+                folder
+                / f"{safe_stem}_{counter}{suffix}"
+        )
+
+        counter += 1
+
+    target.write_bytes(
+        uploaded_file.getbuffer()
+    )
+
+    return target
+
+
+def get_pssr_document_mime_type(path):
+    mime_type, _ = mimetypes.guess_type(
+        str(path)
+    )
+
+    return (
+            mime_type
+            or "application/octet-stream"
+    )
 
 
 # =========================================================
@@ -123,7 +265,6 @@ REQUIRED_HEADERS = [
 
 
 def normalize_header(value):
-
     return (
         str(value)
         .replace("\xa0", " ")
@@ -140,7 +281,6 @@ header_lookup = {
 
 
 def find_header(header):
-
     key = normalize_header(header)
 
     if key in header_lookup:
@@ -163,6 +303,52 @@ COL_STATUS = find_header(
 )
 COL_REMARKS = find_header("Remarks")
 
+# =========================================================
+# GOOGLE SHEET VIEW LINK
+# =========================================================
+COL_REPORT_LINK = None
+
+for _candidate in [
+    "View Report",
+    "Report Link",
+    "Document Link",
+    "Document",
+    "Report",
+    "PSSR Report"
+]:
+    COL_REPORT_LINK = find_header(_candidate)
+    if COL_REPORT_LINK:
+        break
+
+
+def get_google_sheet_row_url(row_index):
+    sheet_row = int(row_index) + 2
+    return (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/edit"
+        f"#gid=0&range=A{sheet_row}"
+    )
+
+
+def get_report_link(row, row_index):
+    if COL_REPORT_LINK:
+        raw = str(row.get(COL_REPORT_LINK, "")).strip()
+
+        if raw and raw.lower() not in {"nan", "none"}:
+
+            if raw.startswith(("http://", "https://")):
+                return raw
+
+            match = re.search(
+                r'https?://[^"\\s)]+',
+                raw
+            )
+
+            if match:
+                return match.group(0)
+
+    return get_google_sheet_row_url(row_index)
+
 
 missing_columns = []
 
@@ -181,9 +367,7 @@ for name, column in [
     if column is None:
         missing_columns.append(name)
 
-
 if missing_columns:
-
     st.error(
         "The following PSSR headers are missing:"
     )
@@ -198,12 +382,10 @@ if missing_columns:
 
     st.stop()
 
-
 # =========================================================
 # DATA PREPARATION
 # =========================================================
 work = df.copy()
-
 
 work["_department"] = (
     work[COL_DEPARTMENT]
@@ -212,14 +394,12 @@ work["_department"] = (
     .str.strip()
 )
 
-
 work["_section"] = (
     work[COL_SECTION]
     .fillna("")
     .astype(str)
     .str.strip()
 )
-
 
 work["_description"] = (
     work[COL_DESCRIPTION]
@@ -228,7 +408,6 @@ work["_description"] = (
     .str.strip()
 )
 
-
 work["_pssr_no"] = (
     work[COL_PSSR_NO]
     .fillna("")
@@ -236,14 +415,12 @@ work["_pssr_no"] = (
     .str.strip()
 )
 
-
 work["_remarks"] = (
     work[COL_REMARKS]
     .fillna("")
     .astype(str)
     .str.strip()
 )
-
 
 work["_status_raw"] = (
     work[COL_STATUS]
@@ -253,13 +430,11 @@ work["_status_raw"] = (
     .str.lower()
 )
 
-
 work["_due_date"] = pd.to_datetime(
     work[COL_DUE_DATE],
     errors="coerce",
     dayfirst=True
 )
-
 
 work["_completion_date"] = pd.to_datetime(
     work[COL_COMPLETION_DATE],
@@ -272,7 +447,6 @@ work["_completion_date"] = pd.to_datetime(
 # STATUS NORMALIZATION
 # =========================================================
 def normalize_status(row):
-
     status = str(
         row["_status_raw"]
     ).strip().lower()
@@ -283,10 +457,7 @@ def normalize_status(row):
     if "pending" in status:
         return "Pending"
 
-    if "completed" in status:
-        return "Completed"
-
-    if "complete" in status:
+    if "completed" in status or "complete" in status:
         return "Completed"
 
     # If status is blank, use completion date
@@ -308,7 +479,6 @@ work["_status"] = work.apply(
     normalize_status,
     axis=1
 )
-
 
 # =========================================================
 # CSS
@@ -371,13 +541,20 @@ body,
 
 .filter-title {
     color:#193d77;
-    font-size:10px;
+    font-size:13px;
     font-weight:900;
-    margin:0 0 2px 3px;
+    margin:0 0 4px 3px !important;
+    line-height:18px !important;
+    position:relative !important;
+    top:-14px !important;
+    z-index:100 !important;
+    display:block !important;
+    height:18px !important;
+    pointer-events:none !important;
 }
 
 div[data-baseweb="select"] > div {
-    height:30px !important;
+    height:40px !important;
     min-height:30px !important;
     border-radius:6px !important;
     background:#ffffff !important;
@@ -386,7 +563,7 @@ div[data-baseweb="select"] > div {
 
 div[data-baseweb="select"] * {
     color:#26384a !important;
-    font-size:10px !important;
+    font-size:13px !important;
 }
 
 div[data-baseweb="select"] svg {
@@ -400,6 +577,7 @@ div[data-baseweb="select"] svg {
 
 .kpi-card {
     height:118px;
+    border-top:4px solid #164b91;
     position:relative;
     overflow:hidden;
 
@@ -423,7 +601,7 @@ div[data-baseweb="select"] svg {
 
 .kpi-label {
     color:#193d77;
-    font-size:11px;
+    font-size:14px;
     font-weight:950;
     text-align:center;
     padding-top:12px;
@@ -431,7 +609,7 @@ div[data-baseweb="select"] svg {
 
 .kpi-value {
     color:#164b91;
-    font-size:39px;
+    font-size:45px;
     line-height:1;
     font-weight:950;
     text-align:center;
@@ -442,21 +620,13 @@ div[data-baseweb="select"] svg {
     color:#d9272e;
 }
 
-.kpi-sub {
-    color:#536779;
-    font-size:10px;
-    font-weight:700;
-    text-align:center;
-    margin-top:7px;
-}
-
-
 /* ======================================================
    COMPLIANCE
    ====================================================== */
 
 .compliance-card {
     height:118px;
+    border-top:4px solid #164b91;
     position:relative;
 
     display:flex;
@@ -796,16 +966,160 @@ div[data-baseweb="select"] svg {
     border-top:1px solid #d7e3ea;
 }
 
+
 </style>
 """,
     unsafe_allow_html=True
 )
 
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
-# =========================================================
-# HEADER
-# =========================================================
+st.set_page_config(
+    page_title="PSM Digital Dashboard",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ============================================================
+# REMOVE STREAMLIT TOP SPACE
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    [data-testid="stHeader"] {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+
+    [data-testid="stDecoration"] {
+        display: none !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .stApp {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    iframe {
+        display: block !important;
+        margin-top: -0px !important;
+        padding-top: 0 !important;
+        border: 0 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
+)
+
+# ============================================================
+# HEADER HTML
+# ============================================================
+
 header_html = """
+
 <!DOCTYPE html>
 
 <html>
@@ -816,740 +1130,610 @@ header_html = """
 
 <style>
 
-* {
-    box-sizing:border-box;
+
+/* ============================================================
+   MAIN HEADER
+   ============================================================ */
+
+.psm-header {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 90px;
+
+    overflow: hidden;
+
+    background:
+        linear-gradient(
+            90deg,
+            #031d34 0%,
+            #052b49 42%,
+            #07385c 74%,
+            #052b49 100%
+        );
+
+    border-radius: 7px;
+
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.18);
+
 }
 
-html,
-body {
-    margin:0;
-    padding:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
+
+/* ============================================================
+   LEFT LOGO AREA
+   ============================================================ */
+
+.psm-left {
+
+    position: absolute;
+
+    left: 0;
+
+    top: 0;
+
+    width: 100%;
+
+    height: 95px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding-left: 4px;
+
+    box-sizing: border-box;
+
+    z-index: 20;
+
+    pointer-events: none;
+
+}
+
+
+/* ============================================================
+   LOGO PANEL
+   ONLY VERTICAL POSITION CHANGED
+   ============================================================ */
+
+.logo-panel {
+
+    width: 195px;
+
+    height: 68px;
+
+    background: #ffffff;
+
+    border-radius: 5px;
+
+    padding: 4px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    box-sizing: border-box;
+
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.20);
+
+    position: relative;
+
+    top: -6px;
+
+    left: 5px;
+
+}
+
+
+/* ============================================================
+   COMPANY LOGO
+   ============================================================ */
+
+.company-logo {
+
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: contain;
+
+    object-position: center;
+
+    display: block;
+
+}
+
+
+/* ============================================================
+   LEFT VERTICAL DIVIDER
+   ============================================================ */
+
+.vertical-line {
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+    margin-left: 18px;
+
+    margin-right: 20px;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ============================================================
+   CENTER TITLE AREA
+   ============================================================ */
+
+.title-area {
+
+    position: absolute;
+
+    left: 50%;
+
+    top: 0;
+
+    height: 95px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: center;
+
+    text-align: center;
+
+    min-width: max-content;
+
+    box-sizing: border-box;
+
+    transform: translateX(-50%);
+
+}
+
+
+/* ============================================================
+   MAIN TITLE
+   ============================================================ */
+
+.main-title {
+
+    color: #ffffff;
+
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+
+    font-size: 27px;
+
+    font-weight: 900;
+
+    line-height: 1;
+
+    letter-spacing: 0.3px;
+
+    white-space: nowrap;
+
+    margin: 0;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   ORANGE TITLE PART
+   ============================================================ */
+
+.main-title-orange {
+
+    color: #f28c00;
+
+}
+
+
+/* ============================================================
+   SUBTITLE
+   ============================================================ */
+
+.subtitle {
+
+    color: #ffffff;
 
     font-family:
         Arial,
-        Helvetica,
         sans-serif;
+
+    font-size: 12px;
+
+    font-weight: 400;
+
+    letter-spacing: 3.6px;
+
+    margin-top: 8px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
 }
 
-body {
-    background:#f4f9fc;
+/* ============================================================
+   SUB-SUBTITLE / TAGLINE
+   ============================================================ */
+
+.tagline {
+
+    color:
+        rgba(255,255,255,0.82);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 7px;
+
+    font-weight: 500;
+
+    letter-spacing: 2.2px;
+
+    margin-top: 6px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
 }
 
-.header {
 
-    position:relative;
+/* ============================================================
+   RIGHT DATE / TIME AREA
+   ============================================================ */
 
-    width:100%;
-    height:72px;
+.psm-right {
 
-    overflow:hidden;
+    position: absolute;
 
-    display:flex;
+    right: 16px;
 
-    align-items:center;
-    justify-content:center;
+    top: 0;
+
+    width: 15%;
+
+    height: 95px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: flex-end;
+
+    text-align: right;
+
+    color: #ffffff;
+
+    z-index: 30;
+
+    padding-left: 18px;
+
+    box-sizing: border-box;
+
+}
+
+
+/* ============================================================
+   RIGHT VERTICAL DIVIDER
+   ============================================================ */
+
+.psm-right::before {
+
+    content: "";
+
+    position: absolute;
+
+    left: 15px;
+
+    top: 6px;
+
+    width: 2px;
+
+    height: 83px;
 
     background:
+        rgba(255,255,255,0.65);
 
-        radial-gradient(
-            ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
-
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
-        );
-
-    border-top:2px solid #0b91d1;
-
-    border-bottom:3px solid #1487c2;
-
-    box-shadow:
-        0 4px 12px rgba(21,92,130,.18);
 }
 
-.header::before {
 
-    content:"";
+/* ============================================================
+   DATE
+   ============================================================ */
 
-    position:absolute;
+.date {
 
-    inset:0;
+    color:
+        rgba(255,255,255,0.95);
 
-    background-image:
+    font-family:
+        Arial,
+        sans-serif;
 
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17) 1.2px,
-            transparent 1.5px
-        );
+    font-size: 11px;
 
-    background-size:15px 15px;
+    font-weight: 400;
 
-    opacity:.65;
+    letter-spacing: 0.7px;
+
+    line-height: 1;
+
+    margin: 0;
+
+    padding: 0;
+
 }
 
-.header::after {
 
-    content:"";
+/* ============================================================
+   TIME
+   ============================================================ */
 
-    position:absolute;
+.time {
 
-    inset:0;
+    color: #ffffff;
+
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+
+    font-size: 22px;
+
+    font-weight: 800;
+
+    margin-top: 4px;
+
+    line-height: 1;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   RIGHT HORIZONTAL LINE
+   ============================================================ */
+
+.right-line {
+
+    width: 80px;
+
+    height: 2px;
 
     background:
+        rgba(255,255,255,0.75);
 
-        linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        ),
+    margin-top: 7px;
 
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        );
+    flex-shrink: 0;
+
 }
 
-.industrial {
 
-    position:absolute;
+/* ============================================================
+   ORANGE BOTTOM BAR
+   ============================================================ */
 
-    left:0;
-    right:0;
-    bottom:0;
+.orange-bar {
 
-    width:100%;
-    height:72px;
+    position: absolute;
 
-    opacity:.38;
+    left: 0;
 
-    z-index:1;
+    bottom: 0;
+
+    width: 100%;
+
+    height: 7px;
+
+    background: #f28c00;
+
+    z-index: 50;
+
 }
 
-.industrial .steel {
-
-    fill:#a8c9da;
-
-    stroke:#5791af;
-
-    stroke-width:1.5;
-}
-
-.industrial .light {
-
-    fill:none;
-
-    stroke:#2e8bb9;
-
-    stroke-width:1.2;
-
-    opacity:.70;
-}
-
-.industrial .window {
-
-    fill:#2787b5;
-
-    opacity:.65;
-}
-
-.hex {
-
-    fill:none;
-
-    stroke:#278abd;
-
-    stroke-width:1;
-
-    opacity:.28;
-}
-
-.content {
-
-    position:relative;
-
-    z-index:8;
-
-    width:100%;
-    height:100%;
-
-    display:flex;
-
-    align-items:center;
-    justify-content:center;
-}
-
-.pillar {
-
-    position:relative;
-
-    width:560px;
-    height:48px;
-
-    display:flex;
-
-    align-items:center;
-    justify-content:center;
-
-    background:
-
-        linear-gradient(
-            180deg,
-            #197fbd 0%,
-            #07538d 48%,
-            #032f5b 100%
-        );
-
-    border:1px solid #0877ba;
-
-    border-radius:14px;
-
-    color:#ffd21a;
-
-    font-size:32px;
-
-    font-weight:950;
-
-    letter-spacing:1px;
-
-    white-space:nowrap;
-
-    box-shadow:
-
-        0 7px 16px rgba(11,83,130,.30),
-
-        inset 0 1px 0 rgba(255,255,255,.32),
-
-        inset 0 -5px 12px rgba(0,35,75,.18);
-}
-
-.pillar::before,
-.pillar::after {
-
-    position:absolute;
-
-    top:50%;
-
-    transform:translateY(-50%);
-
-    color:#51c5ff;
-
-    font-size:20px;
-
-    font-weight:950;
-
-    letter-spacing:-5px;
-}
-
-.pillar::before {
-
-    content:"◀◀";
-
-    left:17px;
-}
-
-.pillar::after {
-
-    content:"▶▶";
-
-    right:17px;
-}
-
-.top-line {
-
-    position:absolute;
-
-    top:0;
-
-    left:24%;
-
-    width:52%;
-
-    height:3px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00a9ff 18%,
-            #ffffff 50%,
-            #00a9ff 82%,
-            transparent
-        );
-}
-
-.scan {
-
-    position:absolute;
-
-    z-index:12;
-
-    bottom:0;
-
-    left:-16%;
-
-    width:16%;
-
-    height:4px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00b5ff,
-            #ffffff,
-            #00b5ff,
-            transparent
-        );
-
-    animation:
-        scanline 3s linear infinite;
-}
-
-@keyframes scanline {
-
-    0% {
-        left:-16%;
-    }
-
-    100% {
-        left:100%;
-    }
-}
-
-.corner-light {
-
-    position:absolute;
-
-    z-index:10;
-
-    width:110px;
-
-    height:3px;
-
-    background:
-
-        linear-gradient(
-            90deg,
-            transparent,
-            #00baff,
-            transparent
-        );
-}
-
-.corner-left {
-
-    left:7%;
-    top:7px;
-}
-
-.corner-right {
-
-    right:7%;
-    top:7px;
-}
 
 </style>
 
 </head>
 
+
 <body>
 
-<div class="header">
 
-    <div class="top-line"></div>
+<!-- ============================================================
+     MAIN HEADER
+     ============================================================ -->
 
-    <div class="corner-light corner-left"></div>
+<div class="psm-header">
 
-    <div class="corner-light corner-right"></div>
 
-    <svg
-        class="industrial"
-        viewBox="0 0 1672 145"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-    >
+    <!-- ========================================================
+         LEFT LOGO AREA
+         ======================================================== -->
 
-        <!-- LEFT TOWER -->
+    <div class="psm-left">
 
-        <g>
 
-            <rect
-                class="steel"
-                x="85"
-                y="24"
-                width="34"
-                height="116"
-                rx="4"
-            />
+        <!-- ====================================================
+             LOGO
+             ==================================================== -->
 
-            <rect
-                class="steel"
-                x="91"
-                y="9"
-                width="22"
-                height="18"
-            />
+        <div class="logo-panel">
 
-            <rect
-                class="steel"
-                x="96"
-                y="0"
-                width="12"
-                height="12"
-            />
+            <img
+                class="company-logo"
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64"
+                alt="JSW JFE Steel Limited"
+            >
 
-            <path
-                class="light"
-                d="
-                    M102 0 L102 140
-                    M87 55 L117 55
-                    M87 78 L117 78
-                    M87 103 L117 103
-                "
-            />
-
-            <circle
-                class="window"
-                cx="102"
-                cy="43"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="102"
-                cy="67"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="102"
-                cy="91"
-                r="3"
-            />
-
-        </g>
-
-
-        <!-- LEFT PIPE -->
-
-        <g>
-
-            <rect
-                class="steel"
-                x="150"
-                y="52"
-                width="17"
-                height="88"
-            />
-
-            <rect
-                class="steel"
-                x="146"
-                y="48"
-                width="25"
-                height="8"
-            />
-
-            <path
-                class="light"
-                d="M158 52 L158 140"
-            />
-
-        </g>
-
-
-        <!-- LEFT PIPING -->
-
-        <g class="light">
-
-            <path d="M55 113 H245 V85 H320"/>
-
-            <path d="M120 125 H260 V105 H355"/>
-
-            <path d="M180 96 H285 V65 H340"/>
-
-            <path d="M215 130 V70 H280"/>
-
-        </g>
-
-
-        <!-- LEFT VESSEL -->
-
-        <g>
-
-            <rect
-                class="steel"
-                x="260"
-                y="64"
-                width="58"
-                height="76"
-                rx="26"
-            />
-
-            <path
-                class="light"
-                d="M260 82 H318 M260 107 H318"
-            />
-
-            <circle
-                class="window"
-                cx="289"
-                cy="95"
-                r="4"
-            />
-
-        </g>
-
-
-        <!-- RIGHT TOWER -->
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1512"
-                y="25"
-                width="36"
-                height="115"
-                rx="4"
-            />
-
-            <rect
-                class="steel"
-                x="1518"
-                y="9"
-                width="24"
-                height="18"
-            />
-
-            <rect
-                class="steel"
-                x="1523"
-                y="0"
-                width="14"
-                height="12"
-            />
-
-            <path
-                class="light"
-                d="
-                    M1530 0 L1530 140
-                    M1514 54 L1546 54
-                    M1514 79 L1546 79
-                    M1514 103 L1546 103
-                "
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="42"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="66"
-                r="3"
-            />
-
-            <circle
-                class="window"
-                cx="1530"
-                cy="90"
-                r="3"
-            />
-
-        </g>
-
-
-        <!-- RIGHT PIPE -->
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1450"
-                y="54"
-                width="18"
-                height="86"
-            />
-
-            <rect
-                class="steel"
-                x="1446"
-                y="49"
-                width="26"
-                height="8"
-            />
-
-            <path
-                class="light"
-                d="M1459 54 L1459 140"
-            />
-
-        </g>
-
-
-        <!-- RIGHT PIPING -->
-
-        <g class="light">
-
-            <path d="M1620 112 H1425 V85 H1350"/>
-
-            <path d="M1575 125 H1410 V104 H1330"/>
-
-            <path d="M1500 95 H1390 V65 H1335"/>
-
-            <path d="M1465 130 V70 H1390"/>
-
-        </g>
-
-
-        <!-- RIGHT VESSEL -->
-
-        <g>
-
-            <rect
-                class="steel"
-                x="1350"
-                y="64"
-                width="58"
-                height="76"
-                rx="26"
-            />
-
-            <path
-                class="light"
-                d="M1350 82 H1408 M1350 107 H1408"
-            />
-
-            <circle
-                class="window"
-                cx="1379"
-                cy="95"
-                r="4"
-            />
-
-        </g>
-
-
-        <!-- FLOOR PIPING -->
-
-        <g class="light">
-
-            <path d="M0 137 H1672"/>
-
-            <path d="M0 126 H420 V116 H650"/>
-
-            <path d="M1672 126 H1250 V116 H1020"/>
-
-        </g>
-
-
-        <!-- HEXAGONS -->
-
-        <g class="hex">
-
-            <path
-                d="
-                    M250 25
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M282 54
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M1335 25
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-            <path
-                d="
-                    M1370 54
-                    l18 -11
-                    l18 11
-                    v22
-                    l-18 11
-                    l-18-11
-                    z
-                "
-            />
-
-        </g>
-
-    </svg>
-
-
-    <div class="content">
-
-        <div class="pillar">
-            PILLAR: PSSR
         </div>
+
+
+        <!-- ====================================================
+             LEFT VERTICAL LINE
+             ==================================================== -->
+
+        <div class="vertical-line"></div>
+
+
+        <!-- ====================================================
+             CENTER TITLE GROUP
+             ==================================================== -->
+
+        <div class="title-area">
+
+
+            <!-- MAIN TITLE -->
+
+            <div class="main-title">
+
+                PRE-STARTUP SAFETY REVIEW (PSSR)
+
+                <span class="main-title-orange"></span>
+
+            </div>
+
+
+            <!-- SUBTITLE -->
+
+            <div class="subtitle">
+
+                PSM DIGITAL DASHBOARD
+
+            </div>
+
+
+            <!-- SUB-SUBTITLE -->
+
+            <div class="tagline">
+
+                PEOPLE
+                &nbsp; | &nbsp;
+                PROCESS
+                &nbsp; | &nbsp;
+                RISK
+                &nbsp; | &nbsp;
+                COMPLIANCE
+
+            </div>
+
+
+        </div>
+
 
     </div>
 
 
-    <div class="scan"></div>
+    <!-- ========================================================
+         RIGHT DATE / TIME
+         ======================================================== -->
+
+    <div class="psm-right">
+
+
+        <div class="date">
+
+            CURRENT_DATE_VALUE
+
+        </div>
+
+
+        <div class="time">
+
+            CURRENT_TIME_VALUE
+
+        </div>
+
+
+        <div class="right-line"></div>
+
+
+    </div>
+
+
+    <!-- ========================================================
+         ORANGE BOTTOM BAR
+         ======================================================== -->
+
+    <div class="orange-bar"></div>
+
 
 </div>
+
 
 </body>
 
 </html>
+
 """
 
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
+header_html = header_html.replace(
+    "LOGO_IMAGE_BASE64",
+    logo_base64
+)
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
+)
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
 
 components.html(
     header_html,
-    height=78,
+    height=114,
     scrolling=False
 )
-
 
 # =========================================================
 # MONTH + DEPARTMENT FILTER
@@ -1559,9 +1743,7 @@ filter_month, filter_department = st.columns(
     gap="small"
 )
 
-
 with filter_month:
-
     st.markdown(
         "<div class='filter-title'>MONTH</div>",
         unsafe_allow_html=True
@@ -1592,11 +1774,9 @@ with filter_month:
 
         month_labels = []
 
-
     month_options = [
-        "All Months"
-    ] + month_labels
-
+                        "All Months"
+                    ] + month_labels
 
     selected_month = st.selectbox(
         "Month",
@@ -1606,14 +1786,11 @@ with filter_month:
         key="pssr_month"
     )
 
-
 with filter_department:
-
     st.markdown(
         "<div class='filter-title'>DEPARTMENT</div>",
         unsafe_allow_html=True
     )
-
 
     departments = sorted(
         [
@@ -1625,11 +1802,9 @@ with filter_department:
         key=lambda x: x.lower()
     )
 
-
     department_options = [
-        "All Departments"
-    ] + departments
-
+                             "All Departments"
+                         ] + departments
 
     selected_department = st.selectbox(
         "Department",
@@ -1639,23 +1814,18 @@ with filter_department:
         key="pssr_department"
     )
 
-
 # =========================================================
 # APPLY FILTER
 # =========================================================
 filtered_df = work.copy()
 
-
 if selected_department != "All Departments":
-
     filtered_df = filtered_df[
         filtered_df["_department"]
         == selected_department
-    ]
-
+        ]
 
 if selected_month != "All Months":
-
     month_period = pd.Period(
         pd.to_datetime(
             selected_month,
@@ -1669,8 +1839,7 @@ if selected_month != "All Months":
         .dt
         .to_period("M")
         == month_period
-    ]
-
+        ]
 
 # =========================================================
 # KPI CALCULATIONS
@@ -1679,22 +1848,22 @@ total_pssr = len(filtered_df)
 
 completed = int(
     (
-        filtered_df["_status"]
-        == "Completed"
+            filtered_df["_status"]
+            == "Completed"
     ).sum()
 )
 
 pending = int(
     (
-        filtered_df["_status"]
-        == "Pending"
+            filtered_df["_status"]
+            == "Pending"
     ).sum()
 )
 
 overdue = int(
     (
-        filtered_df["_status"]
-        == "Overdue"
+            filtered_df["_status"]
+            == "Overdue"
     ).sum()
 )
 
@@ -1704,7 +1873,6 @@ compliance = (
     else 0
 )
 
-
 # =========================================================
 # KPI ROW
 # =========================================================
@@ -1713,12 +1881,10 @@ k1, k2, k3, k4, k5 = st.columns(
     gap="small"
 )
 
-
 # ---------------------------------------------------------
 # TOTAL PSSR
 # ---------------------------------------------------------
 with k1:
-
     st.html(
         f"""
         <div class="kpi-card">
@@ -1731,20 +1897,14 @@ with k1:
                 {total_pssr}
             </div>
 
-            <div class="kpi-sub">
-                100% of total
-            </div>
-
         </div>
         """
     )
-
 
 # ---------------------------------------------------------
 # COMPLETED
 # ---------------------------------------------------------
 with k2:
-
     completed_pct = (
         completed / total_pssr * 100
         if total_pssr
@@ -1763,20 +1923,14 @@ with k2:
                 {completed}
             </div>
 
-            <div class="kpi-sub">
-                {completed_pct:.1f}% completed
-            </div>
-
         </div>
         """
     )
-
 
 # ---------------------------------------------------------
 # PENDING
 # ---------------------------------------------------------
 with k3:
-
     pending_pct = (
         pending / total_pssr * 100
         if total_pssr
@@ -1795,20 +1949,14 @@ with k3:
                 {pending}
             </div>
 
-            <div class="kpi-sub">
-                {pending_pct:.1f}% of total
-            </div>
-
         </div>
         """
     )
-
 
 # ---------------------------------------------------------
 # OVERDUE
 # ---------------------------------------------------------
 with k4:
-
     overdue_pct = (
         overdue / total_pssr * 100
         if total_pssr
@@ -1827,33 +1975,27 @@ with k4:
                 {overdue}
             </div>
 
-            <div class="kpi-sub">
-                {overdue_pct:.1f}% of total
-            </div>
-
         </div>
         """
     )
-
 
 # ---------------------------------------------------------
 # COMPLIANCE
 # ---------------------------------------------------------
 with k5:
-
     radius = 40
 
     circumference = (
-        2 * 3.14159265359 * radius
+            2 * 3.14159265359 * radius
     )
 
     progress = (
-        circumference
-        * min(
-            max(compliance, 0),
-            100
-        )
-        / 100
+            circumference
+            * min(
+        max(compliance, 0),
+        100
+    )
+            / 100
     )
 
     st.html(
@@ -1898,13 +2040,12 @@ with k5:
             </div>
 
             <div class="compliance-sub">
-                Compliance Percentage
+
             </div>
 
         </div>
         """
     )
-
 
 # =========================================================
 # CHART ROW
@@ -1914,12 +2055,10 @@ chart_left, chart_right = st.columns(
     gap="small"
 )
 
-
 # =========================================================
 # DEPARTMENT-WISE PSSR
 # =========================================================
 with chart_left:
-
     st.html(
         """
         <div class="chart-panel">
@@ -1931,7 +2070,6 @@ with chart_left:
             <div class="chart-content">
         """
     )
-
 
     department_counts = (
         filtered_df["_department"]
@@ -1945,9 +2083,7 @@ with chart_left:
         )
     )
 
-
     fig_department = go.Figure()
-
 
     fig_department.add_trace(
         go.Bar(
@@ -1964,7 +2100,11 @@ with chart_left:
 
             marker=dict(
 
-                color="#164b91",
+                color=[
+                    "#164b91", "#f28c00", "#2e8b57", "#8e44ad",
+                    "#e74c3c", "#16a085", "#d35400", "#2980b9",
+                    "#c0392b", "#7f8c8d"
+                ][:len(department_counts)],
 
                 line=dict(
                     color="#0a2d5a",
@@ -1981,13 +2121,11 @@ with chart_left:
         )
     )
 
-
     max_value = (
         int(department_counts.max())
         if not department_counts.empty
         else 1
     )
-
 
     fig_department.update_layout(
 
@@ -2022,8 +2160,8 @@ with chart_left:
             ],
 
             dtick=5
-                if max_value >= 10
-                else 1,
+            if max_value >= 10
+            else 1,
 
             gridcolor="#dce7ed",
 
@@ -2061,7 +2199,6 @@ with chart_left:
 
     )
 
-
     st.plotly_chart(
 
         fig_department,
@@ -2069,23 +2206,20 @@ with chart_left:
         use_container_width=True,
 
         config={
-            "displayModeBar":False,
-            "responsive":True
+            "displayModeBar": False,
+            "responsive": True
         }
 
     )
-
 
     st.html(
         "</div></div>"
     )
 
-
 # =========================================================
 # STATUS SUMMARY
 # =========================================================
 with chart_right:
-
     st.html(
         """
         <div class="chart-panel">
@@ -2098,13 +2232,11 @@ with chart_right:
         """
     )
 
-
     status_labels = [
         "Completed",
         "Pending",
         "Overdue"
     ]
-
 
     status_values = [
         completed,
@@ -2112,9 +2244,7 @@ with chart_right:
         overdue
     ]
 
-
     fig_status = go.Figure()
-
 
     fig_status.add_trace(
 
@@ -2155,7 +2285,6 @@ with chart_right:
         )
 
     )
-
 
     fig_status.update_layout(
 
@@ -2239,7 +2368,6 @@ with chart_right:
 
     )
 
-
     st.plotly_chart(
 
         fig_status,
@@ -2247,17 +2375,15 @@ with chart_right:
         use_container_width=True,
 
         config={
-            "displayModeBar":False,
-            "responsive":True
+            "displayModeBar": False,
+            "responsive": True
         }
 
     )
 
-
     st.html(
         "</div></div>"
     )
-
 
 # =========================================================
 # PSSR REGISTER
@@ -2272,46 +2398,37 @@ st.html(
     """
 )
 
-
 # =========================================================
 # PAGINATION
 # =========================================================
 PAGE_SIZE = 5
 
-
 if "pssr_page" not in st.session_state:
     st.session_state.pssr_page = 1
-
 
 total_pages = max(
     1,
     (
-        len(filtered_df)
-        + PAGE_SIZE
-        - 1
+            len(filtered_df)
+            + PAGE_SIZE
+            - 1
     )
     // PAGE_SIZE
 )
 
-
 if st.session_state.pssr_page > total_pages:
-
     st.session_state.pssr_page = total_pages
-
 
 page = st.session_state.pssr_page
 
-
 start_idx = (
-    page - 1
-) * PAGE_SIZE
-
+                    page - 1
+            ) * PAGE_SIZE
 
 end_idx = (
-    start_idx
-    + PAGE_SIZE
+        start_idx
+        + PAGE_SIZE
 )
-
 
 page_df = filtered_df.iloc[
     start_idx:end_idx
@@ -2319,62 +2436,10 @@ page_df = filtered_df.iloc[
 
 
 # =========================================================
-# TABLE
+# HTML ESCAPE HELPER
 # =========================================================
-html = """
-
-<div style="
-    padding:0 6px;
-">
-
-<table class="pssr-table">
-
-<colgroup>
-
-    <col style="width:19%;">
-
-    <col style="width:19%;">
-
-    <col style="width:14%;">
-
-    <col style="width:10%;">
-
-    <col style="width:10%;">
-
-    <col style="width:10%;">
-
-    <col style="width:18%;">
-
-</colgroup>
-
-<thead>
-
-<tr>
-
-    <th>PSSR No.</th>
-
-    <th>PSSR Description</th>
-
-    <th>Department</th>
-
-    <th>Status</th>
-
-    <th>Upload Report</th>
-
-    <th>View Report</th>
-
-    <th>Remark</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-"""
-
 
 def escape_html(value):
-
     return (
         str(value)
         .replace("&", "&amp;")
@@ -2384,161 +2449,318 @@ def escape_html(value):
     )
 
 
-for _, row in page_df.iterrows():
+# =========================================================
 
-    status = row["_status"]
+# TABLE
+# =========================================================
+# PSSR REGISTER
+# Original PSSR columns are preserved.
+# Only Upload / View are native Streamlit buttons,
+# styled exactly like the working PT table.
+# =========================================================
+
+st.html(
+    '''
+<style>
+
+.pssr-table-wrap {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid #d5e0ea;
+    background: #ffffff;
+}
+
+.pssr-action-row {
+    display: grid;
+    grid-template-columns:
+        1.90fr
+        1.90fr
+        1.40fr
+        1.00fr
+        1.00fr
+        1.80fr;
+}
+
+.pssr-action-header {
+    min-height: 52px;
+    background: linear-gradient(
+        180deg,
+        #205796 0%,
+        #174b87 100%
+    );
+}
+
+.pssr-action-header .pssr-action-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 10px;
+    border-right: 1px solid #d5e0ea;
+    border-bottom: 1px solid #d5e0ea;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.pssr-action-cell {
+    min-height: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    border-right: 1px solid #d5e0ea;
+    border-bottom: 1px solid #d5e0ea;
+    color: #243b57;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 5px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pssr-action-cell.alt {
+    background: #f5f8fb;
+}
+
+.pssr-action-cell.left {
+    justify-content: flex-start;
+    text-align: left;
+}
+.pssr-view-link {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    height:35px;
+    box-sizing:border-box;
+    background:#ffffff;
+    color:#174b87 !important;
+    border-bottom:1px solid #d5e0ea;
+    border-right:1px solid #d5e0ea;
+    text-decoration:none !important;
+    font-size:11px;
+    font-weight:800;
+}
+.pssr-view-link:hover {
+    background:#f5f8fb;
+}
 
 
-    if status == "Completed":
+/* Keep the Google Sheet-style headline visible and tight. */
+div[data-testid="stMarkdownContainer"]:has(.pssr-action-header) {
+    margin: 0 !important;
+    padding: 0 !important;
+}
 
-        status_class = (
-            "status-completed"
+.pssr-action-header .pssr-action-cell {
+    color: #ffffff !important;
+    background: #205796 !important;
+}
+
+.pssr-status-completed {
+    color: #0a9f43;
+    font-weight: 900;
+}
+
+.pssr-status-ongoing,
+.pssr-status-pending {
+    color: #f28c00;
+    font-weight: 900;
+}
+
+.pssr-status-overdue {
+    color: #e1262d;
+    font-weight: 900;
+}
+
+/* SAME VISUAL TARGET AS PT.PY */
+
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker) {
+    gap: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(5) button,
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button {
+    height: 35px !important;
+    min-height: 35px !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    border-right: 1px solid #d5e0ea !important;
+    border-bottom: 1px solid #d5e0ea !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    transform: none !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(5) button {
+    color: #e1262d !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button {
+    color: #174b87 !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(5) button:hover,
+div[data-testid="stHorizontalBlock"]:has(.pssr-action-row-marker)
+div[data-testid="stColumn"]:nth-child(6) button:hover {
+    background: #f5f8fb !important;
+    color: inherit !important;
+    border-color: #d5e0ea !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+</style>
+'''
+)
+
+# =========================================================
+# HEADER
+# =========================================================
+
+st.markdown(
+    '''
+<div class="pssr-table-wrap">
+    <div class="pssr-action-row pssr-action-header">
+        <div class="pssr-action-cell">PSSR No.</div>
+        <div class="pssr-action-cell">PSSR Description</div>
+        <div class="pssr-action-cell">Department</div>
+        <div class="pssr-action-cell">Status</div>
+        <div class="pssr-action-cell">View Report</div>
+        <div class="pssr-action-cell">Remark</div>
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
+
+
+def escape_html(value):
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+for row_no, (_, row) in enumerate(page_df.iterrows()):
+
+    alt = row_no % 2
+
+    pssr_no = str(row["_pssr_no"]).strip()
+    description = str(row["_description"]).strip()
+    department = str(row["_department"]).strip()
+    status = str(row["_status"]).strip()
+    remarks = str(row["_remarks"]).strip()
+
+    if status.lower() == "completed":
+        status_html = (
+            '<span class="pssr-status-completed">COMPLETED</span>'
         )
-
-    elif status == "Overdue":
-
-        status_class = (
-            "status-overdue"
+    elif status.lower() == "ongoing":
+        status_html = (
+            '<span class="pssr-status-ongoing">ONGOING</span>'
         )
-
+    elif status.lower() == "overdue":
+        status_html = (
+            '<span class="pssr-status-overdue">OVERDUE</span>'
+        )
     else:
+        status_html = escape_html(status or "—")
 
-        status_class = (
-            "status-pending"
+    row_cols = st.columns(
+        [
+            1.90,
+            1.90,
+            1.40,
+            1.00,
+            1.00,
+            1.80
+        ],
+        gap=None
+    )
+
+    with row_cols[0]:
+        st.markdown(
+            f'''
+<div class="pssr-action-cell {"alt" if alt else ""} left">
+    <span class="pssr-action-row-marker"></span>
+    {escape_html(pssr_no)}
+</div>
+''',
+            unsafe_allow_html=True
         )
 
-
-    pssr_no = escape_html(
-        row["_pssr_no"]
-    )
-
-    description = escape_html(
-        row["_description"]
-    )
-
-    department = escape_html(
-        row["_department"]
-    )
-
-    remarks = escape_html(
-        row["_remarks"]
-    )
-
-
-    html += f"""
-
-<tr>
-
-    <td
-        class="left"
-        title="{pssr_no}"
-    >
-        {pssr_no}
-    </td>
-
-
-    <td
-        title="{description}"
-    >
-        {description}
-    </td>
-
-
-    <td>
-        {department}
-    </td>
-
-
-    <td>
-
-        <span
-            class="
-                status-badge
-                {status_class}
-            "
-        >
-            {status.upper()}
-        </span>
-
-    </td>
-
-
-    <td>
-
-        <span
-            class="icon-btn"
-            title="Upload Report"
-        >
-            ⇧
-        </span>
-
-    </td>
-
-
-    <td>
-
-        <span
-            class="icon-btn"
-            title="View Report"
-        >
-            ◉
-        </span>
-
-    </td>
-
-
-    <td>
-
-        <span
-            class="remark-icon"
-            title="{remarks}"
-        >
-            ▱
-        </span>
-
-    </td>
-
-</tr>
-
-"""
-
-
-if page_df.empty:
-
-    html += """
-
-<tr>
-
-<td
-    colspan="7"
-    style="
-        height:120px;
-        text-align:center;
-        color:#71808d;
-    "
->
-    No PSSR records found
-    for the selected filters.
-</td>
-
-</tr>
-
-"""
-
-
-html += """
-
-</tbody>
-
-</table>
-
+    with row_cols[1]:
+        st.markdown(
+            f'''
+<div class="pssr-action-cell {"alt" if alt else ""} left"
+     title="{escape_html(description)}">
+    {escape_html(description)}
 </div>
+''',
+            unsafe_allow_html=True
+        )
 
-"""
+    with row_cols[2]:
+        st.markdown(
+            f'''
+<div class="pssr-action-cell {"alt" if alt else ""}">
+    {escape_html(department)}
+</div>
+''',
+            unsafe_allow_html=True
+        )
 
+    with row_cols[3]:
+        st.markdown(
+            f'''
+<div class="pssr-action-cell {"alt" if alt else ""}">
+    {status_html}
+</div>
+''',
+            unsafe_allow_html=True
+        )
 
-st.html(html)
+    with row_cols[4]:
+        report_link = get_report_link(row, page_df.index[row_no])
+        st.markdown(
+            f"""
+<a href="{escape_html(report_link)}"
+   target="_blank"
+   class="pssr-view-link">◉ View</a>
+""",
+            unsafe_allow_html=True
+        )
 
+    with row_cols[5]:
+        st.markdown(
+            f'''
+<div class="pssr-action-cell {"alt" if alt else ""}"
+     title="{escape_html(remarks)}">
+    <span class="remark-icon">▱</span>
+</div>
+''',
+            unsafe_allow_html=True
+        )
+
+st.html("</div>")
 
 # =========================================================
 # REGISTER FOOTER
@@ -2549,12 +2771,10 @@ shown_from = (
     else 0
 )
 
-
 shown_to = min(
     end_idx,
     len(filtered_df)
 )
-
 
 st.html(
     f"""
@@ -2589,9 +2809,9 @@ st.html(
 
             <span class="page-btn">
                 {min(
-                    page + 1,
-                    total_pages
-                )}
+        page + 1,
+        total_pages
+    )}
             </span>
 
             <span class="page-btn">
@@ -2616,7 +2836,6 @@ st.html(
     """
 )
 
-
 # =========================================================
 # REAL PAGINATION BUTTONS
 # =========================================================
@@ -2626,39 +2845,33 @@ if total_pages > 1:
         [1, 1, 1]
     )
 
-
     with p1:
 
         if page > 1:
 
             if st.button(
-                "← Previous",
-                key="pssr_previous"
+                    "← Previous",
+                    key="pssr_previous"
             ):
-
                 st.session_state.pssr_page -= 1
 
                 st.rerun()
-
 
     with p3:
 
         if page < total_pages:
 
             if st.button(
-                "Next →",
-                key="pssr_next"
+                    "Next →",
+                    key="pssr_next"
             ):
-
                 st.session_state.pssr_page += 1
 
                 st.rerun()
 
-
 st.html(
     "</div>"
 )
-
 
 # =========================================================
 # FOOTER
@@ -2679,12 +2892,10 @@ st.html(
     """
 )
 
-
 # =========================================================
 # AUTO REFRESH MESSAGE
 # =========================================================
 if not AUTO_REFRESH_AVAILABLE:
-
     st.caption(
         "Automatic refresh is disabled. "
         "Install streamlit-autorefresh with: "

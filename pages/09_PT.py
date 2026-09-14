@@ -4,11 +4,13 @@ import pandas as pd
 import os
 import base64
 import re
-import mimetypes
-from pathlib import Path
+import json
+from io import BytesIO
+from urllib.request import Request, urlopen
+from openpyxl import load_workbook
 from streamlit_autorefresh import st_autorefresh
-
-
+from pathlib import Path
+from datetime import datetime
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -17,7 +19,7 @@ st.set_page_config(
     page_title="PSM Dashboard - PT",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 
@@ -34,31 +36,7 @@ if "page_number" not in st.session_state:
 if "department_selector" not in st.session_state:
     st.session_state.department_selector = "All Departments"
 
-if "upload_pt_no" not in st.session_state:
-    st.session_state.upload_pt_no = ""
 
-if "view_pt_no" not in st.session_state:
-    st.session_state.view_pt_no = ""
-
-if "open_upload_dialog" not in st.session_state:
-    st.session_state.open_upload_dialog = False
-
-if "open_view_dialog" not in st.session_state:
-    st.session_state.open_view_dialog = False
-
-
-# =========================================================
-# ACTION STATE
-# Upload / View are opened in Streamlit modal dialogs.
-# No query-parameter navigation is used, so the browser
-# does not leave or reload the dashboard page.
-# =========================================================
-
-if "upload_pt_no" not in st.session_state:
-    st.session_state.upload_pt_no = ""
-
-if "view_pt_no" not in st.session_state:
-    st.session_state.view_pt_no = ""
 
 
 # =========================================================
@@ -82,6 +60,17 @@ SHEET2_CSV_URL = (
     f"{SPREADSHEET_ID}"
     f"/gviz/tq?tqx=out:csv&sheet=PT"
 )
+
+
+# These are the exact Google Sheet column names used by the PT register.
+STATUS_COLUMN = "Status (Ongoing/Completed)"
+LINK_COLUMN = "Attach PT Softcopy Link"
+APPROVAL_COLUMN = "Approved  (Yes/No)"
+
+
+def normalize_column_name(value):
+    """Normalize Google Sheet headers so line breaks/multiple spaces do not matter."""
+    return re.sub(r"\s+", " ", str(value).replace("\xa0", " ").replace("\n", " ")).strip().lower()
 
 
 @st.cache_data(ttl=60)
@@ -128,70 +117,79 @@ def get_pt_data():
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=60)
+def get_pt_document_links():
+    """Read the actual hyperlink target from the PT worksheet."""
+    links = {}
+    try:
+        xlsx_url = (
+            f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export"
+            f"?format=xlsx"
+        )
+        request = Request(xlsx_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=30) as response:
+            workbook_bytes = response.read()
+
+        workbook = load_workbook(
+            filename=BytesIO(workbook_bytes),
+            read_only=False,
+            data_only=False
+        )
+        if "PT" not in workbook.sheetnames:
+            workbook.close()
+            return links
+
+        worksheet = workbook["PT"]
+        headers = {}
+        for cell in worksheet[1]:
+            if cell.value is not None:
+                header = str(cell.value).replace("\xa0", " ").strip()
+                headers[header] = cell.column
+
+        link_col = headers.get(LINK_COLUMN)
+        pt_col = headers.get("PT No.")
+        if not link_col or not pt_col:
+            workbook.close()
+            return links
+
+        formula_pattern = re.compile(
+            r'=HYPERLINK\s*\(\s*["\']([^"\']+)["\']',
+            re.IGNORECASE
+        )
+
+        for row_number in range(2, worksheet.max_row + 1):
+            pt_cell = worksheet.cell(row=row_number, column=pt_col)
+            link_cell = worksheet.cell(row=row_number, column=link_col)
+            pt_number = "" if pt_cell.value is None else str(pt_cell.value).strip()
+            if not pt_number:
+                continue
+
+            document_link = ""
+            if link_cell.hyperlink and link_cell.hyperlink.target:
+                document_link = str(link_cell.hyperlink.target).strip()
+
+            if not document_link and isinstance(link_cell.value, str):
+                match = formula_pattern.search(link_cell.value)
+                if match:
+                    document_link = match.group(1).strip()
+
+            if not document_link and isinstance(link_cell.value, str):
+                candidate = link_cell.value.strip()
+                if re.match(r"^https?://", candidate, re.IGNORECASE):
+                    document_link = candidate
+
+            if document_link:
+                links[pt_number] = document_link
+
+        workbook.close()
+    except Exception:
+        return links
+    return links
+
+
 df = get_pt_data()
+pt_document_links = get_pt_document_links()
 
-
-# =========================================================
-# DOCUMENT STORAGE
-# =========================================================
-
-DOCUMENT_FOLDER = Path(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "pt_documents"
-    )
-)
-
-DOCUMENT_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True
-)
-
-
-def safe_pt_folder_name(pt_no):
-    value = str(pt_no).strip()
-    value = re.sub(r"[^A-Za-z0-9._-]+", "_", value)
-    return value or "unknown_pt"
-
-
-def get_pt_document_folder(pt_no):
-    folder = DOCUMENT_FOLDER / safe_pt_folder_name(pt_no)
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
-
-
-def get_pt_documents(pt_no):
-    folder = get_pt_document_folder(pt_no)
-    return sorted(
-        [p for p in folder.iterdir() if p.is_file()],
-        key=lambda p: p.name.lower()
-    )
-
-
-def save_pt_document(pt_no, uploaded_file):
-    folder = get_pt_document_folder(pt_no)
-
-    original_name = Path(uploaded_file.name).name
-    stem = Path(original_name).stem
-    suffix = Path(original_name).suffix
-
-    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")
-    safe_stem = safe_stem or "document"
-
-    target = folder / f"{safe_stem}{suffix}"
-    counter = 1
-
-    while target.exists():
-        target = folder / f"{safe_stem}_{counter}{suffix}"
-        counter += 1
-
-    target.write_bytes(uploaded_file.getbuffer())
-    return target
-
-
-def get_document_mime_type(path):
-    mime_type, _ = mimetypes.guess_type(str(path))
-    return mime_type or "application/octet-stream"
 
 
 # =========================================================
@@ -202,14 +200,49 @@ required_columns = [
     "PT No.",
     "Department",
     "Name of PT",
-    "Status  (Ongoing/Completed)"
+    "Status (Ongoing/Completed)",
+    "Attach PT Softcopy Link"
 ]
 
-STATUS_COLUMN = "Status  (Ongoing/Completed)"
+# Resolve the real Google Sheet headers by normalized text.
+# This handles headers such as "Status  (Ongoing/Completed)"
+# or headers containing a line break/extra spaces.
+_normalized_columns = {normalize_column_name(col): col for col in df.columns}
 
+_column_aliases = {
+    "PT No.": ["PT No."],
+    "Department": ["Department"],
+    "Name of PT": ["Name of PT"],
+    "Status (Ongoing/Completed)": [
+        "Status (Ongoing/Completed)",
+        "Status  (Ongoing/Completed)"
+    ],
+    "Attach PT Softcopy Link": ["Attach PT Softcopy Link"]
+}
+
+_resolved_columns = {}
+for _required in required_columns:
+    _resolved = None
+    for _alias in _column_aliases.get(_required, [_required]):
+        _resolved = _normalized_columns.get(normalize_column_name(_alias))
+        if _resolved:
+            break
+    _resolved_columns[_required] = _resolved
+
+if _resolved_columns["Status (Ongoing/Completed)"]:
+    STATUS_COLUMN = _resolved_columns["Status (Ongoing/Completed)"]
+
+if _resolved_columns["Attach PT Softcopy Link"]:
+    LINK_COLUMN = _resolved_columns["Attach PT Softcopy Link"]
+
+required_columns = [
+    _resolved_columns[col] if _resolved_columns[col] else col
+    for col in required_columns
+]
 
 # =========================================================
 # CHECK DATA
+# =========================================================
 # =========================================================
 
 if df.empty:
@@ -626,7 +659,7 @@ div.stButton > button:disabled {
 
 .kpi-card {
     position: relative;
-    height: 105px;
+    height: 125px;
     overflow: hidden;
 
     background:
@@ -670,8 +703,17 @@ div.stButton > button:disabled {
     border-top-color: #19a657;
 }
 
+
 .kpi-card.ongoing {
     border-top-color: #f18d05;
+}
+
+.kpi-card.approved {
+    border-top-color: #176fc1;
+}
+
+.kpi-card.pending {
+    border-top-color: #d94b4b;
 }
 
 
@@ -712,13 +754,25 @@ div.stButton > button:disabled {
    KPI TEXT — HIGH CONTRAST
    ===================================================== */
 
+/* Keep all KPI text centered horizontally and vertically like TOTAL PT. */
+.kpi-card .kpi-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+}
+
 .kpi-content {
     margin-left: 78px;
 }
 
 .kpi-label {
     color: #092d5c;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: .15px;
 
@@ -729,8 +783,25 @@ div.stButton > button:disabled {
     color: #08783c;
 }
 
+
 .kpi-card.ongoing .kpi-label {
     color: #b96700;
+}
+
+.kpi-card.approved .kpi-label {
+    color: #0a4e91;
+}
+
+.kpi-card.pending .kpi-label {
+    color: #b33a3a;
+}
+
+/* Keep the two document KPI titles on a single line. */
+.kpi-card.approved .kpi-label,
+.kpi-card.pending .kpi-label {
+    white-space: nowrap !important;
+    font-size: 13px !important;
+    letter-spacing: 0 !important;
 }
 
 .kpi-value {
@@ -747,8 +818,17 @@ div.stButton > button:disabled {
     color: #159447 !important;
 }
 
+
 .kpi-value.orange {
     color: #f0a000 !important;
+}
+
+.kpi-value.approved {
+    color: #176fc1 !important;
+}
+
+.kpi-value.pending {
+    color: #d94b4b !important;
 }
 
 .kpi-description {
@@ -1135,1479 +1215,777 @@ div[data-testid="stAlert"] {
     unsafe_allow_html=True
 )
 
-# =========================================================
-# PREMIUM 3D INDUSTRIAL HEADER — REFERENCE MATCH
-# =========================================================
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
-LOGO_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "jsw_jfe_logo.jpg"
+st.set_page_config(
+    page_title="PSM Digital Dashboard",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-if not os.path.exists(LOGO_PATH):
-    st.error(f"Logo file not found: {LOGO_PATH}")
-    st.stop()
 
-with open(LOGO_PATH, "rb") as f:
-    logo_base64 = base64.b64encode(f.read()).decode("utf-8")
+# ============================================================
+# REMOVE STREAMLIT TOP SPACE
+# ============================================================
 
+st.markdown(
+    """
+    <style>
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+
+    [data-testid="stDecoration"] {
+        display: none !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .stApp {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    iframe {
+        display: block !important;
+        margin-top: -0px !important;
+        padding-top: 0 !important;
+        border: 0 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
+)
+
+
+# ============================================================
+# HEADER HTML
+# ============================================================
 
 header_html = """
+
 <!DOCTYPE html>
+
 <html>
+
 <head>
+
 <meta charset="UTF-8">
 
 <style>
 
-* {
-    box-sizing: border-box;
-}
 
-html,
-body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, Helvetica, sans-serif;
-}
+/* ============================================================
+   MAIN HEADER
+   ============================================================ */
 
-body {
-    background: #ffffff;
-}
+.psm-header {
 
-
-/* =====================================================
-   MAIN OUTER HEADER
-   — FULL CORNER CURVE LIKE REFERENCE
-   ===================================================== */
-
-.header {
     position: relative;
 
-    width: calc(100% - 8px);
-    height: 150px;
+    width: 100%;
 
-    /* Move the complete header slightly downward */
-    margin: 8px 4px 0;
+    height: 90px;
 
     overflow: hidden;
 
     background:
-        radial-gradient(
-            ellipse at center,
-            #0a3552 0%,
-            #062239 35%,
-            #031421 67%,
-            #010910 100%
-        );
-
-    border: 1px solid #51c7f5;
-
-    border-radius: 20px;
-
-    box-shadow:
-        0 0 0 2px rgba(4,34,52,.92),
-        0 4px 14px rgba(0,0,0,.40),
-        inset 0 1px 0 rgba(255,255,255,.12),
-        inset 0 -1px 0 rgba(48,194,241,.75);
-}
-
-
-/* =====================================================
-   SECONDARY INNER CURVED FRAME
-   ===================================================== */
-
-.header-frame {
-    position: absolute;
-
-    inset: 5px;
-
-    z-index: 40;
-
-    border: 1px solid rgba(69,190,237,.48);
-
-    border-radius: 15px;
-
-    pointer-events: none;
-
-    box-shadow:
-        inset 0 0 18px rgba(0,151,220,.13);
-}
-
-
-/* =====================================================
-   TOP REFLECTIVE GLOW
-   ===================================================== */
-
-.header-glow {
-    position: absolute;
-
-    z-index: 6;
-
-    left: 17%;
-    right: 17%;
-    top: 2px;
-
-    height: 28px;
-
-    background:
-        radial-gradient(
-            ellipse,
-            rgba(170,235,255,.20) 0%,
-            rgba(65,194,242,.10) 35%,
-            transparent 72%
-        );
-
-    filter: blur(3px);
-
-    pointer-events: none;
-}
-
-
-/* =====================================================
-   TECHNICAL GRID
-   ===================================================== */
-
-.header::before {
-    content: "";
-
-    position: absolute;
-
-    inset: 0;
-
-    background:
-        linear-gradient(
-            rgba(38,184,242,.045) 1px,
-            transparent 1px
-        ),
         linear-gradient(
             90deg,
-            rgba(38,184,242,.045) 1px,
-            transparent 1px
+            #031d34 0%,
+            #052b49 42%,
+            #07385c 74%,
+            #052b49 100%
         );
 
-    background-size: 28px 28px;
+    border-radius: 7px;
 
-    opacity: .9;
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.18);
+
 }
 
 
-/* =====================================================
-   INDUSTRIAL BACKGROUND
-   ===================================================== */
+/* ============================================================
+   LEFT LOGO AREA
+   ============================================================ */
 
-.industrial {
+.psm-left {
+
     position: absolute;
 
     left: 0;
-    right: 0;
-    bottom: 0;
+
+    top: 0;
 
     width: 100%;
-    height: 145px;
 
-    z-index: 2;
-
-    opacity: .55;
-}
-
-.industrial .steel {
-    fill: #12364e;
-    stroke: #2999c4;
-    stroke-width: 1.1;
-}
-
-.industrial .highlight {
-    fill: none;
-    stroke: #39c5f5;
-    stroke-width: 1;
-    opacity: .58;
-}
-
-.industrial .warm {
-    fill: #f2ad23;
-    opacity: .78;
-}
-
-.industrial .glass {
-    fill: #0a5e92;
-    stroke: #53d4ff;
-    stroke-width: .7;
-    opacity: .45;
-}
-
-.tech {
-    fill: none;
-    stroke: #2ca6d8;
-    stroke-width: .8;
-    opacity: .18;
-}
-
-
-/* =====================================================
-   LOGO PANEL
-   — WIDE RECTANGULAR, NOT SQUARE
-   ===================================================== */
-
-.logo-panel {
-    position: absolute;
-
-    z-index: 30;
-
-    left: 2.6%;
-    top: 50%;
-
-    transform: translateY(-50%);
-
-    width: 17.0%;
-    max-width: 325px;
-    min-width: 235px;
-
-    height: 108px;
+    height: 95px;
 
     display: flex;
+
     align-items: center;
-    justify-content: center;
 
-    padding: 6px 10px;
+    padding-left: 4px;
 
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #f9fbfd 42%,
-            #e4edf3 100%
-        );
+    box-sizing: border-box;
 
-    border: 1px solid #a5bccb;
-
-    border-radius: 14px;
-
-    box-shadow:
-        0 7px 15px rgba(0,0,0,.40),
-        0 0 0 2px rgba(20,63,86,.82),
-        inset 0 2px 0 rgba(255,255,255,.98),
-        inset 0 -4px 7px rgba(75,105,124,.14);
-}
-
-.logo-panel::before {
-    content: "";
-
-    position: absolute;
-
-    inset: -4px;
-
-    border-radius: 17px;
-
-    border: 1px solid rgba(84,202,247,.68);
+    z-index: 20;
 
     pointer-events: none;
+
 }
 
-.logo-panel::after {
-    content: "";
 
-    position: absolute;
+/* ============================================================
+   LOGO PANEL
+   ONLY VERTICAL POSITION CHANGED
+   ============================================================ */
 
-    left: 12%;
-    right: 12%;
-    top: -3px;
+.logo-panel {
 
-    height: 3px;
+    width: 195px;
 
-    border-radius: 50%;
+    height: 68px;
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #8fe6ff,
-            transparent
-        );
+    background: #ffffff;
+
+    border-radius: 5px;
+
+    padding: 4px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    box-sizing: border-box;
 
     box-shadow:
-        0 0 8px rgba(72,204,250,.82);
+        0 3px 9px
+        rgba(0,0,0,0.20);
+
+    position: relative;
+
+    top: -5px;
+
+    left: 5px;
+
 }
 
-.header-logo {
-    display: block;
+
+/* ============================================================
+   COMPANY LOGO
+   ============================================================ */
+
+.company-logo {
 
     width: 100%;
+
     height: 100%;
 
     object-fit: contain;
+
     object-position: center;
 
-    border-radius: 6px;
+    display: block;
+
 }
 
 
-/* =====================================================
-   CENTRAL TITLE FRAME
-   — LARGE 3D BEVELED PANEL
-   ===================================================== */
+/* ============================================================
+   LEFT VERTICAL DIVIDER
+   ============================================================ */
 
-.title-frame {
+.vertical-line {
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+    margin-left: 18px;
+
+    margin-right: 20px;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ============================================================
+   CENTER TITLE AREA
+   ============================================================ */
+
+.title-area {
+
     position: absolute;
-
-    z-index: 22;
 
     left: 50%;
-    top: 50%;
 
-    /* Exact horizontal + vertical centering */
-    transform: translate(-50%, -50%);
-
-    width: 53%;
-    max-width: 995px;
-    min-width: 600px;
-
-    height: 112px;
-
-    padding: 3px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f0fbff 0%,
-            #7d9cac 8%,
-            #dcecf4 16%,
-            #254c63 29%,
-            #092337 48%,
-            #597f91 70%,
-            #eaf8ff 86%,
-            #617e8d 100%
-        );
-
-    border-radius: 17px;
-
-    box-shadow:
-        0 8px 20px rgba(0,0,0,.58),
-        0 0 22px rgba(0,160,245,.34);
-}
-
-
-/* INNER TITLE SURFACE */
-
-.title-inner {
-    position: relative;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    background:
-        radial-gradient(
-            ellipse at 50% 25%,
-            #174c6c 0%,
-            #0b304b 38%,
-            #041b2c 100%
-        );
-
-    border: 1px solid #67d4ff;
-
-    border-radius: 13px;
-
-    overflow: hidden;
-
-    box-shadow:
-        inset 0 3px 0 rgba(255,255,255,.22),
-        inset 0 -10px 18px rgba(0,0,0,.30),
-        0 0 15px rgba(28,183,242,.25);
-}
-
-
-/* TOP BLUE REFLECTION */
-
-.title-inner::before {
-    content: "";
-
-    position: absolute;
-
-    z-index: 1;
-
-    left: 12%;
-    right: 12%;
-    top: 5px;
-
-    height: 4px;
-
-    border-radius: 50%;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            rgba(192,242,255,.95),
-            rgba(73,202,248,1),
-            rgba(192,242,255,.95),
-            transparent
-        );
-
-    box-shadow:
-        0 0 10px rgba(72,210,255,.90);
-}
-
-
-/* CENTRAL HIGHLIGHT */
-
-.title-inner::after {
-    content: "";
-
-    position: absolute;
-
-    z-index: 1;
-
-    left: 38%;
-    right: 38%;
     top: 0;
 
-    height: 8px;
-
-    background:
-        radial-gradient(
-            ellipse,
-            rgba(128,228,255,.9),
-            transparent 70%
-        );
-
-    filter: blur(2px);
-}
-
-
-/* =====================================================
-   3D TITLE TEXT
-   ===================================================== */
-
-.title-text {
-    position: relative;
-
-    z-index: 5;
+    height: 95px;
 
     display: flex;
-    flex-direction: row;
 
-    align-items: center;
+    flex-direction: column;
+
     justify-content: center;
 
-    width: 100%;
-    height: 100%;
+    align-items: center;
 
-    line-height: .88;
-    white-space: nowrap;
     text-align: center;
 
-    font-weight: 950;
-    letter-spacing: 1px;
+    min-width: max-content;
+
+    box-sizing: border-box;
+
+    transform: translateX(-50%);
+
 }
 
 
-/* PROCESS */
+/* ============================================================
+   MAIN TITLE
+   ============================================================ */
 
-.title-process {
-    font-size: clamp(25px, 2.55vw, 43px);
+.main-title {
 
     color: #ffffff;
 
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #ffffff 40%,
-            #f2fbff 65%,
-            #d4f1ff 100%
-        );
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
 
-    -webkit-background-clip: text;
-    background-clip: text;
+    font-size: 27px;
 
-    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+
+    line-height: 1;
+
+    letter-spacing: 0.3px;
+
+    white-space: nowrap;
+
+    margin: 0;
+
+    padding: 0;
+
 }
 
 
-/* TECHNOLOGY */
+/* ============================================================
+   ORANGE TITLE PART
+   ============================================================ */
 
-.title-technology {
-    margin-top: 4px;
+.main-title-orange {
 
-    font-size: clamp(27px, 2.85vw, 48px);
+    color: #f28c00;
 
-    color: #35c6ff;
+}
+
+
+/* ============================================================
+   SUBTITLE
+   ============================================================ */
+
+.subtitle {
 
     color: #ffffff;
 
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #ffffff 40%,
-            #f2fbff 65%,
-            #d4f1ff 100%
-        );
+    font-family:
+        Arial,
+        sans-serif;
 
-    -webkit-background-clip: text;
-    background-clip: text;
+    font-size: 12px;
 
-    -webkit-text-fill-color: transparent;
+    font-weight: 400;
+
+    letter-spacing: 3.6px;
+
+    margin-top: 8px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+}
+
+/* ============================================================
+   SUB-SUBTITLE / TAGLINE
+   ============================================================ */
+
+.tagline {
+
+    color:
+        rgba(255,255,255,0.82);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 7px;
+
+    font-weight: 500;
+
+    letter-spacing: 2.2px;
+
+    margin-top: 6px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
 }
 
 
-/* PT GOLD */
+/* ============================================================
+   RIGHT DATE / TIME AREA
+   ============================================================ */
 
-.title-pt {
-    color: #ffc31b;
+.psm-right {
 
-    background:
-        linear-gradient(
-            180deg,
-            #fff39a 0%,
-            #ffc51c 38%,
-            #f09b00 70%,
-            #c66b00 100%
-        );
-
-    -webkit-background-clip: text;
-    background-clip: text;
-
-    -webkit-text-fill-color: transparent;
-}
-
-
-/* =====================================================
-   TITLE BOTTOM ACCENT
-   ===================================================== */
-
-.title-line {
     position: absolute;
 
-    z-index: 6;
+    right: 16px;
 
-    left: 21%;
-    right: 21%;
-    bottom: 9px;
+    top: 0;
+
+    width: 15%;
+
+    height: 95px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: flex-end;
+
+    text-align: right;
+
+    color: #ffffff;
+
+    z-index: 30;
+
+    padding-left: 18px;
+
+    box-sizing: border-box;
+
+}
+
+
+/* ============================================================
+   RIGHT VERTICAL DIVIDER
+   ============================================================ */
+
+.psm-right::before {
+
+    content: "";
+
+    position: absolute;
+
+    left: 15px;
+
+    top: 6px;
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+}
+
+
+/* ============================================================
+   DATE
+   ============================================================ */
+
+.date {
+
+    color:
+        rgba(255,255,255,0.95);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 11px;
+
+    font-weight: 400;
+
+    letter-spacing: 0.7px;
+
+    line-height: 1;
+
+    margin: 0;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   TIME
+   ============================================================ */
+
+.time {
+
+    color: #ffffff;
+
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+
+    font-size: 22px;
+
+    font-weight: 800;
+
+    margin-top: 4px;
+
+    line-height: 1;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   RIGHT HORIZONTAL LINE
+   ============================================================ */
+
+.right-line {
+
+    width: 80px;
 
     height: 2px;
 
     background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #22baf3 18%,
-            #d3f7ff 50%,
-            #22baf3 82%,
-            transparent
-        );
+        rgba(255,255,255,0.75);
 
-    box-shadow:
-        0 0 8px rgba(44,195,250,.85);
+    margin-top: 7px;
+
+    flex-shrink: 0;
+
 }
 
 
-/* =====================================================
-   TITLE SIDE WINGS
-   ===================================================== */
+/* ============================================================
+   ORANGE BOTTOM BAR
+   ============================================================ */
 
-.title-wing {
-    position: absolute;
-
-    z-index: 19;
-
-    top: 50%;
-
-    width: 43px;
-    height: 44px;
-
-    transform: translateY(-50%);
-
-    background:
-        linear-gradient(
-            135deg,
-            #1a4862,
-            #061d30
-        );
-
-    border-top: 1px solid #65d5ff;
-    border-bottom: 1px solid #176b91;
-
-    box-shadow:
-        0 5px 10px rgba(0,0,0,.44);
-}
-
-.title-wing.left {
-    left: 23.0%;
-
-    clip-path:
-        polygon(
-            25% 0,
-            100% 0,
-            100% 100%,
-            25% 100%,
-            0 50%
-        );
-}
-
-.title-wing.right {
-    right: 23.0%;
-
-    clip-path:
-        polygon(
-            0 0,
-            75% 0,
-            100% 50%,
-            75% 100%,
-            0 100%
-        );
-}
-
-
-/* =====================================================
-   TAGLINE
-   ===================================================== */
-
-.tagline {
-    position: absolute;
-
-    z-index: 27;
-
-    left: 50%;
-    bottom: 6px;
-
-    transform: translateX(-50%);
-
-    color: #a9ddec;
-
-    font-size: 8px;
-
-    font-weight: 900;
-
-    letter-spacing: 2px;
-
-    white-space: nowrap;
-}
-
-
-/* =====================================================
-   RIGHT DATE/TIME PANEL
-   — SAME WIDE RECTANGULAR PROPORTION AS LOGO
-   ===================================================== */
-
-.status-panel {
-    position: absolute;
-
-    z-index: 30;
-
-    right: 2.6%;
-    top: 50%;
-
-    transform: translateY(-50%);
-
-    width: 17.0%;
-    max-width: 325px;
-    min-width: 235px;
-
-    height: 108px;
-
-    padding: 8px 13px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #123c55 0%,
-            #08263b 45%,
-            #031522 100%
-        );
-
-    border: 1px solid #55c7ee;
-
-    border-radius: 14px;
-
-    box-shadow:
-        0 7px 15px rgba(0,0,0,.48),
-        0 0 0 2px rgba(12,50,70,.92),
-        inset 0 2px 0 rgba(255,255,255,.13),
-        inset 0 -6px 12px rgba(0,0,0,.30);
-}
-
-.status-panel::before {
-    content: "";
+.orange-bar {
 
     position: absolute;
-
-    inset: -4px;
-
-    border-radius: 17px;
-
-    border: 1px solid rgba(83,202,246,.62);
-
-    pointer-events: none;
-}
-
-.status-panel::after {
-    content: "";
-
-    position: absolute;
-
-    left: 12%;
-    right: 12%;
-    top: -3px;
-
-    height: 3px;
-
-    border-radius: 50%;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #8fe8ff,
-            transparent
-        );
-
-    box-shadow:
-        0 0 8px rgba(71,204,250,.82);
-}
-
-
-/* ONLINE */
-
-.status-top {
-    height: 20px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    gap: 8px;
-
-    color: #a9ddec;
-
-    font-size: 8px;
-
-    font-weight: 900;
-
-    letter-spacing: 1.2px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-
-    border-radius: 50%;
-
-    background: #2de57f;
-
-    box-shadow:
-        0 0 8px rgba(45,229,127,.95);
-}
-
-
-/* DIVIDER */
-
-.status-divider {
-    height: 1px;
-
-    margin: 3px 8px 4px;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #3cc2ed,
-            transparent
-        );
-}
-
-
-/* DATE/TIME ROW */
-
-.status-row {
-    height: 29px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: flex-start;
-
-    gap: 9px;
-
-    padding-left: 16px;
-
-    color: #ffffff;
-
-    font-size: 15px;
-
-    font-weight: 900;
-
-    letter-spacing: .45px;
-
-    font-variant-numeric: tabular-nums;
-}
-
-.status-row.time {
-    color: #c4f2ff;
-}
-
-#current-date,
-#current-time {
-    text-align: left;
-    font-variant-numeric: tabular-nums;
-}
-
-.status-icon {
-    width: 18px;
-
-    color: #20c3f7;
-
-    font-size: 15px;
-
-    text-align: center;
-}
-
-.status-label {
-    width: 39px;
-
-    color: #b9dfed;
-
-    font-size: 12px;
-
-    font-weight: 800;
-
-    letter-spacing: .25px;
-
-    text-align: left;
-}
-
-
-/* =====================================================
-   BOTTOM METALLIC RAIL
-   ===================================================== */
-
-.bottom-rail {
-    position: absolute;
-
-    z-index: 35;
 
     left: 0;
-    right: 0;
+
     bottom: 0;
+
+    width: 100%;
 
     height: 7px;
 
-    background:
-        linear-gradient(
-            90deg,
-            #063d64 0%,
-            #1399d0 20%,
-            #91e8ff 50%,
-            #1399d0 80%,
-            #063d64 100%
-        );
+    background: #f28c00;
 
-    box-shadow:
-        0 0 9px rgba(35,194,249,.90);
+    z-index: 50;
+
 }
 
-.bottom-rail::before,
-.bottom-rail::after {
-    content: "";
-
-    position: absolute;
-
-    top: 1px;
-
-    width: 82px;
-    height: 5px;
-
-    background:
-        repeating-linear-gradient(
-            135deg,
-            transparent 0 8px,
-            rgba(255,255,255,.80) 8px 11px,
-            transparent 11px 18px
-        );
-}
-
-.bottom-rail::before {
-    left: 18%;
-}
-
-.bottom-rail::after {
-    right: 18%;
-}
-
-
-/* =====================================================
-   RESPONSIVE
-   ===================================================== */
-
-@media (max-width: 1200px) {
-
-    .logo-panel,
-    .status-panel {
-        width: 18%;
-        min-width: 205px;
-        height: 94px;
-    }
-
-    .title-frame {
-        width: 49%;
-        min-width: 500px;
-        height: 100px;
-    }
-
-    .title-wing {
-        display: none;
-    }
-
-    .tagline {
-        font-size: 7px;
-    }
-}
-
-@media (max-width: 900px) {
-
-    .header {
-        height: 125px;
-        border-radius: 16px;
-    }
-
-    .industrial {
-        height: 120px;
-    }
-
-    .logo-panel {
-        left: 1.5%;
-        width: 19%;
-        min-width: 150px;
-        height: 78px;
-        border-radius: 11px;
-    }
-
-    .title-frame {
-        width: 47%;
-        min-width: 280px;
-        height: 84px;
-        border-radius: 12px;
-    }
-
-    .title-inner {
-        border-radius: 9px;
-    }
-
-    .title-process {
-        font-size: 21px;
-    }
-
-    .title-technology {
-        font-size: 23px;
-    }
-
-    .status-panel {
-        right: 1.5%;
-        width: 19%;
-        min-width: 150px;
-        height: 78px;
-        border-radius: 11px;
-        padding: 5px 7px;
-    }
-
-    .status-row {
-        font-size: 10px;
-        height: 22px;
-    }
-
-    .status-top {
-        font-size: 6px;
-        height: 15px;
-    }
-
-    .tagline {
-        display: none;
-    }
-}
 
 </style>
+
 </head>
+
 
 <body>
 
-<div class="header">
 
-    <!-- INNER CURVED FRAME -->
-    <div class="header-frame"></div>
+<!-- ============================================================
+     MAIN HEADER
+     ============================================================ -->
 
-    <!-- TOP GLOSS -->
-    <div class="header-glow"></div>
+<div class="psm-header">
 
 
-    <!-- INDUSTRIAL BACKGROUND -->
+    <!-- ========================================================
+         LEFT LOGO AREA
+         ======================================================== -->
 
-    <svg
-        class="industrial"
-        viewBox="0 0 1672 145"
-        preserveAspectRatio="none"
-        aria-hidden="true">
+    <div class="psm-left">
 
-        <!-- LEFT PLANT -->
 
-        <g>
+        <!-- ====================================================
+             LOGO
+             ==================================================== -->
 
-            <rect class="steel"
-                  x="48" y="58"
-                  width="22" height="82"
-                  rx="3"/>
+        <div class="logo-panel">
 
-            <rect class="steel"
-                  x="82" y="40"
-                  width="34" height="100"
-                  rx="5"/>
+            <img
+                class="company-logo"
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64"
+                alt="JSW JFE Steel Limited"
+            >
 
-            <rect class="steel"
-                  x="88" y="23"
-                  width="22" height="19"/>
+        </div>
 
-            <rect class="steel"
-                  x="93" y="10"
-                  width="12" height="15"/>
 
-            <circle class="warm"
-                    cx="99" cy="58" r="3"/>
+        <!-- ====================================================
+             LEFT VERTICAL LINE
+             ==================================================== -->
 
-            <circle class="warm"
-                    cx="99" cy="81" r="3"/>
+        <div class="vertical-line"></div>
 
-            <circle class="warm"
-                    cx="99" cy="104" r="3"/>
 
-            <path class="highlight"
-                  d="
-                    M99 10 V140
-                    M84 62 H114
-                    M84 86 H114
-                    M84 110 H114
-                  "/>
+        <!-- ====================================================
+             CENTER TITLE GROUP
+             ==================================================== -->
 
-            <rect class="steel"
-                  x="137" y="72"
-                  width="52" height="68"
-                  rx="25"/>
+        <div class="title-area">
 
-            <path class="highlight"
-                  d="
-                    M137 91 H189
-                    M137 114 H189
-                  "/>
 
-            <circle class="glass"
-                    cx="163" cy="102" r="5"/>
+            <!-- MAIN TITLE -->
 
-        </g>
+            <div class="main-title">
 
+                PROCESS TECHNOLOGY (PT)
 
-        <!-- LEFT PIPING -->
-
-        <g class="highlight">
-
-            <path d="
-                M0 121
-                H310
-                V92
-                H395
-            "/>
-
-            <path d="
-                M35 132
-                H270
-                V108
-                H420
-            "/>
-
-            <path d="
-                M170 77
-                H285
-                V52
-                H380
-            "/>
-
-            <path d="
-                M247 140
-                V70
-                H335
-            "/>
-
-        </g>
-
-
-        <!-- RIGHT PLANT -->
-
-        <g>
-
-            <rect class="steel"
-                  x="1430" y="57"
-                  width="22" height="83"
-                  rx="3"/>
-
-            <rect class="steel"
-                  x="1470" y="40"
-                  width="34" height="100"
-                  rx="5"/>
-
-            <rect class="steel"
-                  x="1476" y="23"
-                  width="22" height="19"/>
-
-            <rect class="steel"
-                  x="1481" y="10"
-                  width="12" height="15"/>
-
-            <circle class="warm"
-                    cx="1487" cy="58" r="3"/>
-
-            <circle class="warm"
-                    cx="1487" cy="81" r="3"/>
-
-            <circle class="warm"
-                    cx="1487" cy="104" r="3"/>
-
-            <path class="highlight"
-                  d="
-                    M1487 10 V140
-                    M1472 62 H1502
-                    M1472 86 H1502
-                    M1472 110 H1502
-                  "/>
-
-            <rect class="steel"
-                  x="1533" y="72"
-                  width="52" height="68"
-                  rx="25"/>
-
-            <path class="highlight"
-                  d="
-                    M1533 91 H1585
-                    M1533 114 H1585
-                  "/>
-
-            <circle class="glass"
-                    cx="1559" cy="102" r="5"/>
-
-        </g>
-
-
-        <!-- RIGHT PIPING -->
-
-        <g class="highlight">
-
-            <path d="
-                M1672 121
-                H1362
-                V92
-                H1277
-            "/>
-
-            <path d="
-                M1637 132
-                H1402
-                V108
-                H1252
-            "/>
-
-            <path d="
-                M1502 77
-                H1387
-                V52
-                H1292
-            "/>
-
-            <path d="
-                M1425 140
-                V70
-                H1337
-            "/>
-
-        </g>
-
-
-        <!-- TECHNICAL HEXAGONS -->
-
-        <g class="tech">
-
-            <path d="
-                M270 25
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M309 58
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M1366 25
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M1405 58
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-        </g>
-
-    </svg>
-
-
-    <!-- LOGO -->
-
-    <div class="logo-panel">
-
-        <img
-            class="header-logo"
-            src="data:image/jpeg;base64,LOGO_BASE64"
-            alt="JSW JFE Steel Limited"
-        >
-
-    </div>
-
-
-    <!-- TITLE SIDE WINGS -->
-
-    <div class="title-wing left"></div>
-    <div class="title-wing right"></div>
-
-
-    <!-- CENTRAL 3D TITLE -->
-
-    <div class="title-frame">
-
-        <div class="title-inner">
-
-            <div class="title-text">
-
-                <div class="title-process">
-                    PROCESS
-                </div>
-
-                <div class="title-technology">
-                    TECHNOLOGY
-                    <span class="title-pt">(PT)</span>
-                </div>
+                <span class="main-title-orange"></span>
 
             </div>
 
-            <div class="title-line"></div>
+
+            <!-- SUBTITLE -->
+
+            <div class="subtitle">
+
+                PSM DIGITAL DASHBOARD
+
+            </div>
+
+
+            <!-- SUB-SUBTITLE -->
+
+            <div class="tagline">
+
+                PEOPLE
+                &nbsp; | &nbsp;
+                PROCESS
+                &nbsp; | &nbsp;
+                RISK
+                &nbsp; | &nbsp;
+                COMPLIANCE
+
+            </div>
+
 
         </div>
+
 
     </div>
 
 
-    <!-- TAGLINE -->
+    <!-- ========================================================
+         RIGHT DATE / TIME
+         ======================================================== -->
 
-    <div class="tagline">
-        PROCESS SAFETY MANAGEMENT • DIGITAL OPERATIONS
-    </div>
+    <div class="psm-right">
 
 
-    <!-- RIGHT DATE / TIME PANEL -->
+        <div class="date">
 
-    <div class="status-panel">
-
-        <div class="status-top">
-
-            <span class="status-dot"></span>
-
-            <span>SYSTEM ONLINE</span>
+            CURRENT_DATE_VALUE
 
         </div>
 
-        <div class="status-divider"></div>
 
-        <div class="status-row">
+        <div class="time">
 
-            <span class="status-icon">▣</span>
-
-            <span class="status-label">Date:</span>
-
-            <span id="current-date">
-                03.09.2026
-            </span>
+            CURRENT_TIME_VALUE
 
         </div>
 
-        <div class="status-row time">
 
-            <span class="status-icon">◷</span>
+        <div class="right-line"></div>
 
-            <span class="status-label">Time:</span>
-
-            <span id="current-time">
-                00.00.00
-            </span>
-
-        </div>
 
     </div>
 
 
-    <!-- BOTTOM RAIL -->
+    <!-- ========================================================
+         ORANGE BOTTOM BAR
+         ======================================================== -->
 
-    <div class="bottom-rail"></div>
+    <div class="orange-bar"></div>
+
 
 </div>
 
 
-<script>
-
-function updateDateTime() {
-
-    const now = new Date();
-
-
-    /* =================================================
-       DATE — DD.MM.YYYY
-       ================================================= */
-
-    const dateParts = new Intl.DateTimeFormat(
-        "en-GB",
-        {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            timeZone: "Asia/Kolkata"
-        }
-    ).formatToParts(now);
-
-    let day = "";
-    let month = "";
-    let year = "";
-
-    dateParts.forEach(function(part) {
-
-        if (part.type === "day") {
-            day = part.value;
-        }
-
-        if (part.type === "month") {
-            month = part.value;
-        }
-
-        if (part.type === "year") {
-            year = part.value;
-        }
-
-    });
-
-    document.getElementById("current-date").textContent =
-        day + "." + month + "." + year;
-
-
-    /* =================================================
-       TIME — HH.MM.SS AM/PM
-       ================================================= */
-
-    const timeParts = new Intl.DateTimeFormat(
-        "en-GB",
-        {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: true,
-            timeZone: "Asia/Kolkata"
-        }
-    ).formatToParts(now);
-
-    let hour = "";
-    let minute = "";
-    let second = "";
-    let dayPeriod = "";
-
-    timeParts.forEach(function(part) {
-
-        if (part.type === "hour") {
-            hour = part.value;
-        }
-
-        if (part.type === "minute") {
-            minute = part.value;
-        }
-
-        if (part.type === "second") {
-            second = part.value;
-        }
-
-        if (part.type === "dayPeriod") {
-            dayPeriod = part.value.toUpperCase();
-        }
-
-    });
-
-    document.getElementById("current-time").textContent =
-        hour + "." + minute + "." + second + " " + dayPeriod;
-}
-
-
-updateDateTime();
-
-setInterval(
-    updateDateTime,
-    1000
-);
-
-</script>
-
 </body>
+
 </html>
+
 """
 
+
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
 header_html = header_html.replace(
-    "LOGO_BASE64",
+    "LOGO_IMAGE_BASE64",
     logo_base64
 )
 
-components.html(
-    header_html,
-    height=160,
-    scrolling=False
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
 )
 
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
+
+components.html(
+    header_html,
+    height=114,
+    scrolling=False
+)
+#======================================================================================================================
 # =========================================================
-# RESET FILTER CALLBACK
+# RESET FILTER
 # =========================================================
 
 def reset_pt_filters():
     st.session_state.status_filter = "All"
     st.session_state.page_number = 1
     st.session_state.department_selector = "All Departments"
-    st.session_state.view_pt_no = ""
-    st.session_state.upload_pt_no = ""
-    st.session_state.open_view_dialog = False
-    st.session_state.open_upload_dialog = False
 
 
 # =========================================================
@@ -2618,12 +1996,8 @@ filter_month, filter_department, filter_reset = st.columns(
     [1.0, 1.0, 0.34],
     gap="small"
 )
-# =========================================================
-# MONTH
-# =========================================================
 
 with filter_month:
-
     st.markdown(
         "<div class='month-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
@@ -2641,12 +2015,8 @@ with filter_month:
         ],
         index=0
     )
-# =========================================================
-# DEPARTMENT
-# =========================================================
 
 with filter_department:
-
     st.markdown(
         "<div class='department-filter-anchor' style='height:22px;'></div>",
         unsafe_allow_html=True
@@ -2659,43 +2029,32 @@ with filter_department:
         .str.strip()
     )
 
-    department_values = department_values[
-        (department_values != "") &
-        (department_values.str.lower() != "nan")
-    ]
-
-    department_options = [
-        "All Departments"
-    ] + sorted(
-        department_values.unique().tolist(),
+    department_options = ["All Departments"] + sorted(
+        [
+            value for value in department_values.unique().tolist()
+            if value and value.lower() != "nan"
+        ],
         key=lambda x: x.lower()
     )
 
     selected_department = st.selectbox(
-    "Department",
-    department_options,
-    key="department_selector"
-)
-
-
-# =========================================================
-# RESET FILTER
-# =========================================================
+        "Department",
+        department_options,
+        key="department_selector"
+    )
 
 with filter_reset:
-
     st.markdown(
         "<div style='height:46px;'></div>",
         unsafe_allow_html=True
     )
 
-    if st.button(
+    st.button(
         "↻ Reset Filters",
         use_container_width=True,
         key="reset_pt_filters_button",
         on_click=reset_pt_filters
-    ):
-        st.rerun()
+    )
 
 
 # =========================================================
@@ -2705,16 +2064,13 @@ with filter_reset:
 filtered_df = df.copy()
 
 if selected_department != "All Departments":
-
     filtered_df = filtered_df[
         filtered_df["Department"]
         .fillna("")
         .astype(str)
         .str.strip()
-        ==
-        selected_department
+        == selected_department
     ]
-
 
 filtered_df[STATUS_COLUMN] = (
     filtered_df[STATUS_COLUMN]
@@ -2726,26 +2082,55 @@ filtered_df[STATUS_COLUMN] = (
 
 
 # =========================================================
-# KPI CALCULATION
+# KPI
 # =========================================================
 
 total_pt = len(filtered_df)
 
 completed = int(
-    (
-        filtered_df[STATUS_COLUMN]
-        ==
-        "completed"
-    ).sum()
+    (filtered_df[STATUS_COLUMN] == "completed").sum()
 )
 
 ongoing = int(
-    (
-        filtered_df[STATUS_COLUMN]
-        ==
-        "ongoing"
-    ).sum()
+    (filtered_df[STATUS_COLUMN] == "ongoing").sum()
 )
+
+# =========================================================
+# APPROVAL KPI
+# Source column: Approved  (Yes/No)
+# This column is NOT a required column.
+# It is used only for the two approval KPI boxes.
+# =========================================================
+
+def _find_approval_column(dataframe):
+    target = normalize_column_name("Approved  (Yes/No)")
+    for column in dataframe.columns:
+        if normalize_column_name(column) == target:
+            return column
+    return None
+
+
+_APPROVAL_SOURCE_COLUMN = _find_approval_column(df)
+
+if _APPROVAL_SOURCE_COLUMN is not None:
+    approval_values = (
+        df[_APPROVAL_SOURCE_COLUMN]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    approved_documents = int(
+        (approval_values == "yes").sum()
+    )
+
+    pending_documents = int(
+        (approval_values == "no").sum()
+    )
+else:
+    approved_documents = 0
+    pending_documents = 0
 
 completion_percentage = (
     completed / total_pt * 100
@@ -2753,93 +2138,67 @@ completion_percentage = (
     else 0
 )
 
-
-# =========================================================
-# KPI CARDS
-# =========================================================
-
-k1, k2, k3 = st.columns(
-    3,
-    gap="small"
-)
+# Five KPI boxes are displayed in one row.
+k1, k2, k3, k4, k5 = st.columns(5, gap="small")
 
 cards = [
-
+    ("", "TOTAL PT", total_pt, "", "blue", "total"),
     (
         "",
-        "TOTAL PT",
-        total_pt,
+        "APPROVED",
+        approved_documents,
         "",
-        "blue",
-        "total"
+        "approved",
+        "approved"
     ),
-
+    (
+        "",
+        "PENDING",
+        pending_documents,
+        "",
+        "pending",
+        "pending"
+    ),
     (
         "",
         "COMPLETED",
         completed,
-        f"{completion_percentage:.1f}% completed",
+        f"",
         "green",
         "completed"
     ),
-
     (
         "",
         "ONGOING",
         ongoing,
-        "Currently under progress",
+        "",
         "orange",
         "ongoing"
     )
 ]
 
-
-for column, card in zip(
-    [k1, k2, k3],
-    cards
-):
-
+for column, card in zip([k1, k2, k3, k4, k5], cards):
     icon, label, value, description, color, extra = card
 
     with column:
-
         st.html(
             f"""
 <div class="kpi-card {extra}">
-
-    <div class="kpi-icon">
-        {icon}
-    </div>
-
+    <div class="kpi-icon">{icon}</div>
     <div class="kpi-content">
-
-        <div class="kpi-label">
-            {label}
-        </div>
-
-        <div class="kpi-value {color}">
-            {value}
-        </div>
-
-        <div class="kpi-description">
-            {description}
-        </div>
-
+        <div class="kpi-label">{label}</div>
+        <div class="kpi-value {color}">{value}</div>
+        <div class="kpi-description">{description}</div>
     </div>
-
     <div class="kpi-pattern"></div>
-
-    <div class="kpi-arrow">
-        &gt;
-    </div>
-
+    <div class="kpi-arrow">&gt;</div>
 </div>
 """
         )
 
 
 # =========================================================
-# PT REGISTER TITLE
+# PT REGISTER
 # =========================================================
 
 st.html(
@@ -2855,7 +2214,7 @@ st.html(
 
 
 # =========================================================
-# PT REGISTER TOOLBAR
+# TOOLBAR
 # =========================================================
 
 search_col, all_col, completed_col, ongoing_col, refresh_col = st.columns(
@@ -2895,9 +2254,8 @@ with refresh_col:
         st.rerun()
 
 
-
 # =========================================================
-# SEARCH + STATUS FILTER
+# SEARCH + STATUS
 # =========================================================
 
 display_df = filtered_df.copy()
@@ -2906,302 +2264,248 @@ if search_text.strip():
     q = search_text.strip().lower()
 
     search_mask = (
-        display_df["PT No."].fillna("").astype(str).str.lower().str.contains(q, regex=False)
-        | display_df["Department"].fillna("").astype(str).str.lower().str.contains(q, regex=False)
-        | display_df["Name of PT"].fillna("").astype(str).str.lower().str.contains(q, regex=False)
-        | display_df[STATUS_COLUMN].fillna("").astype(str).str.lower().str.contains(q, regex=False)
+        display_df["PT No."]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(q, regex=False)
+        |
+        display_df["Department"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(q, regex=False)
+        |
+        display_df["Name of PT"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(q, regex=False)
+        |
+        display_df[STATUS_COLUMN]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.contains(q, regex=False)
     )
 
     display_df = display_df[search_mask]
 
 if st.session_state.status_filter != "All":
     display_df = display_df[
-        display_df[STATUS_COLUMN].fillna("").astype(str).str.strip().str.lower()
-        == st.session_state.status_filter.lower()
+        display_df[STATUS_COLUMN]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        ==
+        st.session_state.status_filter.lower()
     ]
 
 
 # =========================================================
-# PT TABLE
-# ONLY SIX COLUMNS SHOWN IN DASHBOARD
+# PAGINATION
 # =========================================================
 
 ROWS_PER_PAGE = 5
 total_entries = len(display_df)
-total_pages = max(1, (total_entries + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
+
+total_pages = max(
+    1,
+    (total_entries + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE
+)
 
 if st.session_state.page_number > total_pages:
     st.session_state.page_number = total_pages
 
 page_number = st.session_state.page_number
+
 start_index = (page_number - 1) * ROWS_PER_PAGE
 end_index = start_index + ROWS_PER_PAGE
 
 page_df = display_df.iloc[start_index:end_index].copy()
 
-# =========================================================
-# PT TABLE
-# The table appearance is retained. The two action columns
-# use native Streamlit buttons so clicking them opens a
-# modal dialog without URL navigation.
-# =========================================================
-
-# Table header remains the same HTML.
-table_header = """
-<div class="pt-table">
-    <div class="pt-row pt-header">
-        <div class="pt-cell">PT No.</div>
-        <div class="pt-cell">Department</div>
-        <div class="pt-cell">Name of PT</div>
-        <div class="pt-cell">Status<br>(Ongoing/Completed)</div>
-        <div class="pt-cell">Upload Document</div>
-        <div class="pt-cell">View Document</div>
-    </div>
-</div>
-"""
-
-# We render each data row as a six-column Streamlit row.
-# CSS below makes these rows visually match the existing
-# PT table and removes the normal Streamlit column gap.
-st.html(
-    f"""
-<style>
-.pt-action-row [data-testid="stHorizontalBlock"] {{
-    gap: 0 !important;
-}}
-
-.pt-action-row [data-testid="stColumn"] {{
-    padding: 0 !important;
-}}
-
-.pt-action-cell {{
-    min-height: 35px;
-    height: 35px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
-    border-right: 1px solid #d5e0ea;
-    border-bottom: 1px solid #d5e0ea;
-    color: #243b57;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.2;
-    padding: 5px 10px;
-}}
-
-.pt-action-cell.alt {{
-    background: #f5f8fb;
-}}
-
-.pt-action-cell.left {{
-    justify-content: flex-start;
-    text-align: left;
-}}
-
-.pt-action-button-wrap {{
-    height: 35px;
-    display: flex;
-    align-items: stretch;
-}}
-
-.pt-action-button-wrap > div {{
-    width: 100%;
-}}
-
-.pt-action-button-wrap button {{
-    height: 35px !important;
-    min-height: 35px !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 8px !important;
-    border-radius: 0 !important;
-    border: 0 !important;
-    border-right: 1px solid #d5e0ea !important;
-    border-bottom: 1px solid #d5e0ea !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
-    font-size: 11px !important;
-    font-weight: 800 !important;
-}}
-
-.pt-action-button-wrap button:hover {{
-    transform: none !important;
-    box-shadow: none !important;
-}}
-
-.pt-upload-button button {{
-    color: #e1262d !important;
-}}
-
-.pt-view-button button {{
-    color: #174b87 !important;
-}}
-
-.pt-action-alt button {{
-    background: #f5f8fb !important;
-}}
-</style>
-"""
-)
-
-# Header
-# Keep the original PT table heading styling exactly as in the dashboard.
-st.html(
-    f"""
-<style>
-.pt-table {{
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid #d5e0ea;
-    background: #ffffff;
-}}
-
-.pt-row {{
-    display: grid;
-    grid-template-columns: 1.10fr 1.45fr 2.10fr 1.15fr 1.45fr 1.45fr;
-}}
-
-.pt-header {{
-    min-height: 52px;
-    background: linear-gradient(180deg, #205796 0%, #174b87 100%);
-}}
-
-.pt-header .pt-cell {{
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 7px 10px;
-    border-right: 1px solid #d5e0ea;
-    border-bottom: 1px solid #d5e0ea;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: 900;
-    text-align: center;
-    line-height: 1.2;
-}}
-
-</style>
-{table_header}
-"""
-)
-
-for row_no, (_, row) in enumerate(page_df.iterrows()):
-    alt = row_no % 2
-    pt_no = str(row["PT No."]).strip()
-    department = str(row["Department"]).strip()
-    name_pt = str(row["Name of PT"]).strip()
-    status = str(row[STATUS_COLUMN]).strip()
-
-    if status.lower() == "completed":
-        status_html = '<span class="status-completed">COMPLETED</span>'
-    elif status.lower() == "ongoing":
-        status_html = '<span class="status-ongoing">ONGOING</span>'
-    else:
-        status_html = f'<span class="status-normal">{status or "—"}</span>'
-
-    # The marker lets CSS target only these row blocks.
-    row_cols = st.columns(
-        [1.10, 1.45, 2.10, 1.15, 1.45, 1.45],
-        gap=None
-    )
-
-    with row_cols[0]:
-        st.markdown(
-            f'<div class="pt-action-cell {"alt" if alt else ""} left"><span class="pt-action-row-marker"></span>{pt_no}</div>',
-            unsafe_allow_html=True
-        )
-
-    with row_cols[1]:
-        st.markdown(
-            f'<div class="pt-action-cell {"alt" if alt else ""} left">{department}</div>',
-            unsafe_allow_html=True
-        )
-
-    with row_cols[2]:
-        st.markdown(
-            f'<div class="pt-action-cell {"alt" if alt else ""} left">{name_pt}</div>',
-            unsafe_allow_html=True
-        )
-
-    with row_cols[3]:
-        st.markdown(
-            f'<div class="pt-action-cell {"alt" if alt else ""}">{status_html}</div>',
-            unsafe_allow_html=True
-        )
-
-    with row_cols[4]:
-        if st.button(
-            "↑ Upload",
-            key=f"upload_{safe_pt_folder_name(pt_no)}_{row_no}",
-            use_container_width=True
-        ):
-            st.session_state.upload_pt_no = pt_no
-            st.session_state.view_pt_no = ""
-            st.session_state.open_upload_dialog = True
-            st.session_state.open_view_dialog = False
-
-    with row_cols[5]:
-        if st.button(
-            "◉ View",
-            key=f"view_{safe_pt_folder_name(pt_no)}_{row_no}",
-            use_container_width=True
-        ):
-            st.session_state.view_pt_no = pt_no
-            st.session_state.upload_pt_no = ""
-            st.session_state.open_view_dialog = True
-            st.session_state.open_upload_dialog = False
 
 # =========================================================
-# ACTION BUTTON VISUAL TARGETING
+# TABLE CSS
 # =========================================================
-# This CSS is scoped only to the PT data rows.
+
 st.markdown(
     """
 <style>
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker) {
+.pt-simple-table {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #c8d6e4;
+    background: #ffffff;
+}
+
+.pt-simple-inner {
+    min-width: 900px;
+}
+
+.pt-simple-header,
+.pt-simple-row {
+    display: grid;
+    grid-template-columns:
+        0.60fr
+        1.10fr
+        1.45fr
+        2.20fr
+        1.20fr
+        1.30fr;
+}
+
+.pt-simple-header {
+    min-height: 44px;
+    background: linear-gradient(
+        180deg,
+        #0b4f91 0%,
+        #063c73 100%
+    );
+}
+
+.pt-simple-header > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 4px;
+    color: #ffffff;
+    border-right: 1px solid #8caecc;
+    border-bottom: 1px solid #052f5b;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.15;
+    text-align: center;
+}
+
+.pt-simple-cell {
+    min-height: 43px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 7px;
+    background: #ffffff;
+    color: #092d5c;
+    border-right: 1px solid #c8d6e4;
+    border-bottom: 1px solid #c8d6e4;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.18;
+    text-align: center;
+    word-break: break-word;
+}
+
+.pt-simple-cell.alt {
+    background: #f3f7fb;
+}
+
+.pt-simple-cell.left {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.pt-simple-status-completed {
+    color: #16A34A;
+    font-weight: 900;
+}
+
+.pt-simple-status-ongoing {
+    color: #EA8A00;
+    font-weight: 900;
+}
+
+.pt-view-link {
+    width: 100%;
+    min-height: 43px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #174b87 !important;
+    text-decoration: none !important;
+    font-size: 11px;
+    font-weight: 900;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.pt-view-link.alt {
+    background: #f3f7fb;
+}
+
+.pt-view-link:hover {
+    background: #e8f1f9;
+    color: #075ca8 !important;
+}
+
+.pt-no-link {
+    width: 100%;
+    min-height: 43px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #9aaabd;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.pt-no-link.alt {
+    background: #f3f7fb;
+}
+
+.pt-record-bar {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: linear-gradient(
+        180deg,
+        #ffffff 0%,
+        #edf3f8 100%
+    );
+    color: #173f6d;
+    font-size: 11px;
+    font-weight: 800;
+    border-top: 1px solid #c4d4e3;
+    border-bottom: 1px solid #c4d4e3;
+}
+
+.pt-pagination {
+    height: 38px !important;
+    min-height: 38px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #173f6d;
+    font-size: 11px;
+    font-weight: 800;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.pt-pagination-row [data-testid="stHorizontalBlock"] {
+    align-items: center !important;
+}
+
+.pt-pagination-row [data-testid="stVerticalBlock"] {
+    justify-content: center !important;
     gap: 0 !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(5) button,
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button {
-    height: 35px !important;
-    min-height: 35px !important;
-    width: 100% !important;
+.pt-pagination-row div.stButton {
     margin: 0 !important;
-    padding: 0 8px !important;
-    border-radius: 0 !important;
-    border: 0 !important;
-    border-right: 1px solid #d5e0ea !important;
-    border-bottom: 1px solid #d5e0ea !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
-    font-size: 11px !important;
-    font-weight: 800 !important;
-    transform: none !important;
+    padding: 0 !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(5) button {
-    color: #e1262d !important;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button {
-    color: #174b87 !important;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(5) button:hover,
-div[data-testid="stHorizontalBlock"]:has(.pt-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button:hover {
-    background: #f5f8fb !important;
-    color: inherit !important;
-    border-color: #d5e0ea !important;
-    box-shadow: none !important;
-    transform: none !important;
+.pt-pagination-row div.stButton > button {
+    height: 36px !important;
+    min-height: 36px !important;
+    margin: 0 !important;
 }
 </style>
 """,
@@ -3210,256 +2514,253 @@ div[data-testid="stColumn"]:nth-child(6) button:hover {
 
 
 # =========================================================
-# UPLOAD DOCUMENT — VERY SMALL MODAL POPUP
+# TABLE HEADER
 # =========================================================
 
-if st.session_state.open_upload_dialog and st.session_state.upload_pt_no:
-
-    upload_pt = st.session_state.upload_pt_no
-    st.session_state.open_upload_dialog = False
-
-    @st.dialog("Upload Document", width="small")
-    def upload_document_dialog():
-
-        st.caption(f"PT No.  {upload_pt}")
-
-        uploaded_file = st.file_uploader(
-            "Choose file",
-            type=[
-                "pdf", "doc", "docx",
-                "xls", "xlsx", "csv",
-                "ppt", "pptx", "txt",
-                "png", "jpg", "jpeg"
-            ],
-            key=f"uploader_dialog_{safe_pt_folder_name(upload_pt)}"
-        )
-
-        c1, c2 = st.columns(2, gap="small")
-
-        with c1:
-            if st.button(
-                "Save",
-                key=f"save_dialog_{safe_pt_folder_name(upload_pt)}",
-                use_container_width=True,
-                disabled=uploaded_file is None
-            ):
-                save_pt_document(upload_pt, uploaded_file)
-                st.session_state.upload_pt_no = ""
-                st.session_state.open_upload_dialog = False
-                st.rerun()
-
-        with c2:
-            if st.button(
-                "Cancel",
-                key=f"cancel_dialog_{safe_pt_folder_name(upload_pt)}",
-                use_container_width=True
-            ):
-                st.session_state.upload_pt_no = ""
-                st.session_state.open_upload_dialog = False
-                st.rerun()
-
-    upload_document_dialog()
-
-
-# =========================================================
-# VIEW DOCUMENT — SEPARATE MODAL POPUP
-# =========================================================
-
-if st.session_state.open_view_dialog and st.session_state.view_pt_no:
-
-    view_pt = st.session_state.view_pt_no
-    st.session_state.open_view_dialog = False
-
-    @st.dialog("View Document", width="large")
-    def view_document_dialog():
-
-        st.caption(f"PT No.  {view_pt}")
-
-        documents = get_pt_documents(view_pt)
-
-        if not documents:
-            st.info("No document has been uploaded for this PT yet.")
-            return
-
-        document_names = [p.name for p in documents]
-
-        selected_document_name = st.selectbox(
-            "Select document",
-            document_names,
-            key=f"document_selector_{safe_pt_folder_name(view_pt)}"
-        )
-
-        selected_document = next(
-            (p for p in documents if p.name == selected_document_name),
-            None
-        )
-
-        if selected_document is None:
-            return
-
-        file_bytes = selected_document.read_bytes()
-        mime_type = get_document_mime_type(selected_document)
-
-        st.download_button(
-            "↓ Download",
-            data=file_bytes,
-            file_name=selected_document.name,
-            mime=mime_type,
-            key=(
-                f"download_{safe_pt_folder_name(view_pt)}_"
-                f"{safe_pt_folder_name(selected_document.name)}"
-            )
-        )
-
-        if mime_type == "application/pdf":
-
-            pdf_base64 = base64.b64encode(file_bytes).decode("utf-8")
-
-            components.html(
-                f"""
-<iframe
-    src="data:application/pdf;base64,{pdf_base64}"
-    width="100%"
-    height="600"
-    style="border:1px solid #d5e0ea;">
-</iframe>
-""",
-                height=620,
-                scrolling=False
-            )
-
-        elif mime_type.startswith("image/"):
-
-            st.image(file_bytes, use_container_width=True)
-
-        elif mime_type.startswith("text/"):
-
-            text_preview = file_bytes.decode(
-                "utf-8",
-                errors="replace"
-            )
-
-            st.text_area(
-                "Document preview",
-                text_preview,
-                height=450,
-                disabled=True,
-                key=(
-                    f"text_preview_{safe_pt_folder_name(view_pt)}_"
-                    f"{safe_pt_folder_name(selected_document.name)}"
-                )
-            )
-
-        else:
-
-            st.info(
-                "Preview is not available for this file type. "
-                "Use Download to open the file."
-            )
-
-    view_document_dialog()
-
-
-# =========================================================
-# RECORD BAR + PAGINATION
-# =========================================================
-
-shown_from = start_index + 1 if total_entries else 0
-shown_to = min(end_index, total_entries)
-
-p1, p2, p3, p4, p5, p6 = st.columns(
-    [3.2, 0.45, 0.45, 0.45, 0.45, 0.45],
-    gap="small"
+st.html(
+    """
+<div class="pt-simple-table">
+<div class="pt-simple-inner">
+<div class="pt-simple-header">
+    <div>Sr No.</div>
+    <div>PT No.</div>
+    <div>Department</div>
+    <div>Name of PT</div>
+    <div>Status</div>
+    <div>View Document</div>
+</div>
+</div>
+</div>
+"""
 )
 
-with p1:
-    st.markdown(
+
+# =========================================================
+# TABLE DATA
+#
+# The URL is fetched from the SAME GOOGLE SHEET ROW:
+# Attach PT Softcopy Link
+#
+# That source column is hidden from the visible table.
+# =========================================================
+
+rows_html = [
+    '<div class="pt-simple-table">',
+    '<div class="pt-simple-inner">'
+]
+
+for row_no, (_, row) in enumerate(page_df.iterrows()):
+
+    alt = "alt" if row_no % 2 else ""
+
+    sr_no = start_index + row_no + 1
+
+    pt_no = str(row["PT No."]).strip()
+    department = str(row["Department"]).strip()
+    name_pt = str(row["Name of PT"]).strip()
+    status = str(row[STATUS_COLUMN]).strip()
+
+    # =====================================================
+    # FETCH DOCUMENT LINK FROM GOOGLE SHEET ROW
+    # =====================================================
+
+    # Fetch the actual URL from the same Google Sheet row.
+    document_link = pt_document_links.get(pt_no, "")
+
+    # Fallback when the sheet cell itself contains a plain URL.
+    if not document_link:
+        raw_link = row[LINK_COLUMN]
+        if not pd.isna(raw_link):
+            candidate_link = str(raw_link).strip()
+            if re.match(r"^https?://", candidate_link, re.IGNORECASE):
+                document_link = candidate_link
+
+    # HTML escaping for displayed values.
+    def esc(value):
+        return (
+            str(value)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#39;")
+        )
+
+    if status.lower() == "completed":
+        status_html = (
+            '<span class="pt-simple-status-completed">'
+            'COMPLETED'
+            '</span>'
+        )
+
+    elif status.lower() == "ongoing":
+        status_html = (
+            '<span class="pt-simple-status-ongoing">'
+            'ONGOING'
+            '</span>'
+        )
+
+    else:
+        status_html = esc(status) if status else "—"
+
+    if document_link:
+
+        safe_link = (
+            document_link
+            .replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "%3C")
+            .replace(">", "%3E")
+        )
+
+        # A normal anchor is used deliberately. Streamlit does not intercept
+        # this click, so the browser opens the exact document URL in a new tab.
+        view_html = f"""
+<a
+    class=\"pt-view-link {alt}\"
+    href=\"{safe_link}\"
+    target=\"_blank\"
+    rel=\"noopener noreferrer\"
+>
+    ◉ View
+</a>
+"""
+
+    else:
+
+        view_html = f"""
+<div class=\"pt-no-link {alt}\">
+    No Link
+</div>
+"""
+
+    rows_html.append(
         f"""
-        <div style="
-            height:38px;
-            display:flex;
-            align-items:center;
-            padding-left:12px;
-            color:#5d7085;
-            font-size:11px;
-            font-weight:600;
-        ">
-            Showing {shown_from} to {shown_to} of {total_entries} entries
-        </div>
-        """,
-        unsafe_allow_html=True
+<div class="pt-simple-row">
+
+    <div class="pt-simple-cell {alt}">
+        {esc(sr_no)}
+    </div>
+
+    <div class="pt-simple-cell {alt}">
+        {esc(pt_no)}
+    </div>
+
+    <div class="pt-simple-cell {alt} left">
+        {esc(department)}
+    </div>
+
+    <div class="pt-simple-cell {alt} left">
+        {esc(name_pt)}
+    </div>
+
+    <div class="pt-simple-cell {alt}">
+        {status_html}
+    </div>
+
+    <div class="pt-simple-cell {alt}">
+        {view_html}
+    </div>
+
+</div>
+"""
     )
 
-with p2:
-    if st.button("«", key="page_first", use_container_width=True):
-        st.session_state.page_number = 1
-        st.session_state.view_pt_no = ""
-        st.session_state.upload_pt_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
+rows_html.append("</div></div>")
 
-with p3:
-    if st.button("‹", key="page_prev", use_container_width=True):
-        st.session_state.page_number = max(1, page_number - 1)
-        st.session_state.view_pt_no = ""
-        st.session_state.upload_pt_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
-
-with p4:
-    st.markdown(
-        f"""
-        <div style="
-            height:36px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            background:#174b87;
-            color:white;
-            border-radius:6px;
-            font-size:12px;
-            font-weight:900;
-        ">{page_number}</div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with p5:
-    if st.button("›", key="page_next", use_container_width=True):
-        st.session_state.page_number = min(total_pages, page_number + 1)
-        st.session_state.view_pt_no = ""
-        st.session_state.upload_pt_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
-
-with p6:
-    if st.button("»", key="page_last", use_container_width=True):
-        st.session_state.page_number = total_pages
-        st.session_state.view_pt_no = ""
-        st.session_state.upload_pt_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
+st.html(
+    "".join(rows_html)
+)
 
 
 # =========================================================
-# GOOGLE SHEET SOURCE
+# RECORD COUNT + PAGINATION
 # =========================================================
-# The data source remains the Google Sheet tab named "PT".
-#
-# Fetched from PT:
-#   1. PT No.
-#   2. Department
-#   3. Name of PT
-#   4. Status (Ongoing/Completed)
-#
-# Upload Document and View Document are dashboard action
-# columns and are NOT fetched as data columns from the sheet.
-#
-# The existing Month selector is retained. No Month column
-# exists in the requested PT parameters, so no artificial
-# month filter is applied.
 
+first_entry = start_index + 1 if total_entries else 0
+last_entry = min(end_index, total_entries)
+
+if total_pages > 1:
+
+    # Keep Showing text, Previous, Page X of Y and Next
+    # on the same horizontal line and vertically centered.
+    st.markdown(
+        '<div class="pt-pagination-row">',
+        unsafe_allow_html=True
+    )
+
+    pg_showing, pg_prev, pg_page, pg_next, pg_end = st.columns(
+        [2.25, 1.05, 1.45, 1.05, 2.20],
+        gap="small"
+    )
+
+    with pg_showing:
+        st.markdown(
+            f"""
+<div class="pt-record-bar">
+    Showing {first_entry} - {last_entry}
+    of {total_entries} entries
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+    with pg_prev:
+        if st.button(
+            "‹ Previous",
+            use_container_width=True,
+            key="pt_previous_page",
+            disabled=page_number <= 1
+        ):
+            st.session_state.page_number -= 1
+            st.rerun()
+
+    with pg_page:
+        st.markdown(
+            f"""
+<div class="pt-pagination">
+    Page {page_number} of {total_pages}
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+    with pg_next:
+        if st.button(
+            "Next ›",
+            use_container_width=True,
+            key="pt_next_page",
+            disabled=page_number >= total_pages
+        ):
+            st.session_state.page_number += 1
+            st.rerun()
+
+    st.markdown(
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+else:
+
+    st.markdown(
+        f"""
+<div class="pt-record-bar">
+    Showing {first_entry} - {last_entry}
+    of {total_entries} entries
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.markdown(
+    """
+<div class="footer">
+    PROCESS SAFETY MANAGEMENT • DIGITAL OPERATIONS
+</div>
+""",
+    unsafe_allow_html=True
+)

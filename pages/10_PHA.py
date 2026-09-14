@@ -5,8 +5,13 @@ import os
 import base64
 import re
 import mimetypes
+from datetime import datetime
 from pathlib import Path
+from io import BytesIO
+from urllib.request import Request, urlopen
+from openpyxl import load_workbook
 from streamlit_autorefresh import st_autorefresh
+
 
 # =========================================================
 # PAGE CONFIG
@@ -16,7 +21,7 @@ st.set_page_config(
     page_title="PSM Dashboard - PHA",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # =========================================================
@@ -121,6 +126,159 @@ def get_pha_data():
 
 
 df = get_pha_data()
+
+
+# =========================================================
+# GOOGLE SHEET UPLOAD DOCUMENT LINKS
+# =========================================================
+# The PHA "View Document" dashboard column uses the link
+# from the SAME Google Sheet row's "Upload Document" cell.
+#
+# This supports:
+#   1. A normal URL stored directly in the cell.
+#   2. A Google Sheets rich-text hyperlink.
+#   3. A HYPERLINK(...) formula.
+# =========================================================
+
+PHA_UPLOAD_COLUMN = "Upload Document"
+PHA_NO_COLUMN = "PHA No"
+
+
+@st.cache_data(ttl=60)
+def get_pha_upload_document_links():
+    links = {}
+
+    try:
+        xlsx_url = (
+            f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/export?format=xlsx"
+        )
+
+        request = Request(
+            xlsx_url,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+
+        with urlopen(request, timeout=30) as response:
+            workbook_bytes = response.read()
+
+        workbook = load_workbook(
+            filename=BytesIO(workbook_bytes),
+            read_only=False,
+            data_only=False
+        )
+
+        if "PHA" not in workbook.sheetnames:
+            workbook.close()
+            return links
+
+        worksheet = workbook["PHA"]
+
+        headers = {}
+
+        for cell in worksheet[1]:
+            if cell.value is not None:
+                header = (
+                    str(cell.value)
+                    .replace("\xa0", " ")
+                    .replace("\n", " ")
+                    .strip()
+                )
+                headers[header] = cell.column
+
+        pha_col = headers.get(PHA_NO_COLUMN)
+        upload_col = headers.get(PHA_UPLOAD_COLUMN)
+
+        if not pha_col or not upload_col:
+            workbook.close()
+            return links
+
+        formula_pattern = re.compile(
+            r'=HYPERLINK\s*\(\s*["\']([^"\']+)["\']',
+            re.IGNORECASE
+        )
+
+        for row_number in range(
+            2,
+            worksheet.max_row + 1
+        ):
+
+            pha_cell = worksheet.cell(
+                row=row_number,
+                column=pha_col
+            )
+
+            upload_cell = worksheet.cell(
+                row=row_number,
+                column=upload_col
+            )
+
+            pha_number = (
+                ""
+                if pha_cell.value is None
+                else str(pha_cell.value).strip()
+            )
+
+            if not pha_number:
+                continue
+
+            document_link = ""
+
+            # Rich-text / normal Excel hyperlink target.
+            if (
+                upload_cell.hyperlink
+                and upload_cell.hyperlink.target
+            ):
+                document_link = (
+                    str(upload_cell.hyperlink.target)
+                    .strip()
+                )
+
+            # HYPERLINK("url","text") formula.
+            if (
+                not document_link
+                and isinstance(upload_cell.value, str)
+            ):
+                match = formula_pattern.search(
+                    upload_cell.value
+                )
+
+                if match:
+                    document_link = (
+                        match.group(1)
+                        .strip()
+                    )
+
+            # Plain URL.
+            if (
+                not document_link
+                and isinstance(upload_cell.value, str)
+            ):
+                candidate = upload_cell.value.strip()
+
+                if re.match(
+                    r"^https?://",
+                    candidate,
+                    re.IGNORECASE
+                ):
+                    document_link = candidate
+
+            if document_link:
+                links[pha_number] = document_link
+
+        workbook.close()
+
+    except Exception:
+        # CSV fallback below will still work when the cell
+        # itself contains the actual URL.
+        return links
+
+    return links
+
+
+pha_upload_document_links = (
+    get_pha_upload_document_links()
+)
 
 
 @st.cache_data(ttl=60)
@@ -261,8 +419,7 @@ required_columns = [
     "Department",
     "Name of PHA",
     "Status  (Ongoing/Completed)",
-    "Upload Document",
-    "View Document"
+    "Upload Document"
 ]
 
 STATUS_COLUMN = "Status  (Ongoing/Completed)"
@@ -273,7 +430,7 @@ STATUS_COLUMN = "Status  (Ongoing/Completed)"
 
 if df.empty:
     st.error(
-        "No data found in Google Sheet Sheet2."
+        "No data found in Google Sheet PHA."
     )
 
     st.stop()
@@ -286,13 +443,13 @@ missing_columns = [
 
 if missing_columns:
     st.error(
-        "Some required columns are missing from Sheet2."
+        "Some required columns are missing from PHA."
     )
 
     st.write("Missing columns:")
     st.write(missing_columns)
 
-    st.write("Columns found in Sheet2:")
+    st.write("Columns found in PHA:")
     st.write(df.columns.tolist())
 
     st.stop()
@@ -681,7 +838,7 @@ div.stButton > button:disabled {
 
 .kpi-card {
     position: relative;
-    height: 105px;
+    height: 145px;
     overflow: hidden;
 
     background:
@@ -768,7 +925,28 @@ div.stButton > button:disabled {
    ===================================================== */
 
 .kpi-content {
-    margin-left: 78px;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    text-align: center !important;
+}
+
+.kpi-card .kpi-label,
+.kpi-card .kpi-value {
+    width: 100% !important;
+    text-align: center !important;
+    align-self: center !important;
+}
+
+.kpi-card .kpi-description {
+    display: none !important;
 }
 
 .kpi-label {
@@ -793,17 +971,30 @@ div.stButton > button:disabled {
     line-height: 1;
     font-weight: 900;
     margin-top: 6px;
-    color: #0a4e91;
+    color: #092d5c !important;
 
     text-align: center;
 }
 
+/* KPI NUMBER = SAME COLOR AS KPI TEXT */
+.kpi-card.total .kpi-value {
+    color: #092d5c !important;
+}
+
+.kpi-card.completed .kpi-value {
+    color: #08783c !important;
+}
+
+.kpi-card.ongoing .kpi-value {
+    color: #b96700 !important;
+}
+
 .kpi-value.green {
-    color: #159447 !important;
+    color: #08783c !important;
 }
 
 .kpi-value.orange {
-    color: #f0a000 !important;
+    color: #b96700 !important;
 }
 
 .kpi-description {
@@ -1447,6 +1638,13 @@ div[data-testid="stAlert"] {
     table-layout:auto;
 }
 
+/* RECOMMENDATION COLUMN — DECREASE WIDTH */
+.recommendation-table th:nth-child(2),
+.recommendation-table td:nth-child(2) {
+    width:400px !important;
+    max-width:400px !important;
+}
+
 .recommendation-table th {
     background:linear-gradient(180deg,#0b4f91 0%,#063c73 100%);
     color:#ffffff;
@@ -1466,6 +1664,13 @@ div[data-testid="stAlert"] {
     vertical-align:middle;
     padding:7px 6px;
     word-break:break-word;
+}
+
+/* RECOMENDATION REGISTER — SR NO CENTERED */
+.recommendation-table th:first-child,
+.recommendation-table td:first-child {
+    text-align:center !important;
+    vertical-align:middle !important;
 }
 
 .recommendation-table tr:nth-child(even) td { background:#f3f7fb; }
@@ -1572,1479 +1777,801 @@ div.stButton > button {
     font-weight: 900 !important;
 }
 
+
+/* PHA REGISTER — left-align COMPLETED / ONGOING in Status column */
+.pha-table .pha-status-cell,
+.pha-table .pha-status-cell * {
+    text-align: left !important;
+}
+
+
+/* PHA REGISTER — keep Status text at the left side */
+.pha-status-cell,
+.pha-status-cell > *,
+.pha-status-cell span,
+.pha-status-cell div {
+    text-align: left !important;
+    justify-content: flex-start !important;
+}
+
+
+/* PHA REGISTER — Status left-side spacing */
+.pha-status-cell {
+    padding-left: 14px !important;
+    box-sizing: border-box !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True
 )
 
-# =========================================================
-# PREMIUM 3D INDUSTRIAL HEADER — REFERENCE MATCH
-# =========================================================
 
-LOGO_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "jsw_jfe_logo.jpg"
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
+st.set_page_config(
+    page_title="PSM Digital Dashboard",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-if not os.path.exists(LOGO_PATH):
-    st.error(f"Logo file not found: {LOGO_PATH}")
-    st.stop()
 
-with open(LOGO_PATH, "rb") as f:
-    logo_base64 = base64.b64encode(f.read()).decode("utf-8")
+# ============================================================
+# REMOVE STREAMLIT TOP SPACE
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+
+    [data-testid="stDecoration"] {
+        display: none !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .block-container {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .stApp {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    iframe {
+        display: block !important;
+        margin-top: -0px !important;
+        padding-top: 0 !important;
+        border: 0 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
+)
+
+
+# ============================================================
+# HEADER HTML
+# ============================================================
 
 header_html = """
+
 <!DOCTYPE html>
+
 <html>
+
 <head>
+
 <meta charset="UTF-8">
 
 <style>
 
-* {
-    box-sizing: border-box;
-}
 
-html,
-body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, Helvetica, sans-serif;
-}
+/* ============================================================
+   MAIN HEADER
+   ============================================================ */
 
-body {
-    background: #ffffff;
-}
+.psm-header {
 
-
-/* =====================================================
-   MAIN OUTER HEADER
-   — FULL CORNER CURVE LIKE REFERENCE
-   ===================================================== */
-
-.header {
     position: relative;
 
-    width: calc(100% - 8px);
-    height: 150px;
+    width: 100%;
 
-    /* Move the complete header slightly downward */
-    margin: 8px 4px 0;
+    height: 90px;
 
     overflow: hidden;
 
     background:
-        radial-gradient(
-            ellipse at center,
-            #0a3552 0%,
-            #062239 35%,
-            #031421 67%,
-            #010910 100%
-        );
-
-    border: 1px solid #51c7f5;
-
-    border-radius: 20px;
-
-    box-shadow:
-        0 0 0 2px rgba(4,34,52,.92),
-        0 4px 14px rgba(0,0,0,.40),
-        inset 0 1px 0 rgba(255,255,255,.12),
-        inset 0 -1px 0 rgba(48,194,241,.75);
-}
-
-
-/* =====================================================
-   SECONDARY INNER CURVED FRAME
-   ===================================================== */
-
-.header-frame {
-    position: absolute;
-
-    inset: 5px;
-
-    z-index: 40;
-
-    border: 1px solid rgba(69,190,237,.48);
-
-    border-radius: 15px;
-
-    pointer-events: none;
-
-    box-shadow:
-        inset 0 0 18px rgba(0,151,220,.13);
-}
-
-
-/* =====================================================
-   TOP REFLECTIVE GLOW
-   ===================================================== */
-
-.header-glow {
-    position: absolute;
-
-    z-index: 6;
-
-    left: 17%;
-    right: 17%;
-    top: 2px;
-
-    height: 28px;
-
-    background:
-        radial-gradient(
-            ellipse,
-            rgba(170,235,255,.20) 0%,
-            rgba(65,194,242,.10) 35%,
-            transparent 72%
-        );
-
-    filter: blur(3px);
-
-    pointer-events: none;
-}
-
-
-/* =====================================================
-   TECHNICAL GRID
-   ===================================================== */
-
-.header::before {
-    content: "";
-
-    position: absolute;
-
-    inset: 0;
-
-    background:
-        linear-gradient(
-            rgba(38,184,242,.045) 1px,
-            transparent 1px
-        ),
         linear-gradient(
             90deg,
-            rgba(38,184,242,.045) 1px,
-            transparent 1px
+            #031d34 0%,
+            #052b49 42%,
+            #07385c 74%,
+            #052b49 100%
         );
 
-    background-size: 28px 28px;
+    border-radius: 7px;
 
-    opacity: .9;
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.18);
+
 }
 
 
-/* =====================================================
-   INDUSTRIAL BACKGROUND
-   ===================================================== */
+/* ============================================================
+   LEFT LOGO AREA
+   ============================================================ */
 
-.industrial {
+.psm-left {
+
     position: absolute;
 
     left: 0;
-    right: 0;
-    bottom: 0;
+
+    top: 0;
 
     width: 100%;
-    height: 145px;
 
-    z-index: 2;
-
-    opacity: .55;
-}
-
-.industrial .steel {
-    fill: #12364e;
-    stroke: #2999c4;
-    stroke-width: 1.1;
-}
-
-.industrial .highlight {
-    fill: none;
-    stroke: #39c5f5;
-    stroke-width: 1;
-    opacity: .58;
-}
-
-.industrial .warm {
-    fill: #f2ad23;
-    opacity: .78;
-}
-
-.industrial .glass {
-    fill: #0a5e92;
-    stroke: #53d4ff;
-    stroke-width: .7;
-    opacity: .45;
-}
-
-.tech {
-    fill: none;
-    stroke: #2ca6d8;
-    stroke-width: .8;
-    opacity: .18;
-}
-
-
-/* =====================================================
-   LOGO PANEL
-   — WIDE RECTANGULAR, NOT SQUARE
-   ===================================================== */
-
-.logo-panel {
-    position: absolute;
-
-    z-index: 30;
-
-    left: 2.6%;
-    top: 50%;
-
-    transform: translateY(-50%);
-
-    width: 17.0%;
-    max-width: 325px;
-    min-width: 235px;
-
-    height: 108px;
+    height: 95px;
 
     display: flex;
+
     align-items: center;
-    justify-content: center;
 
-    padding: 6px 10px;
+    padding-left: 4px;
 
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #f9fbfd 42%,
-            #e4edf3 100%
-        );
+    box-sizing: border-box;
 
-    border: 1px solid #a5bccb;
-
-    border-radius: 14px;
-
-    box-shadow:
-        0 7px 15px rgba(0,0,0,.40),
-        0 0 0 2px rgba(20,63,86,.82),
-        inset 0 2px 0 rgba(255,255,255,.98),
-        inset 0 -4px 7px rgba(75,105,124,.14);
-}
-
-.logo-panel::before {
-    content: "";
-
-    position: absolute;
-
-    inset: -4px;
-
-    border-radius: 17px;
-
-    border: 1px solid rgba(84,202,247,.68);
+    z-index: 20;
 
     pointer-events: none;
+
 }
 
-.logo-panel::after {
-    content: "";
 
-    position: absolute;
+/* ============================================================
+   LOGO PANEL
+   ONLY VERTICAL POSITION CHANGED
+   ============================================================ */
 
-    left: 12%;
-    right: 12%;
-    top: -3px;
+.logo-panel {
 
-    height: 3px;
+    width: 195px;
 
-    border-radius: 50%;
+    height: 68px;
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #8fe6ff,
-            transparent
-        );
+    background: #ffffff;
+
+    border-radius: 5px;
+
+    padding: 4px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    box-sizing: border-box;
 
     box-shadow:
-        0 0 8px rgba(72,204,250,.82);
+        0 3px 9px
+        rgba(0,0,0,0.20);
+
+    position: relative;
+
+    top: -5px;
+
+    left: 5px;
+
 }
 
-.header-logo {
-    display: block;
+
+/* ============================================================
+   COMPANY LOGO
+   ============================================================ */
+
+.company-logo {
 
     width: 100%;
+
     height: 100%;
 
     object-fit: contain;
+
     object-position: center;
 
-    border-radius: 6px;
+    display: block;
+
 }
 
 
-/* =====================================================
-   CENTRAL TITLE FRAME
-   — LARGE 3D BEVELED PANEL
-   ===================================================== */
+/* ============================================================
+   LEFT VERTICAL DIVIDER
+   ============================================================ */
 
-.title-frame {
+.vertical-line {
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+    margin-left: 18px;
+
+    margin-right: 20px;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ============================================================
+   CENTER TITLE AREA
+   ============================================================ */
+
+.title-area {
+
     position: absolute;
-
-    z-index: 22;
 
     left: 50%;
-    top: 50%;
 
-    /* Exact horizontal + vertical centering */
-    transform: translate(-50%, -50%);
-
-    width: 53%;
-    max-width: 995px;
-    min-width: 600px;
-
-    height: 112px;
-
-    padding: 3px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #f0fbff 0%,
-            #7d9cac 8%,
-            #dcecf4 16%,
-            #254c63 29%,
-            #092337 48%,
-            #597f91 70%,
-            #eaf8ff 86%,
-            #617e8d 100%
-        );
-
-    border-radius: 17px;
-
-    box-shadow:
-        0 8px 20px rgba(0,0,0,.58),
-        0 0 22px rgba(0,160,245,.34);
-}
-
-
-/* INNER TITLE SURFACE */
-
-.title-inner {
-    position: relative;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    background:
-        radial-gradient(
-            ellipse at 50% 25%,
-            #174c6c 0%,
-            #0b304b 38%,
-            #041b2c 100%
-        );
-
-    border: 1px solid #67d4ff;
-
-    border-radius: 13px;
-
-    overflow: hidden;
-
-    box-shadow:
-        inset 0 3px 0 rgba(255,255,255,.22),
-        inset 0 -10px 18px rgba(0,0,0,.30),
-        0 0 15px rgba(28,183,242,.25);
-}
-
-
-/* TOP BLUE REFLECTION */
-
-.title-inner::before {
-    content: "";
-
-    position: absolute;
-
-    z-index: 1;
-
-    left: 12%;
-    right: 12%;
-    top: 5px;
-
-    height: 4px;
-
-    border-radius: 50%;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            rgba(192,242,255,.95),
-            rgba(73,202,248,1),
-            rgba(192,242,255,.95),
-            transparent
-        );
-
-    box-shadow:
-        0 0 10px rgba(72,210,255,.90);
-}
-
-
-/* CENTRAL HIGHLIGHT */
-
-.title-inner::after {
-    content: "";
-
-    position: absolute;
-
-    z-index: 1;
-
-    left: 38%;
-    right: 38%;
     top: 0;
 
-    height: 8px;
-
-    background:
-        radial-gradient(
-            ellipse,
-            rgba(128,228,255,.9),
-            transparent 70%
-        );
-
-    filter: blur(2px);
-}
-
-
-/* =====================================================
-   3D TITLE TEXT
-   ===================================================== */
-
-.title-text {
-    position: relative;
-
-    z-index: 5;
+    height: 95px;
 
     display: flex;
-    flex-direction: row;
+
+    flex-direction: column;
+
+    justify-content: center;
 
     align-items: center;
-    justify-content: center;
-    gap: 12px;
 
-    width: 100%;
-    height: 100%;
-
-    line-height: .88;
-    white-space: nowrap;
     text-align: center;
 
-    font-weight: 950;
-    letter-spacing: 1px;
+    min-width: max-content;
+
+    box-sizing: border-box;
+
+    transform: translateX(-50%);
+
 }
 
 
-/* PROCESS */
+/* ============================================================
+   MAIN TITLE
+   ============================================================ */
 
-.title-process {
-    font-size: clamp(25px, 2.55vw, 43px);
+.main-title {
 
     color: #ffffff;
 
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #ffffff 40%,
-            #f2fbff 65%,
-            #d4f1ff 100%
-        );
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
 
-    -webkit-background-clip: text;
-    background-clip: text;
+    font-size: 27px;
 
-    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+
+    line-height: 1;
+
+    letter-spacing: 0.3px;
+
+    white-space: nowrap;
+
+    margin: 0;
+
+    padding: 0;
+
 }
 
 
-/* TECHNOLOGY */
+/* ============================================================
+   ORANGE TITLE PART
+   ============================================================ */
 
-.title-technology {
-    margin-top: 4px;
+.main-title-orange {
 
-    font-size: clamp(27px, 2.85vw, 48px);
+    color: #f28c00;
 
-    color: #35c6ff;
+}
+
+
+/* ============================================================
+   SUBTITLE
+   ============================================================ */
+
+.subtitle {
 
     color: #ffffff;
 
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #ffffff 40%,
-            #f2fbff 65%,
-            #d4f1ff 100%
-        );
+    font-family:
+        Arial,
+        sans-serif;
 
-    -webkit-background-clip: text;
-    background-clip: text;
+    font-size: 12px;
 
-    -webkit-text-fill-color: transparent;
+    font-weight: 400;
+
+    letter-spacing: 3.6px;
+
+    margin-top: 8px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+}
+
+/* ============================================================
+   SUB-SUBTITLE / TAGLINE
+   ============================================================ */
+
+.tagline {
+
+    color:
+        rgba(255,255,255,0.82);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 7px;
+
+    font-weight: 500;
+
+    letter-spacing: 2.2px;
+
+    margin-top: 6px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
 }
 
 
-/* PT GOLD */
+/* ============================================================
+   RIGHT DATE / TIME AREA
+   ============================================================ */
 
-.title-pt {
-    color: #ffc31b;
+.psm-right {
 
-    background:
-        linear-gradient(
-            180deg,
-            #fff39a 0%,
-            #ffc51c 38%,
-            #f09b00 70%,
-            #c66b00 100%
-        );
-
-    -webkit-background-clip: text;
-    background-clip: text;
-
-    -webkit-text-fill-color: transparent;
-}
-
-
-/* =====================================================
-   TITLE BOTTOM ACCENT
-   ===================================================== */
-
-.title-line {
     position: absolute;
 
-    z-index: 6;
+    right: 16px;
 
-    left: 21%;
-    right: 21%;
-    bottom: 9px;
+    top: 0;
+
+    width: 15%;
+
+    height: 95px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: flex-end;
+
+    text-align: right;
+
+    color: #ffffff;
+
+    z-index: 30;
+
+    padding-left: 18px;
+
+    box-sizing: border-box;
+
+}
+
+
+/* ============================================================
+   RIGHT VERTICAL DIVIDER
+   ============================================================ */
+
+.psm-right::before {
+
+    content: "";
+
+    position: absolute;
+
+    left: 15px;
+
+    top: 6px;
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+}
+
+
+/* ============================================================
+   DATE
+   ============================================================ */
+
+.date {
+
+    color:
+        rgba(255,255,255,0.95);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 11px;
+
+    font-weight: 400;
+
+    letter-spacing: 0.7px;
+
+    line-height: 1;
+
+    margin: 0;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   TIME
+   ============================================================ */
+
+.time {
+
+    color: #ffffff;
+
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+
+    font-size: 22px;
+
+    font-weight: 800;
+
+    margin-top: 4px;
+
+    line-height: 1;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   RIGHT HORIZONTAL LINE
+   ============================================================ */
+
+.right-line {
+
+    width: 80px;
 
     height: 2px;
 
     background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #22baf3 18%,
-            #d3f7ff 50%,
-            #22baf3 82%,
-            transparent
-        );
+        rgba(255,255,255,0.75);
 
-    box-shadow:
-        0 0 8px rgba(44,195,250,.85);
+    margin-top: 7px;
+
+    flex-shrink: 0;
+
 }
 
 
-/* =====================================================
-   TITLE SIDE WINGS
-   ===================================================== */
+/* ============================================================
+   ORANGE BOTTOM BAR
+   ============================================================ */
 
-.title-wing {
-    position: absolute;
-
-    z-index: 19;
-
-    top: 50%;
-
-    width: 43px;
-    height: 44px;
-
-    transform: translateY(-50%);
-
-    background:
-        linear-gradient(
-            135deg,
-            #1a4862,
-            #061d30
-        );
-
-    border-top: 1px solid #65d5ff;
-    border-bottom: 1px solid #176b91;
-
-    box-shadow:
-        0 5px 10px rgba(0,0,0,.44);
-}
-
-.title-wing.left {
-    left: 23.0%;
-
-    clip-path:
-        polygon(
-            25% 0,
-            100% 0,
-            100% 100%,
-            25% 100%,
-            0 50%
-        );
-}
-
-.title-wing.right {
-    right: 23.0%;
-
-    clip-path:
-        polygon(
-            0 0,
-            75% 0,
-            100% 50%,
-            75% 100%,
-            0 100%
-        );
-}
-
-
-/* =====================================================
-   TAGLINE
-   ===================================================== */
-
-.tagline {
-    position: absolute;
-
-    z-index: 27;
-
-    left: 50%;
-    bottom: 6px;
-
-    transform: translateX(-50%);
-
-    color: #a9ddec;
-
-    font-size: 8px;
-
-    font-weight: 900;
-
-    letter-spacing: 2px;
-
-    white-space: nowrap;
-}
-
-
-/* =====================================================
-   RIGHT DATE/TIME PANEL
-   — SAME WIDE RECTANGULAR PROPORTION AS LOGO
-   ===================================================== */
-
-.status-panel {
-    position: absolute;
-
-    z-index: 30;
-
-    right: 2.6%;
-    top: 50%;
-
-    transform: translateY(-50%);
-
-    width: 17.0%;
-    max-width: 325px;
-    min-width: 235px;
-
-    height: 108px;
-
-    padding: 8px 13px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #123c55 0%,
-            #08263b 45%,
-            #031522 100%
-        );
-
-    border: 1px solid #55c7ee;
-
-    border-radius: 14px;
-
-    box-shadow:
-        0 7px 15px rgba(0,0,0,.48),
-        0 0 0 2px rgba(12,50,70,.92),
-        inset 0 2px 0 rgba(255,255,255,.13),
-        inset 0 -6px 12px rgba(0,0,0,.30);
-}
-
-.status-panel::before {
-    content: "";
+.orange-bar {
 
     position: absolute;
-
-    inset: -4px;
-
-    border-radius: 17px;
-
-    border: 1px solid rgba(83,202,246,.62);
-
-    pointer-events: none;
-}
-
-.status-panel::after {
-    content: "";
-
-    position: absolute;
-
-    left: 12%;
-    right: 12%;
-    top: -3px;
-
-    height: 3px;
-
-    border-radius: 50%;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #8fe8ff,
-            transparent
-        );
-
-    box-shadow:
-        0 0 8px rgba(71,204,250,.82);
-}
-
-
-/* ONLINE */
-
-.status-top {
-    height: 20px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: center;
-
-    gap: 8px;
-
-    color: #a9ddec;
-
-    font-size: 8px;
-
-    font-weight: 900;
-
-    letter-spacing: 1.2px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-
-    border-radius: 50%;
-
-    background: #2de57f;
-
-    box-shadow:
-        0 0 8px rgba(45,229,127,.95);
-}
-
-
-/* DIVIDER */
-
-.status-divider {
-    height: 1px;
-
-    margin: 3px 8px 4px;
-
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #3cc2ed,
-            transparent
-        );
-}
-
-
-/* DATE/TIME ROW */
-
-.status-row {
-    height: 29px;
-
-    display: flex;
-
-    align-items: center;
-    justify-content: flex-start;
-
-    gap: 9px;
-
-    padding-left: 16px;
-
-    color: #ffffff;
-
-    font-size: 15px;
-
-    font-weight: 900;
-
-    letter-spacing: .45px;
-
-    font-variant-numeric: tabular-nums;
-}
-
-.status-row.time {
-    color: #c4f2ff;
-}
-
-#current-date,
-#current-time {
-    text-align: left;
-    font-variant-numeric: tabular-nums;
-}
-
-.status-icon {
-    width: 18px;
-
-    color: #20c3f7;
-
-    font-size: 15px;
-
-    text-align: center;
-}
-
-.status-label {
-    width: 39px;
-
-    color: #b9dfed;
-
-    font-size: 12px;
-
-    font-weight: 800;
-
-    letter-spacing: .25px;
-
-    text-align: left;
-}
-
-
-/* =====================================================
-   BOTTOM METALLIC RAIL
-   ===================================================== */
-
-.bottom-rail {
-    position: absolute;
-
-    z-index: 35;
 
     left: 0;
-    right: 0;
+
     bottom: 0;
+
+    width: 100%;
 
     height: 7px;
 
-    background:
-        linear-gradient(
-            90deg,
-            #063d64 0%,
-            #1399d0 20%,
-            #91e8ff 50%,
-            #1399d0 80%,
-            #063d64 100%
-        );
+    background: #f28c00;
 
-    box-shadow:
-        0 0 9px rgba(35,194,249,.90);
+    z-index: 50;
+
 }
 
-.bottom-rail::before,
-.bottom-rail::after {
-    content: "";
-
-    position: absolute;
-
-    top: 1px;
-
-    width: 82px;
-    height: 5px;
-
-    background:
-        repeating-linear-gradient(
-            135deg,
-            transparent 0 8px,
-            rgba(255,255,255,.80) 8px 11px,
-            transparent 11px 18px
-        );
-}
-
-.bottom-rail::before {
-    left: 18%;
-}
-
-.bottom-rail::after {
-    right: 18%;
-}
-
-
-/* =====================================================
-   RESPONSIVE
-   ===================================================== */
-
-@media (max-width: 1200px) {
-
-    .logo-panel,
-    .status-panel {
-        width: 18%;
-        min-width: 205px;
-        height: 94px;
-    }
-
-    .title-frame {
-        width: 49%;
-        min-width: 500px;
-        height: 100px;
-    }
-
-    .title-wing {
-        display: none;
-    }
-
-    .tagline {
-        font-size: 7px;
-    }
-}
-
-@media (max-width: 900px) {
-
-    .header {
-        height: 125px;
-        border-radius: 16px;
-    }
-
-    .industrial {
-        height: 120px;
-    }
-
-    .logo-panel {
-        left: 1.5%;
-        width: 19%;
-        min-width: 150px;
-        height: 78px;
-        border-radius: 11px;
-    }
-
-    .title-frame {
-        width: 47%;
-        min-width: 280px;
-        height: 84px;
-        border-radius: 12px;
-    }
-
-    .title-inner {
-        border-radius: 9px;
-    }
-
-    .title-process {
-        font-size: 21px;
-    }
-
-    .title-technology {
-        font-size: 23px;
-    }
-
-    .status-panel {
-        right: 1.5%;
-        width: 19%;
-        min-width: 150px;
-        height: 78px;
-        border-radius: 11px;
-        padding: 5px 7px;
-    }
-
-    .status-row {
-        font-size: 10px;
-        height: 22px;
-    }
-
-    .status-top {
-        font-size: 6px;
-        height: 15px;
-    }
-
-    .tagline {
-        display: none;
-    }
-}
 
 </style>
+
 </head>
+
 
 <body>
 
-<div class="header">
 
-    <!-- INNER CURVED FRAME -->
-    <div class="header-frame"></div>
+<!-- ============================================================
+     MAIN HEADER
+     ============================================================ -->
 
-    <!-- TOP GLOSS -->
-    <div class="header-glow"></div>
+<div class="psm-header">
 
 
-    <!-- INDUSTRIAL BACKGROUND -->
+    <!-- ========================================================
+         LEFT LOGO AREA
+         ======================================================== -->
 
-    <svg
-        class="industrial"
-        viewBox="0 0 1672 145"
-        preserveAspectRatio="none"
-        aria-hidden="true">
+    <div class="psm-left">
 
-        <!-- LEFT PLANT -->
 
-        <g>
+        <!-- ====================================================
+             LOGO
+             ==================================================== -->
 
-            <rect class="steel"
-                  x="48" y="58"
-                  width="22" height="82"
-                  rx="3"/>
+        <div class="logo-panel">
 
-            <rect class="steel"
-                  x="82" y="40"
-                  width="34" height="100"
-                  rx="5"/>
+            <img
+                class="company-logo"
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64"
+                alt="JSW JFE Steel Limited"
+            >
 
-            <rect class="steel"
-                  x="88" y="23"
-                  width="22" height="19"/>
+        </div>
 
-            <rect class="steel"
-                  x="93" y="10"
-                  width="12" height="15"/>
 
-            <circle class="warm"
-                    cx="99" cy="58" r="3"/>
+        <!-- ====================================================
+             LEFT VERTICAL LINE
+             ==================================================== -->
 
-            <circle class="warm"
-                    cx="99" cy="81" r="3"/>
+        <div class="vertical-line"></div>
 
-            <circle class="warm"
-                    cx="99" cy="104" r="3"/>
 
-            <path class="highlight"
-                  d="
-                    M99 10 V140
-                    M84 62 H114
-                    M84 86 H114
-                    M84 110 H114
-                  "/>
+        <!-- ====================================================
+             CENTER TITLE GROUP
+             ==================================================== -->
 
-            <rect class="steel"
-                  x="137" y="72"
-                  width="52" height="68"
-                  rx="25"/>
+        <div class="title-area">
 
-            <path class="highlight"
-                  d="
-                    M137 91 H189
-                    M137 114 H189
-                  "/>
 
-            <circle class="glass"
-                    cx="163" cy="102" r="5"/>
+            <!-- MAIN TITLE -->
 
-        </g>
+            <div class="main-title">
 
+                PROCESS HAZARD ANALYSIS (PHA)
 
-        <!-- LEFT PIPING -->
-
-        <g class="highlight">
-
-            <path d="
-                M0 121
-                H310
-                V92
-                H395
-            "/>
-
-            <path d="
-                M35 132
-                H270
-                V108
-                H420
-            "/>
-
-            <path d="
-                M170 77
-                H285
-                V52
-                H380
-            "/>
-
-            <path d="
-                M247 140
-                V70
-                H335
-            "/>
-
-        </g>
-
-
-        <!-- RIGHT PLANT -->
-
-        <g>
-
-            <rect class="steel"
-                  x="1430" y="57"
-                  width="22" height="83"
-                  rx="3"/>
-
-            <rect class="steel"
-                  x="1470" y="40"
-                  width="34" height="100"
-                  rx="5"/>
-
-            <rect class="steel"
-                  x="1476" y="23"
-                  width="22" height="19"/>
-
-            <rect class="steel"
-                  x="1481" y="10"
-                  width="12" height="15"/>
-
-            <circle class="warm"
-                    cx="1487" cy="58" r="3"/>
-
-            <circle class="warm"
-                    cx="1487" cy="81" r="3"/>
-
-            <circle class="warm"
-                    cx="1487" cy="104" r="3"/>
-
-            <path class="highlight"
-                  d="
-                    M1487 10 V140
-                    M1472 62 H1502
-                    M1472 86 H1502
-                    M1472 110 H1502
-                  "/>
-
-            <rect class="steel"
-                  x="1533" y="72"
-                  width="52" height="68"
-                  rx="25"/>
-
-            <path class="highlight"
-                  d="
-                    M1533 91 H1585
-                    M1533 114 H1585
-                  "/>
-
-            <circle class="glass"
-                    cx="1559" cy="102" r="5"/>
-
-        </g>
-
-
-        <!-- RIGHT PIPING -->
-
-        <g class="highlight">
-
-            <path d="
-                M1672 121
-                H1362
-                V92
-                H1277
-            "/>
-
-            <path d="
-                M1637 132
-                H1402
-                V108
-                H1252
-            "/>
-
-            <path d="
-                M1502 77
-                H1387
-                V52
-                H1292
-            "/>
-
-            <path d="
-                M1425 140
-                V70
-                H1337
-            "/>
-
-        </g>
-
-
-        <!-- TECHNICAL HEXAGONS -->
-
-        <g class="tech">
-
-            <path d="
-                M270 25
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M309 58
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M1366 25
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-            <path d="
-                M1405 58
-                l18 -11
-                l18 11
-                v22
-                l-18 11
-                l-18-11z
-            "/>
-
-        </g>
-
-    </svg>
-
-
-    <!-- LOGO -->
-
-    <div class="logo-panel">
-
-        <img
-            class="header-logo"
-            src="data:image/jpeg;base64,LOGO_BASE64"
-            alt="JSW JFE Steel Limited"
-        >
-
-    </div>
-
-
-    <!-- TITLE SIDE WINGS -->
-
-    <div class="title-wing left"></div>
-    <div class="title-wing right"></div>
-
-
-    <!-- CENTRAL 3D TITLE -->
-
-    <div class="title-frame">
-
-        <div class="title-inner">
-
-            <div class="title-text">
-
-                <div class="title-process">
-                    PROCESS
-                </div>
-
-                <div class="title-technology">
-                    HAZARD
-                </div>
-
-                <div class="title-technology">
-                    ANALYSIS
-                </div>
-
-                    <span class="title-pt">(PHA)</span>
-                </div>
+                <span class="main-title-orange"></span>
 
             </div>
 
-            <div class="title-line"></div>
+
+            <!-- SUBTITLE -->
+
+            <div class="subtitle">
+
+                PSM DIGITAL DASHBOARD
+
+            </div>
+
+
+            <!-- SUB-SUBTITLE -->
+
+            <div class="tagline">
+
+                PEOPLE
+                &nbsp; | &nbsp;
+                PROCESS
+                &nbsp; | &nbsp;
+                RISK
+                &nbsp; | &nbsp;
+                COMPLIANCE
+
+            </div>
+
 
         </div>
+
 
     </div>
 
 
-    <!-- TAGLINE -->
+    <!-- ========================================================
+         RIGHT DATE / TIME
+         ======================================================== -->
 
-    <div class="tagline">
-        PROCESS SAFETY MANAGEMENT • DIGITAL OPERATIONS
-    </div>
+    <div class="psm-right">
 
 
-    <!-- RIGHT DATE / TIME PANEL -->
+        <div class="date">
 
-    <div class="status-panel">
-
-        <div class="status-top">
-
-            <span class="status-dot"></span>
-
-            <span>SYSTEM ONLINE</span>
+            CURRENT_DATE_VALUE
 
         </div>
 
-        <div class="status-divider"></div>
 
-        <div class="status-row">
+        <div class="time">
 
-            <span class="status-icon">▣</span>
-
-            <span class="status-label">Date:</span>
-
-            <span id="current-date">
-                03.09.2026
-            </span>
+            CURRENT_TIME_VALUE
 
         </div>
 
-        <div class="status-row time">
 
-            <span class="status-icon">◷</span>
+        <div class="right-line"></div>
 
-            <span class="status-label">Time:</span>
-
-            <span id="current-time">
-                00.00.00
-            </span>
-
-        </div>
 
     </div>
 
 
-    <!-- BOTTOM RAIL -->
+    <!-- ========================================================
+         ORANGE BOTTOM BAR
+         ======================================================== -->
 
-    <div class="bottom-rail"></div>
+    <div class="orange-bar"></div>
+
 
 </div>
 
 
-<script>
-
-function updateDateTime() {
-
-    const now = new Date();
-
-
-    /* =================================================
-       DATE — DD.MM.YYYY
-       ================================================= */
-
-    const dateParts = new Intl.DateTimeFormat(
-        "en-GB",
-        {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            timeZone: "Asia/Kolkata"
-        }
-    ).formatToParts(now);
-
-    let day = "";
-    let month = "";
-    let year = "";
-
-    dateParts.forEach(function(part) {
-
-        if (part.type === "day") {
-            day = part.value;
-        }
-
-        if (part.type === "month") {
-            month = part.value;
-        }
-
-        if (part.type === "year") {
-            year = part.value;
-        }
-
-    });
-
-    document.getElementById("current-date").textContent =
-        day + "." + month + "." + year;
-
-
-    /* =================================================
-       TIME — HH.MM.SS AM/PM
-       ================================================= */
-
-    const timeParts = new Intl.DateTimeFormat(
-        "en-GB",
-        {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: true,
-            timeZone: "Asia/Kolkata"
-        }
-    ).formatToParts(now);
-
-    let hour = "";
-    let minute = "";
-    let second = "";
-    let dayPeriod = "";
-
-    timeParts.forEach(function(part) {
-
-        if (part.type === "hour") {
-            hour = part.value;
-        }
-
-        if (part.type === "minute") {
-            minute = part.value;
-        }
-
-        if (part.type === "second") {
-            second = part.value;
-        }
-
-        if (part.type === "dayPeriod") {
-            dayPeriod = part.value.toUpperCase();
-        }
-
-    });
-
-    document.getElementById("current-time").textContent =
-        hour + "." + minute + "." + second + " " + dayPeriod;
-}
-
-
-updateDateTime();
-
-setInterval(
-    updateDateTime,
-    1000
-);
-
-</script>
-
 </body>
+
 </html>
+
 """
 
+
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
 header_html = header_html.replace(
-    "LOGO_BASE64",
+    "LOGO_IMAGE_BASE64",
     logo_base64
 )
 
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
+)
+
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
+
 components.html(
     header_html,
-    height=160,
+    height=114,
     scrolling=False
 )
 
 
+#==================================================================
 # =========================================================
 # RESET FILTER CALLBACK
 # =========================================================
@@ -3267,12 +2794,7 @@ for column, card in zip(
         <div class="kpi-value {color}">
             {value}
         </div>
-
-        <div class="kpi-description">
-            {description}
-        </div>
-
-    </div>
+</div>
 
     <div class="kpi-pattern"></div>
 
@@ -3499,12 +3021,7 @@ for row_start in range(
         <div class="kpi-value">
             {value}
         </div>
-
-        <div class="kpi-description">
-            {description}
-        </div>
-
-    </div>
+</div>
 
     <div class="kpi-pattern"></div>
 
@@ -3703,153 +3220,135 @@ page_df = display_df.iloc[
 
 # =========================================================
 # TABLE
-# Product / Process / Location intentionally removed
-# Upload / View implementation copied from PT.PY and
-# adapted only from PT names to PHA names.
+# Google Sheet data shown as one normal HTML table.
+# Upload Document remains a hidden SOURCE column only.
+# View Document is a normal column directly beside Status.
 # =========================================================
 
-table_widths = [
-    .45,  # Sr No
-    .85,  # PHA
-    1.25,  # Department
-    1.65,  # Name
-    .95,  # Status
-    1.15,  # Upload
-    1.05  # View
-]
-
-table_headers = [
-    "Sr No",
-    "PHA No",
-    "Department",
-    "Name of PHA",
-    "Status  (Ongoing/Completed)",
-    "Upload Document",
-    "View Document"
-]
-
-header_columns = st.columns(
-    table_widths,
-    gap=None
-)
-
-for column, header_text in zip(
-        header_columns,
-        table_headers
-):
-    with column:
-        st.html(
-            f"""
-<div class="table-head">
-    {header_text}
-</div>
-"""
-        )
-
-# =========================================================
-# PHA TABLE ACTION STYLE
-# SAME IMPLEMENTATION AS PT.PY
-# =========================================================
-
-st.html(
-    """
+pha_table_html = """
 <style>
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker) {
-    gap: 0 !important;
+.pha-register-container {
+    width: 100%;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"] {
-    padding: 0 !important;
+.pha-register-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+    padding: 0;
 }
 
-.pha-action-cell {
-    min-height: 35px;
+.pha-register-table th {
+    background: #0b4f8a;
+    color: #ffffff;
+    border-right: 1px solid #d5e0ea;
+    border-bottom: 1px solid #d5e0ea;
+    height: 46px;
+    padding: 8px 10px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.15;
+    box-sizing: border-box;
+}
+
+.pha-register-table td {
     height: 35px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
+    padding: 5px 10px;
     border-right: 1px solid #d5e0ea;
     border-bottom: 1px solid #d5e0ea;
     color: #243b57;
     font-size: 12px;
     font-weight: 600;
     line-height: 1.2;
-    padding: 5px 10px;
+    text-align: center;
+    vertical-align: middle;
+    box-sizing: border-box;
+    background: #ffffff;
 }
 
-.pha-action-cell.alt {
+.pha-register-table tbody tr:nth-child(even) td {
     background: #f5f8fb;
 }
 
-.pha-action-cell.left {
-    justify-content: flex-start;
-    text-align: left;
+.pha-register-table td.left {
+    text-align: left !important;
+    padding-left: 45px !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button,
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(7) button {
-    height: 35px !important;
-    min-height: 35px !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 8px !important;
-    border-radius: 0 !important;
-    border: 0 !important;
-    border-right: 1px solid #d5e0ea !important;
-    border-bottom: 1px solid #d5e0ea !important;
+.pha-register-table td.left .status-completed,
+.pha-register-table td.left .status-ongoing {
+    display: inline-block;
+    text-align: left !important;
+}
+
+.pha-register-table .pha-view-link {
+    color: #174b87;
+    text-decoration: none !important;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.pha-register-table .pha-view-link:hover {
+    color: #0b4f8a;
+    text-decoration: none !important;
+}
+
+.pha-register-table .pha-no-link {
+    color: #9aaabd;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pha-register-table .status-completed,
+.pha-register-table .status-ongoing {
+    background: transparent !important;
+    border: none !important;
     box-shadow: none !important;
-    background: #ffffff !important;
-    font-size: 11px !important;
-    font-weight: 800 !important;
-    transform: none !important;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button {
-    color: #e1262d !important;
+.pha-register-table .status-completed {
+    color: #16A34A !important;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(7) button {
-    color: #174b87 !important;
-}
-
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(6) button:hover,
-div[data-testid="stHorizontalBlock"]:has(.pha-action-row-marker)
-div[data-testid="stColumn"]:nth-child(7) button:hover {
-    background: #f5f8fb !important;
-    border-color: #d5e0ea !important;
-    box-shadow: none !important;
-    transform: none !important;
+.pha-register-table .status-ongoing {
+    color: #EA8A00 !important;
 }
 </style>
+
+<div class="pha-register-container">
+<table class="pha-register-table">
+<colgroup>
+    <col style="width:8%;">
+    <col style="width:15%;">
+    <col style="width:19%;">
+    <col style="width:27%;">
+    <col style="width:16%;">
+    <col style="width:15%;">
+</colgroup>
+<thead>
+<tr>
+    <th>Sr No</th>
+    <th>PHA No</th>
+    <th>Department</th>
+    <th>Name of PHA</th>
+    <th>Status</th>
+    <th>View Document</th>
+</tr>
+</thead>
+<tbody>
 """
-)
 
-# =========================================================
-# TABLE ROWS
-# =========================================================
-
-for row_number, (_, row) in enumerate(
-        page_df.iterrows()
-):
-
-    alternate = (
-        "alt"
-        if row_number % 2 == 1
-        else ""
-    )
-
-    row_columns = st.columns(
-        table_widths,
-        gap=None
-    )
-
+for row_number, (_, row) in enumerate(page_df.iterrows()):
     sr_no = str(row["Sr No"]).strip()
     pha_no = str(row["PHA No"]).strip()
     department = str(row["Department"]).strip()
@@ -3864,67 +3363,73 @@ for row_number, (_, row) in enumerate(
         department = ""
     if name_pha.lower() == "nan":
         name_pha = ""
+    if status.lower() == "nan":
+        status = ""
+
+    def esc(value):
+        return (
+            str(value)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
+    sr_no_html = esc(sr_no)
+    pha_no_html = esc(pha_no)
+    department_html = esc(department)
+    name_html = esc(name_pha)
 
     if status.lower() == "completed":
         status_html = '<span class="status-completed">● COMPLETED</span>'
     elif status.lower() == "ongoing":
         status_html = '<span class="status-ongoing">● ONGOING</span>'
     else:
-        status_html = '<span class="status-pill">—</span>'
+        status_html = esc(status)
 
-    with row_columns[0]:
-        st.markdown(
-            f'<div class="pha-action-cell {alternate}"><span class="pha-action-row-marker"></span>{sr_no}</div>',
-            unsafe_allow_html=True
+    # Fetch the link from the SAME Google Sheet row's hidden Upload Document cell.
+    document_link = pha_upload_document_links.get(pha_no, "")
+
+    if not document_link:
+        raw_upload_value = row.get(PHA_UPLOAD_COLUMN, "")
+        if not pd.isna(raw_upload_value):
+            candidate_link = str(raw_upload_value).strip()
+            if re.match(r"^https?://", candidate_link, re.IGNORECASE):
+                document_link = candidate_link
+
+    if document_link:
+        safe_link = (
+            document_link
+            .replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
         )
-
-    with row_columns[1]:
-        st.markdown(
-            f'<div class="pha-action-cell {alternate}">{pha_no}</div>',
-            unsafe_allow_html=True
+        view_html = (
+            f'<a class="pha-view-link" href="{safe_link}" '
+            f'target="_blank" rel="noopener noreferrer">◉ View</a>'
         )
+    else:
+        view_html = '<span class="pha-no-link">No Link</span>'
 
-    with row_columns[2]:
-        st.markdown(
-            f'<div class="pha-action-cell {alternate} left">{department}</div>',
-            unsafe_allow_html=True
-        )
+    pha_table_html += f"""
+<tr>
+    <td>{sr_no_html}</td>
+    <td>{pha_no_html}</td>
+    <td class="left">{department_html}</td>
+    <td class="left">{name_html}</td>
+    <td class="left">{status_html}</td>
+    <td>{view_html}</td>
+</tr>
+"""
 
-    with row_columns[3]:
-        st.markdown(
-            f'<div class="pha-action-cell {alternate} left">{name_pha}</div>',
-            unsafe_allow_html=True
-        )
+pha_table_html += """
+</tbody>
+</table>
+</div>
+"""
 
-    with row_columns[4]:
-        st.markdown(
-            f'<div class="pha-action-cell {alternate}">{status_html}</div>',
-            unsafe_allow_html=True
-        )
-
-    with row_columns[5]:
-        if st.button(
-                "↑ Upload",
-                key=f"upload_{safe_pha_folder_name(pha_no)}_{row_number}",
-                use_container_width=True
-        ):
-            st.session_state.upload_pha_no = pha_no
-            st.session_state.view_pha_no = ""
-            st.session_state.open_upload_dialog = True
-            st.session_state.open_view_dialog = False
-            st.rerun()
-
-    with row_columns[6]:
-        if st.button(
-                "◉ View",
-                key=f"view_{safe_pha_folder_name(pha_no)}_{row_number}",
-                use_container_width=True
-        ):
-            st.session_state.view_pha_no = pha_no
-            st.session_state.upload_pha_no = ""
-            st.session_state.open_view_dialog = True
-            st.session_state.open_upload_dialog = False
-            st.rerun()
+st.html(pha_table_html)
 
 # =========================================================
 # RECORD COUNT + PAGINATION
@@ -4016,6 +3521,7 @@ st.html(
 
 recommendation_register_columns = [
     "Sr No",
+    "Recommendation",
     "PHA No.",
     "Department",
     "Target Date",
@@ -4125,8 +3631,14 @@ else:
 """
 
     for column in recommendation_register_columns:
+        display_column = (
+            "Status"
+            if column == "Status (Open/Close)"
+            else column
+        )
+
         recommendation_register_html += (
-            f"<th>{column}</th>"
+            f"<th>{display_column}</th>"
         )
 
     recommendation_register_html += """

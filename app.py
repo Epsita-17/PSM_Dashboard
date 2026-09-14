@@ -1,7 +1,6 @@
 import streamlit as st
 from pathlib import Path
 
-
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -10,10 +9,8 @@ st.set_page_config(
     page_title="PSM Dashboard",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
-
-
 # ============================================================
 # PROJECT PATHS
 # ============================================================
@@ -45,8 +42,7 @@ st.markdown(
         padding-right: 1rem;
         max-width: 100%;
     }
-
-
+    
     /* ========================================================
        STREAMLIT HEADER
        DO NOT HIDE THIS HEADER
@@ -61,34 +57,35 @@ st.markdown(
     z-index: 999999 !important;
 }
 
-
     /* ========================================================
-       SIDEBAR COLLAPSED CONTROL
-       ======================================================== */
+   SIDEBAR - ALWAYS REOPENABLE
+   ======================================================== */
 
-    [data-testid="stSidebarCollapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        z-index: 1000000 !important;
-    }
+/* Sidebar itself */
+section[data-testid="stSidebar"] {
+    visibility: visible !important;
+}
 
-    [data-testid="stSidebarCollapsedControl"] button {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-    }
+/* Sidebar reopen control */
+[data-testid="stSidebarCollapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    z-index: 999999 !important;
+}
 
-    button[aria-label="Open sidebar"],
-    button[aria-label="Close sidebar"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-    }
-
+/* Reopen button */
+[data-testid="stSidebarCollapsedControl"] button {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 1000000 !important;
+}
 
     /* ========================================================
        SIDEBAR
@@ -105,7 +102,6 @@ st.markdown(
     section[data-testid="stSidebar"] * {
         color: #ffffff;
     }
-
 
     /* ========================================================
        SIDEBAR BRAND
@@ -143,7 +139,6 @@ st.markdown(
         margin-top: 5px;
     }
 
-
     /* ========================================================
        SIDEBAR NAVIGATION
        ======================================================== */
@@ -172,7 +167,6 @@ st.markdown(
         color: #ffffff !important;
     }
 
-
     /* ========================================================
        SIDEBAR DIVIDER
        ======================================================== */
@@ -198,7 +192,6 @@ st.markdown(
         font-weight: 700;
     }
 
-
     /* ========================================================
        ALERTS
        ======================================================== */
@@ -211,7 +204,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
 
 # ============================================================
 # SIDEBAR BRANDING
@@ -228,19 +220,19 @@ with st.sidebar:
     # LOGO
     # --------------------------------------------------------
 
-    if LOGO_PATH.exists():
+    #if LOGO_PATH.exists():
 
-        st.image(
-            str(LOGO_PATH),
-            width=185
-        )
+        #st.image(
+            #str(LOGO_PATH),
+            #width=185
+        #)
 
-    else:
+    #else:
 
-        st.warning(
-            "Logo file not found:\n"
-            "assets/jsw_jfe_logo.png"
-        )
+        #st.warning(
+            #"Logo file not found:\n"
+            #"assets/jsw_jfe_logo.png"
+       #)
 
 
     # --------------------------------------------------------
@@ -270,7 +262,6 @@ with st.sidebar:
     )
 
     st.divider()
-
 
 # ============================================================
 # MAIN DASHBOARD PAGES
@@ -311,15 +302,6 @@ apex_page = st.Page(
 )
 
 
-# ------------------------------------------------------------
-# 04 STEERING COMMITTEE
-# ------------------------------------------------------------
-
-steering_page = st.Page(
-    str(BASE_DIR / "pages" / "04_Steering_Committee.py"),
-    title="Steering Committee",
-    icon="🧭"
-)
 
 
 # ------------------------------------------------------------
@@ -334,12 +316,12 @@ sub_committee_chairman_page = st.Page(
 
 
 # ------------------------------------------------------------
-# 06 PSM CHAIRMAN DASHBOARD
+# 06 PSM SC CHAIRMAN DASHBOARD
 # ------------------------------------------------------------
 
-psm_chairman_page = st.Page(
-    str(BASE_DIR / "pages" / "06_PSM_Chairman_Dashboard.py"),
-    title="PSM Chairman Dashboard",
+psm_sc_convener_page = st.Page(
+    str(BASE_DIR / "pages" / "06_PSM_SC_Convener_Dashboard.py"),
+    title="PSM SC Convener Dashboard",
     icon="👤"
 )
 
@@ -358,7 +340,6 @@ all_departments_page = st.Page(
 # ============================================================
 # INDIVIDUAL DEPARTMENT PAGES
 # ============================================================
-
 
 # ------------------------------------------------------------
 # BLAST FURNACE
@@ -514,6 +495,28 @@ lcp_page = st.Page(
 )
 
 
+# ------------------------------------------------------------
+# RMHS
+# ------------------------------------------------------------
+
+rmhs_page = st.Page(
+    str(BASE_DIR / "departments" / "17_RMHS.py"),
+    title="RMHS",
+    icon="⚙️"
+)
+
+# ------------------------------------------------------------
+# PROJECTS
+# ------------------------------------------------------------
+
+projects_page = st.Page(
+    str(BASE_DIR / "departments" / "18_Projects.py"),
+    title="PROJECTS",
+    icon="⚙️"
+)
+
+
+
 # ============================================================
 # PSM MODULE PAGES
 # ============================================================
@@ -575,6 +578,17 @@ training_page = st.Page(
 
 
 # ------------------------------------------------------------
+# 15 OP
+# ------------------------------------------------------------
+
+op_page = st.Page(
+    str(BASE_DIR / "pages" / "15_OP.py"),
+    title="OP",
+    icon="📋"
+)
+
+
+# ------------------------------------------------------------
 # 14 PROCESS SAFETY INCIDENT
 # ------------------------------------------------------------
 
@@ -584,14 +598,63 @@ psi_page = st.Page(
     icon="🚨"
 )
 
+# ------------------------------------------------------------
+# 17 AUDIT
+# ------------------------------------------------------------
+
+audit_page = st.Page(
+    str(BASE_DIR / "pages" / "17_Audit.py"),
+    title="Audit",
+    icon="📊"
+)
+
+# ------------------------------------------------------------
+# 18 INCIDENT LIBRARY
+# ------------------------------------------------------------
+incident_library_page = st.Page(
+    str(BASE_DIR / "pages" / "18_Incident Library.py"),
+    title="Incident Library",
+    icon="📚"
+)
+
+# ------------------------------------------------------------
+# 19 ALARM & INTERLOCK MANAGEMENT
+# ------------------------------------------------------------
+
+alarm_interlock_management_page = st.Page(
+    str(BASE_DIR / "pages" / "19_ALARM_&_INTERLOCK_MANAGEMENT.py"),
+    title="ALARM & INTERLOCK MANAGEMENT",
+    icon="📚"
+)
+
+# ------------------------------------------------------------
+# 20 PSM CE & BARRIER HEALTH
+# ------------------------------------------------------------
+
+psm_ce_barrier_health_page = st.Page(
+    str(BASE_DIR / "pages" / "20_PSM CE & BARRIER HEALTH.py"),
+    title="PSM CE & BARRIER HEALTH",
+    icon="🛡️"
+)
+
+# 21 JSW SAFETY STANDARDS
+# ------------------------------------------------------------
+
+jsw_safety_standards_page = st.Page(
+    str(BASE_DIR / "pages" / "21_JSW_Safety_Standards.py"),
+    title="JSW SAFETY STANDARDS",
+    icon="📚"
+)
+
+
 
 # ============================================================
 # REPORTS
 # ============================================================
 
 reports_page = st.Page(
-    str(BASE_DIR / "pages" / "16_Reports.py"),
-    title="Reports",
+    str(BASE_DIR / "pages" / "16_Document Reprosotory.py"),
+    title="Document Repository",
     icon="📄"
 )
 
@@ -606,9 +669,8 @@ pg = st.navigation(
             home_page,
             executive_page,
             apex_page,
-            steering_page,
             sub_committee_chairman_page,
-            psm_chairman_page
+            psm_sc_convener_page
         ],
 
         "PSM OVERVIEW": [
@@ -629,18 +691,25 @@ pg = st.navigation(
             tube_mill_page,
             csp_page,
             pellet_beneficiation_page,
-            lcp_page
+            lcp_page,
+            rmhs_page,
+            projects_page
         ],
 
         "PSM MODULES": [
-            pt_page,
-            pha_page,
-            moc_page,
-            pssr_page,
-            training_page,
-            psi_page
-        ],
-
+    pt_page,
+    pha_page,
+    moc_page,
+    pssr_page,
+    training_page,
+    op_page,
+    psi_page,
+    audit_page,
+    incident_library_page,
+    alarm_interlock_management_page,
+    psm_ce_barrier_health_page,
+    jsw_safety_standards_page
+],
         "REPORTING": [
             reports_page
         ]

@@ -1,5 +1,7 @@
 import io
 import re
+import base64
+from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
@@ -60,8 +62,9 @@ st.markdown(
 
 
 
-   .block-container {
+.block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-35px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -130,24 +133,10 @@ div[data-testid="stMetricLabel"] p {
     }
 
     .module-title {
-        color:#073f78 !important;
-        font-size:12px !important;
-        font-weight:900 !important;
+        color:#073f78;
+        font-size:12px;
+        font-weight:900;
         margin-bottom:6px;
-    }
-
-    [data-testid="stPageLink"] {
-        margin-bottom:6px !important;
-    }
-
-    [data-testid="stPageLink"] a,
-    [data-testid="stPageLink"] a *,
-    [data-testid="stPageLink"] p,
-    [data-testid="stPageLink"] span {
-        color:#073f78 !important;
-        font-size:12px !important;
-        font-weight:900 !important;
-        text-decoration:none !important;
     }
 
     .section-bar {
@@ -191,13 +180,40 @@ div[data-testid="stMetricLabel"] p {
     }
 
 
-    /* ========================================================
-       REDUCE SPACE BETWEEN HEADER AND REFRESH BUTTON
-       ======================================================== */
+/* ========================================================
+   REFRESH BUTTON — KEEP BELOW HEADER
+   ======================================================== */
 
-    div[data-testid="stButton"] {
-        margin-top:-35px !important;
-        margin-bottom:0px !important;
+div[data-testid="stButton"] {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+}
+
+
+
+    /* ========================================================
+       MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
+       ======================================================== */
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
+
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
+
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover * {
+        color:#073f78 !important;
+        text-decoration:none !important;
     }
 
     </style>
@@ -205,316 +221,789 @@ div[data-testid="stMetricLabel"] p {
     unsafe_allow_html=True,
 )
 
-# LIME PLANT HEADER
-# DO NOT CHANGE THIS HEADER
+#=============================================================
+#HEADER CODE
+#=============================================================
+import streamlit as st
+import streamlit.components.v1 as components
+import base64
+from pathlib import Path
+from datetime import datetime
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
+st.set_page_config(
+    page_title="PSM Digital Dashboard",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+
+# ============================================================
+# REMOVE STREAMLIT TOP SPACE
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+
+    [data-testid="stDecoration"] {
+        display: none !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .block-container {
+    padding-top: 0 !important;
+    margin-top: -30px !important;
+    padding-bottom: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
+
+    .stApp {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    iframe {
+        display: block !important;
+        margin-top: -20px !important;
+        padding-top: 0 !important;
+        border: 0 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
+)
+
+
+# ============================================================
+# HEADER HTML
 # ============================================================
 
 header_html = """
+
 <!DOCTYPE html>
+
 <html>
+
 <head>
+
 <meta charset="UTF-8">
 
 <style>
 
-* {
-    box-sizing: border-box;
-}
 
-html, body {
-    margin: 0;
-    padding: 0;
+/* ============================================================
+   MAIN HEADER
+   ============================================================ */
+
+.psm-header {
+
+    position: relative;
+
     width: 100%;
-    height: 100%;
+
+    height: 90px;
+
     overflow: hidden;
-    font-family: Arial, Helvetica, sans-serif;
-}
-
-body {
-    background: #f4f9fc;
-}
-
-.header {
-    position: relative;
-    width: 100%;
-    height: 145px;
-    overflow: hidden;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        radial-gradient(
-            ellipse at center,
-            rgba(55,160,218,.24) 0%,
-            rgba(223,242,252,.82) 45%,
-            rgba(244,250,253,.98) 100%
-        ),
-        linear-gradient(
-            180deg,
-            #edf8fd 0%,
-            #dceff8 100%
-        );
-
-    border-top: 2px solid #0b91d1;
-    border-bottom: 3px solid #1487c2;
-
-    box-shadow:
-        0 4px 12px rgba(21,92,130,.18);
-}
-
-.header::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-
-    background-image:
-        radial-gradient(
-            circle,
-            rgba(0,122,190,.17) 1.2px,
-            transparent 1.5px
-        );
-
-    background-size: 15px 15px;
-    opacity: .65;
-}
-
-.header::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-
-    background:
-        linear-gradient(
-            135deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        ),
-        linear-gradient(
-            315deg,
-            transparent 0 7%,
-            rgba(0,133,210,.12) 7% 8%,
-            transparent 8% 11%,
-            rgba(0,133,210,.08) 11% 12%,
-            transparent 12%
-        );
-}
-
-.content {
-    position: relative;
-    z-index: 8;
-
-    width: 100%;
-    height: 100%;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    text-align: center;
-}
-
-.title {
-    color: #153e68;
-    font-size: 24px;
-    font-weight: 950;
-    letter-spacing: 5px;
-    line-height: 1;
-    margin-bottom: 5px;
-
-    text-shadow:
-        0 1px 1px rgba(255,255,255,.9);
-}
-
-.pillar {
-    position: relative;
-
-    width: 560px;
-    height: 66px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #176ca5 0%,
-            #07518b 55%,
-            #063e70 100%
-        );
-
-    border: 1px solid #0877ba;
-    border-radius: 14px;
-
-    color: #ffd21a;
-
-    font-size: 42px;
-    font-weight: 950;
-    letter-spacing: 1px;
-
-    box-shadow:
-        0 7px 16px rgba(11,83,130,.25),
-        inset 0 1px 0 rgba(255,255,255,.28),
-        inset 0 -5px 12px rgba(0,35,75,.16);
-}
-
-.pillar::before,
-.pillar::after {
-    position: absolute;
-
-    top: 50%;
-    transform: translateY(-50%);
-
-    color: #51c5ff;
-    font-size: 21px;
-    font-weight: 950;
-    letter-spacing: -5px;
-
-    text-shadow:
-        0 1px 5px rgba(0,100,160,.5);
-}
-
-.pillar::before {
-    content: "◀◀";
-    left: 17px;
-}
-
-.pillar::after {
-    content: "▶▶";
-    right: 17px;
-}
-
-.subtitle {
-    margin-top: 7px;
-
-    height: 25px;
-    min-width: 700px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    padding: 4px 30px;
 
     background:
         linear-gradient(
             90deg,
-            #075b8e,
-            #1188c4,
-            #075b8e
+            #031d34 0%,
+            #052b49 42%,
+            #07385c 74%,
+            #052b49 100%
         );
 
-    border: 1px solid #078fd2;
     border-radius: 7px;
+
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.18);
+
+}
+
+
+/* ============================================================
+   LEFT LOGO AREA
+   ============================================================ */
+
+.psm-left {
+
+    position: absolute;
+
+    left: 0;
+
+    top: 0;
+
+    width: 100%;
+
+    height: 95px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding-left: 4px;
+
+    box-sizing: border-box;
+
+    z-index: 20;
+
+    pointer-events: none;
+
+}
+
+
+/* ============================================================
+   LOGO PANEL
+   ONLY VERTICAL POSITION CHANGED
+   ============================================================ */
+
+.logo-panel {
+
+    width: 195px;
+
+    height: 68px;
+
+    background: #ffffff;
+
+    border-radius: 5px;
+
+    padding: 10px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    box-sizing: border-box;
+
+    box-shadow:
+        0 3px 9px
+        rgba(0,0,0,0.20);
+
+    position: relative;
+
+    top: -5px;
+
+    left: 5px;
+
+}
+
+
+/* ============================================================
+   COMPANY LOGO
+   ============================================================ */
+
+.company-logo {
+
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: contain;
+
+    object-position: center;
+
+    display: block;
+
+}
+
+
+/* ============================================================
+   LEFT VERTICAL DIVIDER
+   ============================================================ */
+
+.vertical-line {
+
+    width: 2px;
+
+    height: 83px;
+
+    background:
+        rgba(255,255,255,0.65);
+
+    margin-left: 18px;
+
+    margin-right: 20px;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ============================================================
+   CENTER TITLE AREA
+   ============================================================ */
+
+.title-area {
+
+    position: absolute;
+
+    left: 50%;
+
+    top: 0;
+
+    height: 95px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: center;
+
+    text-align: center;
+
+    min-width: max-content;
+
+    box-sizing: border-box;
+
+    transform: translateX(-50%);
+
+}
+
+
+/* ============================================================
+   MAIN TITLE
+   ============================================================ */
+
+.main-title {
 
     color: #ffffff;
 
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 1.8px;
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
 
-    box-shadow:
-        0 4px 9px rgba(10,93,140,.20),
-        inset 0 1px 0 rgba(255,255,255,.25);
+    font-size: 27px;
+
+    font-weight: 900;
+
+    line-height: 1;
+
+    letter-spacing: 0.3px;
+
+    white-space: nowrap;
+
+    margin: 0;
+
+    padding: 0;
+
 }
 
-.top-line {
+
+/* ============================================================
+   ORANGE TITLE PART
+   ============================================================ */
+
+.main-title-orange {
+
+    color: #f28c00;
+
+}
+
+
+/* ============================================================
+   SUBTITLE
+   ============================================================ */
+
+.subtitle {
+
+    color: #ffffff;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 12px;
+
+    font-weight: 400;
+
+    letter-spacing: 3.6px;
+
+    margin-top: 8px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+}
+
+
+/* ============================================================
+   SUB-SUBTITLE / TAGLINE
+   ============================================================ */
+
+.tagline {
+
+    color:
+        rgba(255,255,255,0.82);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 7px;
+
+    font-weight: 500;
+
+    letter-spacing: 2.2px;
+
+    margin-top: 6px;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+}
+
+
+/* ============================================================
+   RIGHT DATE / TIME AREA
+   ============================================================ */
+
+.psm-right {
+
     position: absolute;
+
+    right: 16px;
 
     top: 0;
-    left: 24%;
 
-    width: 52%;
-    height: 3px;
+    width: 15%;
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #00a9ff 18%,
-            #ffffff 50%,
-            #00a9ff 82%,
-            transparent
-        );
+    height: 95px;
 
-    box-shadow:
-        0 0 8px rgba(0,169,255,.55);
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: flex-end;
+
+    text-align: right;
+
+    color: #ffffff;
+
+    z-index: 30;
+
+    padding-left: 18px;
+
+    box-sizing: border-box;
+
 }
 
-.corner-light {
+
+/* ============================================================
+   RIGHT VERTICAL DIVIDER
+   ============================================================ */
+
+.psm-right::before {
+
+    content: "";
+
     position: absolute;
-    z-index: 10;
 
-    width: 110px;
-    height: 3px;
+    left: 0;
+
+    top: 6px;
+
+    width: 2px;
+
+    height: 83px;
 
     background:
-        linear-gradient(
-            90deg,
-            transparent,
-            #00baff,
-            transparent
-        );
+        rgba(255,255,255,0.65);
 
-    box-shadow:
-        0 0 8px rgba(0,186,255,.55);
 }
 
-.corner-left {
-    left: 7%;
-    top: 7px;
+
+/* ============================================================
+   DATE
+   ============================================================ */
+
+.date {
+
+    color:
+        rgba(255,255,255,0.95);
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    font-size: 11px;
+
+    font-weight: 400;
+
+    letter-spacing: 0.7px;
+
+    line-height: 1;
+
+    margin: 0;
+
+    padding: 0;
+
 }
 
-.corner-right {
-    right: 7%;
-    top: 7px;
+
+/* ============================================================
+   TIME
+   ============================================================ */
+
+.time {
+
+    color: #ffffff;
+
+    font-family:
+        "Arial Narrow",
+        "Roboto Condensed",
+        Arial,
+        sans-serif;
+
+    font-size: 22px;
+
+    font-weight: 800;
+
+    margin-top: 4px;
+
+    line-height: 1;
+
+    padding: 0;
+
 }
+
+
+/* ============================================================
+   RIGHT HORIZONTAL LINE
+   ============================================================ */
+
+.right-line {
+
+    width: 80px;
+
+    height: 2px;
+
+    background:
+        rgba(255,255,255,0.75);
+
+    margin-top: 7px;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ============================================================
+   ORANGE BOTTOM BAR
+   ============================================================ */
+
+.orange-bar {
+
+    position: absolute;
+
+    left: 0;
+
+    bottom: 0;
+
+    width: 100%;
+
+    height: 9px;
+
+    background: #f28c00;
+
+    z-index: 50;
+
+}
+
 
 </style>
+
 </head>
+
 
 <body>
 
-<div class="header">
 
-    <div class="top-line"></div>
+<!-- ============================================================
+     MAIN HEADER
+     ============================================================ -->
 
-    <div class="corner-light corner-left"></div>
-    <div class="corner-light corner-right"></div>
+<div class="psm-header">
 
-    <div class="content">
 
-        <div class="title">
-            PSM DASHBOARD
+    <!-- ========================================================
+         LEFT LOGO AREA
+         ======================================================== -->
+
+    <div class="psm-left">
+
+
+        <!-- ====================================================
+             LOGO
+             ==================================================== -->
+
+        <div class="logo-panel">
+
+            <img
+                class="company-logo"
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64"
+                alt="JSW JFE Steel Limited"
+            >
+
         </div>
 
-        <div class="pillar">
-           LIME PLANT
+
+        <!-- ====================================================
+             LEFT VERTICAL LINE
+             ==================================================== -->
+
+        <div class="vertical-line"></div>
+
+
+        <!-- ====================================================
+             CENTER TITLE GROUP
+             ==================================================== -->
+
+        <div class="title-area">
+
+
+            <!-- MAIN TITLE -->
+
+            <div class="main-title">
+
+                LIME CALCINATION PLANT
+
+                <span class="main-title-orange"></span>
+
+            </div>
+
+
+            <!-- SUBTITLE -->
+
+            <div class="subtitle">
+
+                PSM DIGITAL DASHBOARD
+
+            </div>
+
+
+            <!-- SUB-SUBTITLE -->
+
+            <div class="tagline">
+
+                PEOPLE
+                &nbsp; | &nbsp;
+                PROCESS
+                &nbsp; | &nbsp;
+                RISK
+                &nbsp; | &nbsp;
+                COMPLIANCE
+
+            </div>
+
+
         </div>
 
-        <div class="subtitle">
-            PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL
-        </div>
 
     </div>
 
+
+    <!-- ========================================================
+         RIGHT DATE / TIME
+         ======================================================== -->
+
+    <div class="psm-right">
+
+
+        <div class="date">
+
+            CURRENT_DATE_VALUE
+
+        </div>
+
+
+        <div class="time">
+
+            CURRENT_TIME_VALUE
+
+        </div>
+
+
+        <div class="right-line"></div>
+
+
+    </div>
+
+
+    <!-- ========================================================
+         ORANGE BOTTOM BAR
+         ======================================================== -->
+
+    <div class="orange-bar"></div>
+
+
 </div>
 
+
 </body>
+
 </html>
+
 """
 
-st.components.v1.html(
+
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
+header_html = header_html.replace(
+    "LOGO_IMAGE_BASE64",
+    logo_base64
+)
+
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
+)
+
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
+
+components.html(
     header_html,
-    height=170,
+    height=114,
     scrolling=False
+)
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
+        margin-bottom: -65px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 # ============================================================
 # HELPERS
@@ -942,10 +1431,6 @@ def get_date_column(df):
 # ============================================================
 # LOAD DATA
 # ============================================================
-if st.button("↻ Refresh Data", key="refresh_data"):
-    st.cache_data.clear()
-    st.rerun()
-
 loaded = {}
 
 for module_name in SHEETS:
@@ -1464,7 +1949,6 @@ a, b, c = st.columns(
 # ============================================================
 
 with a:
-
     with st.container(border=True):
 
         show_module_title(
@@ -1473,21 +1957,90 @@ with a:
             "PRE-STARTUP SAFETY REVIEW (PSSR)"
         )
 
-        x = status_counts(pssr)
+        # --------------------------------------------------------
+        # FIND PSSR STATUS COLUMN
+        # --------------------------------------------------------
+        pssr_status_col = find_col(
+            pssr,
+            [
+                "Overdue/Pending/Completed",
+                "Overdue / Pending / Completed",
+                "Overdue Pending Completed",
+                "Status",
+                "Current Status"
+            ]
+        )
 
+        # --------------------------------------------------------
+        # CALCULATE PSSR STATUS COUNTS
+        # --------------------------------------------------------
+        if pssr is None or pssr.empty:
+
+            total_pssr = 0
+            completed_pssr = 0
+            pending_pssr = 0
+            overdue_pssr = 0
+
+        else:
+
+            total_pssr = len(pssr)
+
+            if pssr_status_col is not None:
+
+                pssr_status = (
+                    pssr[pssr_status_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.casefold()
+                )
+
+                completed_pssr = int(
+                    pssr_status.str.contains(
+                        "completed",
+                        na=False
+                    ).sum()
+                )
+
+                pending_pssr = int(
+                    pssr_status.str.contains(
+                        "pending",
+                        na=False
+                    ).sum()
+                )
+
+                overdue_pssr = int(
+                    pssr_status.str.contains(
+                        "overdue",
+                        na=False
+                    ).sum()
+                )
+
+            else:
+
+                completed_pssr = 0
+                pending_pssr = 0
+                overdue_pssr = 0
+
+        # --------------------------------------------------------
+        # KPI CARDS
+        # --------------------------------------------------------
         show_metric_row([
-            ("TOTAL PSSR", x["total"]),
-            ("COMPLETED", x["completed"]),
-            ("PENDING", x["pending"]),
-            ("OVERDUE", x["overdue"]),
+            ("TOTAL PSSR", total_pssr),
+            ("COMPLETED", completed_pssr),
+            ("PENDING", pending_pssr),
+            ("OVERDUE", overdue_pssr),
         ])
 
+        # --------------------------------------------------------
+        # PSSR REGISTER
+        # --------------------------------------------------------
         show_register(
             "PSSR REGISTER",
             pssr,
             [
-                "PSSR No",
                 "PSSR No.",
+                "PSSR No",
                 "PSSR ID",
                 "ID"
             ],
@@ -1497,12 +2050,12 @@ with a:
                 "PSSR Name"
             ],
             [
+                "Overdue/Pending/Completed",
+                "Overdue / Pending / Completed",
                 "Status",
                 "Current Status"
             ],
         )
-
-
 # ============================================================
 # 6 — PROCESS SAFETY INCIDENT
 # ============================================================
@@ -2641,19 +3194,23 @@ with a:
                 # ------------------------------------------------
 
                 fy_months = [
-                    "April-26",
+                    "Apr-26",
                     "May-26",
-                    "June-26",
-                    "July-26",
-                    "August-26",
-                    "September-26",
-                    "October-26",
-                    "November-26",
-                    "December-26",
-                    "January-27",
-                    "February-27",
-                    "March-27",
+                    "Jun-26",
+                    "Jul-26",
+                    "Aug-26",
+                    "Sep-26",
+                    "Oct-26",
+                    "Nov-26",
+                    "Dec-26",
+                    "Jan-27",
+                    "Feb-27",
+                    "Mar-27",
                 ]
+
+                # ------------------------------------------------
+                # MONTH-WISE SOC
+                # ------------------------------------------------
 
                 soc_monthly = (
                     df_socsol
@@ -2664,6 +3221,10 @@ with a:
                     .sum()
                 )
 
+                # ------------------------------------------------
+                # MONTH-WISE SOL
+                # ------------------------------------------------
+
                 sol_monthly = (
                     df_socsol
                     .groupby(
@@ -2673,11 +3234,13 @@ with a:
                     .sum()
                 )
 
-                monthly = pd.DataFrame(
-                    {
-                        "_MONTH": fy_months
-                    }
-                )
+                # ------------------------------------------------
+                # CREATE MONTHLY TABLE
+                # ------------------------------------------------
+
+                monthly = pd.DataFrame({
+                    "_MONTH": fy_months
+                })
 
                 monthly = monthly.merge(
                     soc_monthly,
@@ -2692,12 +3255,18 @@ with a:
                 )
 
                 monthly["_SOC_VALUE"] = (
-                    monthly["_SOC_VALUE"]
+                    pd.to_numeric(
+                        monthly["_SOC_VALUE"],
+                        errors="coerce"
+                    )
                     .fillna(0)
                 )
 
                 monthly["_SOL_VALUE"] = (
-                    monthly["_SOL_VALUE"]
+                    pd.to_numeric(
+                        monthly["_SOL_VALUE"],
+                        errors="coerce"
+                    )
                     .fillna(0)
                 )
 
@@ -2714,17 +3283,24 @@ with a:
                         y=monthly["_SOC_VALUE"],
                         mode="lines+markers+text",
                         name="SOC Deviation",
-                        text=(
-                            monthly["_SOC_VALUE"]
-                            .astype(int)
-                        ),
+
+                        # Show only non-zero values
+                        text=[
+                            str(int(v)) if v > 0 else ""
+                            for v in monthly["_SOC_VALUE"]
+                        ],
+
                         textposition="top center",
+                        textfont=dict(size=11),
+
                         line=dict(
                             width=3
                         ),
+
                         marker=dict(
                             size=7
                         ),
+
                         hovertemplate=(
                             "<b>SOC</b><br>"
                             "Month: %{x}<br>"
@@ -2741,18 +3317,25 @@ with a:
                         y=monthly["_SOL_VALUE"],
                         mode="lines+markers+text",
                         name="SOL Deviation",
-                        text=(
-                            monthly["_SOL_VALUE"]
-                            .astype(int)
-                        ),
-                        textposition="bottom center",
+
+                        # Show only non-zero values
+                        text=[
+                            str(int(v)) if v > 0 else ""
+                            for v in monthly["_SOL_VALUE"]
+                        ],
+
+                        textposition="top center",
+                        textfont=dict(size=11),
+
                         line=dict(
                             width=3,
                             dash="solid"
                         ),
+
                         marker=dict(
                             size=7
                         ),
+
                         hovertemplate=(
                             "<b>SOL</b><br>"
                             "Month: %{x}<br>"
@@ -2796,6 +3379,17 @@ with a:
                     yaxis=dict(
                         title="No. of Deviations",
                         rangemode="tozero",
+
+                        # Extra space above highest value
+                        range=[
+                            0,
+                            max(
+                                monthly["_SOC_VALUE"].max(),
+                                monthly["_SOL_VALUE"].max(),
+                                1
+                            ) + 1
+                        ],
+
                         showgrid=True,
                         dtick=1
                     ),
@@ -2803,7 +3397,7 @@ with a:
                     legend=dict(
                         orientation="v",
                         x=0.78,
-                        y=1.28,
+                        y=1.02,
                         xanchor="left",
                         yanchor="top",
                         font=dict(size=9),
@@ -2824,7 +3418,6 @@ with a:
                     },
                     key="bf_soc_sol_deviation_chart"
                 )
-
 
 # ============================================================
 # 9 — AUDIT / COMPLIANCE
