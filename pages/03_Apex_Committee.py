@@ -1,894 +1,2545 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-from pathlib import Path
-from datetime import datetime
+
+import io
 import re
-import math
+import base64
+from pathlib import Path
+from html.parser import HTMLParser
+from datetime import datetime
+
+import pandas as pd
+import requests
+from openpyxl import load_workbook
+import streamlit as st
+import streamlit.components.v1 as components
+import plotly.graph_objects as go
 
 # ============================================================
-# PAGE SETUP
+# PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Screen 02 - Apex Committee",
-    page_icon="🛡️",
+    page_title="PSM Dashboard - All Departments",
+    page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ============================================================
-# CONSTANTS
+# GOOGLE SHEET
 # ============================================================
-BASE_DIR = Path(__file__).resolve().parent.parent
-DEPT_DIR = BASE_DIR / "data" / "departments"
+SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
 
-DEPARTMENTS = [
-    "Blast Furnace",
-    "Coke Oven-1",
-    "Coke Oven-2",
-    "CRM",
-    "WRM",
-    "CPP",
-    "CU",
-    "DRI",
-    "LCP",
-    "Pellet and Beneficiation",
-    "Sinter",
-    "SMS-1",
-    "SMS-2",
-    "Tube Mill",
-    "CSP",
-]
-
-PILLARS = [
-    "Process Safety Information",
-    "Process Hazard Analysis (PHA)",
-    "Operating Procedures",
-    "Mechanical Integrity",
-    "Training & Competence",
-    "Management of Change (MOC)",
-    "Pre-Startup Safety Review (PSSR)",
-    "Contractor Safety Management",
-    "Emergency Planning & Response",
-    "Incident Investigation",
-    "Compliance & Audit",
-    "Employee Participation",
-    "Trade Secrets / Critical Info",
-    "Management Review",
-]
-
-# Exact row/column structure already used by the Individual Department page.
-# Excel rows are represented here as zero-based pandas row indexes.
-# Row 5 = monthly top section; Row 10 = monthly bottom section.
-MONTH_TOP_ROW = 5
-MONTH_BOTTOM_ROW = 10
+# IMPORTANT:
+# These are the GIDs used for the All Departments dashboard.
+# PT and the other modules are NOT read by row count from the
+# whole workbook. Each module is loaded from its own tab/GID.
+SHEETS = {
+    "PT": "1997330551",
+    "PHA": "1151637695",
+    "PHA Recommendation": "1114420199",
+    "MOC": "1493447251",
+    "PSSR": "1914804736",
+    "PS Incident": "354502422",  # corrected: Incident
+    "Training": "1071736559",  # corrected: Training
+    "SOC-SOL": "510439154",
+    "Interlock ": 1552637895,
+    "PSM CE ": 1552637895,
+    "Failure Data": 1071263265,
+    "Barrier Audit": "1741048982",
+    "Audit Compliance": "1790395364",
+}
 
 # ============================================================
-# CSS
+# STYLE
 # ============================================================
 st.markdown(
     """
     <style>
+
     .stApp {
-        background: #eef5fb;
+        background:#f3f8fc;
     }
 
-    .main-header {
-        background: linear-gradient(110deg, #062d50, #075f84);
-        border: 2px solid #00a8df;
-        border-radius: 14px;
-        padding: 14px 18px 12px 18px;
-        text-align: center;
-        color: white;
-        box-shadow: 0 5px 18px rgba(0,45,80,.25);
-        margin-bottom: 10px;
+    #MainMenu, footer {
+        visibility:hidden;
     }
 
-    .main-title {
-        font-size: 18px;
-        font-weight: 800;
-        letter-spacing: .5px;
+
+
+.block-container {
+    padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-35px !important;
+    margin-bottom:0px !important;
+    max-width:100%;
+}
+
+/* REMOVE BOTTOM SPACE */
+[data-testid="stAppViewContainer"] {
+    padding-bottom:0px !important;
+}
+
+[data-testid="stMainBlockContainer"] {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
+}
+
+section.main {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
+}
+
+   div[data-testid="stMetric"] {
+    background:#ffffff;
+    border:1px solid #cbddea;
+    border-radius:7px;
+    padding:6px 6px !important;
+    min-height:72px;
+    overflow:visible !important;
+}
+
+    div[data-testid="stMetricLabel"] {
+    font-size:9px !important;
+    font-weight:800 !important;
+    color:#20384f !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    line-height:1.1 !important;
+}
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] > div,
+div[data-testid="stMetricLabel"] p {
+    overflow:visible !important;
+    text-overflow:clip !important;
+    white-space:nowrap !important;
+    max-width:none !important;
+}
+
+div[data-testid="stMetricLabel"] p {
+    margin:0 !important;
+    padding:0 !important;
+    font-size:8px !important;
+    line-height:1.1 !important;
+}
+    div[data-testid="stMetricValue"] {
+        color:#123f77 !important;
+        font-size:24px !important;
+        font-weight:900 !important;
     }
 
-    .screen-title {
-        font-size: 29px;
-        font-weight: 900;
-        color: #ffd000;
-        margin-top: 3px;
+    .module-card {
+        background:#ffffff;
+        border:1px solid #d3e0ea;
+        border-radius:7px;
+        padding:7px;
+        margin-bottom:8px;
+        box-shadow:0 1px 4px rgba(20,65,95,.06);
     }
 
-    .main-subtitle {
-        font-size: 14px;
-        font-weight: 600;
-        margin-top: 2px;
+    .module-title {
+        color:#073f78;
+        font-size:12px;
+        font-weight:900;
+        margin-bottom:6px;
     }
 
-    .online {
-        display: inline-block;
-        background: #063a20;
-        color: #54f18a;
-        border: 1px solid #24bb61;
-        border-radius: 20px;
-        padding: 4px 18px;
-        margin-top: 7px;
-        font-weight: 800;
-        font-size: 12px;
+    .section-bar {
+        background:#07518b;
+        color:#ffffff;
+        border-radius:4px;
+        padding:6px 8px;
+        font-size:10px;
+        font-weight:900;
+        margin:4px 0 6px 0;
     }
 
-    .panel {
-        background: white;
-        border: 1px solid #7fa7c4;
-        border-radius: 10px;
-        padding: 8px;
-        box-shadow: 0 2px 8px rgba(0,40,80,.12);
+    .live-bar {
+        background:#ffffff;
+        border:1px solid #cbddea;
+        border-radius:4px;
+        padding:5px 8px;
+        color:#4f6678;
+        font-size:10px;
+        margin-bottom:6px;
     }
 
-    .panel-title {
-        text-align: center;
-        color: #092d50;
-        font-weight: 900;
-        font-size: 13px;
-        border-bottom: 1px solid #9bb6ca;
-        padding: 4px 2px 8px;
-        margin-bottom: 7px;
+    .footer {
+        text-align:center;
+        color:#627689;
+        background:#edf4f8;
+        border-top:1px solid #cbdce7;
+        padding:7px;
+        font-size:10px;
+        font-weight:800;
+        margin-top:8px;
     }
 
-    .section-title {
-        color: #07345b;
-        font-size: 18px;
-        font-weight: 900;
-        margin: 9px 0 5px;
-        padding: 6px 10px;
-        border-left: 5px solid #00a8df;
-        background: white;
-        border-radius: 5px;
+    .small-note {
+        font-size:9px;
+        color:#6c7f8f;
     }
 
-    .data-note {
-        background: #eaf6ff;
-        border: 1px solid #73b9e5;
-        color: #17486c;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin: 5px 0 10px;
-        font-weight: 600;
+    .stDataFrame {
+        border:1px solid #d5e0e8;
     }
 
-    .pending-note {
-        background: #fff8df;
-        border: 1px solid #e6c35a;
-        color: #705700;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin: 5px 0 10px;
-        font-weight: 600;
+    /* ============================================================
+       AUDIT REGISTER - COMPACT LOOK
+       ============================================================ */
+    .audit-register-wrap {
+        width:100%;
+        max-height:180px;
+        overflow-y:auto;
+        overflow-x:hidden;
+        border:1px solid #d5e0e8;
+        border-radius:4px;
+        background:#ffffff;
     }
 
-    div[data-testid="stMetric"] {
-        background: white;
-        border: 1px solid #9db8cc;
-        border-radius: 8px;
-        padding: 8px 12px;
-        box-shadow: 0 2px 6px rgba(0,40,80,.08);
+    .audit-register-table {
+        width:100%;
+        border-collapse:collapse;
+        table-layout:fixed;
+        font-size:10px;
+        color:#173f70;
     }
 
-    .real-badge {
-        color: #087a2b;
-        font-weight: 800;
+    .audit-register-table th {
+        position:sticky;
+        top:0;
+        z-index:2;
+        background:#f3f7fa;
+        color:#627689;
+        font-weight:800;
+        text-align:left;
+        padding:7px 8px;
+        border-bottom:1px solid #d5e0e8;
     }
 
-    .pending-badge {
-        color: #a56a00;
-        font-weight: 800;
+    .audit-register-table td {
+        padding:7px 8px;
+        border-bottom:1px solid #e1e8ee;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
     }
-    </style>
+
+    .audit-register-table th:nth-child(1), .audit-register-table td:nth-child(1) { width:8%; }
+    .audit-register-table th:nth-child(2), .audit-register-table td:nth-child(2) { width:24%; }
+    .audit-register-table th:nth-child(3), .audit-register-table td:nth-child(3) { width:18%; }
+    .audit-register-table th:nth-child(4), .audit-register-table td:nth-child(4) { width:17%; }
+    .audit-register-table th:nth-child(5), .audit-register-table td:nth-child(5) { width:33%; }
+
+    .audit-register-table a {
+        color:#0067c5 !important;
+        font-weight:700;
+        text-decoration:none;
+    }
+
+    .audit-register-table a:hover {
+        text-decoration:underline;
+    }
+
+
+    /* ========================================================
+       REDUCE SPACE BETWEEN HEADER AND REFRESH BUTTON
+       ======================================================== */
+
+    div[data-testid="stButton"] {
+        margin-top:-35px !important;
+        margin-bottom:0px !important;
+    }
+
+
+/* ============================================================
+   MATCH CLICKABLE MODULE HEADINGS WITH NORMAL MODULE HEADING
+   ============================================================ */
+[data-testid="stPageLink"] {
+    margin-bottom:6px !important;
+}
+
+[data-testid="stPageLink"],
+[data-testid="stPageLink"] a,
+[data-testid="stPageLink"] a *,
+[data-testid="stPageLink"] p,
+[data-testid="stPageLink"] span,
+[data-testid="stPageLink"] div {
+    color:#073f78 !important;
+    font-size:12px !important;
+    font-weight:900 !important;
+    text-decoration:none !important;
+}
+
+[data-testid="stPageLink"] a:hover,
+[data-testid="stPageLink"] a:hover * {
+    color:#073f78 !important;
+    text-decoration:none !important;
+}
+
+</style>
     """,
     unsafe_allow_html=True,
 )
 
+# BASE DIRECTORY
 # ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+    # ============================================================
+
+
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
+)
+
+# ============================================================
+# HEADER HTML
+# ============================================================
+
+header_html = """ 
+
+<!DOCTYPE html> 
+
+<html> 
+
+<head> 
+
+<meta charset="UTF-8"> 
+
+<style> 
+
+
+/* ============================================================ 
+   MAIN HEADER 
+   ============================================================ */ 
+
+.psm-header { 
+
+    position: relative; 
+
+    width: 100%; 
+
+    height: 90px; 
+
+    overflow: hidden; 
+
+    background: 
+        linear-gradient( 
+            90deg, 
+            #031d34 0%, 
+            #052b49 42%, 
+            #07385c 74%, 
+            #052b49 100% 
+        ); 
+
+    border-radius: 7px; 
+
+    box-shadow: 
+        0 3px 9px 
+        rgba(0,0,0,0.18); 
+
+} 
+
+
+/* ============================================================ 
+   LEFT LOGO AREA 
+   ============================================================ */ 
+
+.psm-left { 
+
+    position: absolute; 
+
+    left: 0; 
+
+    top: 0; 
+
+    width: 100%; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    align-items: center; 
+
+    padding-left: 4px; 
+
+    box-sizing: border-box; 
+
+    z-index: 20; 
+
+    pointer-events: none; 
+
+} 
+
+
+/* ============================================================ 
+   LOGO PANEL 
+   ONLY VERTICAL POSITION CHANGED 
+   ============================================================ */ 
+
+.logo-panel { 
+
+    width: 195px; 
+
+    height: 68px; 
+
+    background: #ffffff; 
+
+    border-radius: 5px; 
+
+    padding: 4px; 
+
+    display: flex; 
+
+    align-items: center; 
+
+    justify-content: center; 
+
+    flex-shrink: 0; 
+
+    box-sizing: border-box; 
+
+    box-shadow: 
+        0 3px 9px 
+        rgba(0,0,0,0.20); 
+
+    position: relative; 
+
+    top: -6px; 
+
+    left: 6px; 
+
+} 
+
+
+/* ============================================================ 
+   COMPANY LOGO 
+   ============================================================ */ 
+
+.company-logo { 
+
+    width: 100%; 
+
+    height: 100%; 
+
+    object-fit: contain; 
+
+    object-position: center; 
+
+    display: block; 
+
+} 
+
+
+/* ============================================================ 
+   LEFT VERTICAL DIVIDER 
+   ============================================================ */ 
+
+.vertical-line { 
+
+    width: 2px; 
+
+    height: 83px; 
+
+    background: 
+        rgba(255,255,255,0.65); 
+
+    margin-left: 18px; 
+
+    margin-right: 20px; 
+
+    flex-shrink: 0; 
+
+} 
+
+
+/* ============================================================ 
+   CENTER TITLE AREA 
+   ============================================================ */ 
+
+.title-area { 
+
+    position: absolute; 
+
+    left: 50%; 
+
+    top: 0; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    flex-direction: column; 
+
+    justify-content: center; 
+
+    align-items: center; 
+
+    text-align: center; 
+
+    min-width: max-content; 
+
+    box-sizing: border-box; 
+
+    transform: translateX(-50%); 
+
+} 
+
+
+/* ============================================================ 
+   MAIN TITLE 
+   ============================================================ */ 
+
+.main-title { 
+
+    color: #ffffff; 
+
+    font-family: 
+        "Arial Narrow", 
+        "Roboto Condensed", 
+        Arial, 
+        sans-serif; 
+
+    font-size: 27px; 
+
+    font-weight: 900; 
+
+    line-height: 1; 
+
+    letter-spacing: 0.3px; 
+
+    white-space: nowrap; 
+
+    margin: 0; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   ORANGE TITLE PART 
+   ============================================================ */ 
+
+.main-title-orange { 
+
+    color: #f28c00; 
+
+} 
+
+
+/* ============================================================ 
+   SUBTITLE 
+   ============================================================ */ 
+
+.subtitle { 
+
+    color: #ffffff; 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 12px; 
+
+    font-weight: 400; 
+
+    letter-spacing: 3.6px; 
+
+    margin-top: 8px; 
+
+    line-height: 1; 
+
+    white-space: nowrap; 
+
+} 
+
+/* ============================================================ 
+   SUB-SUBTITLE / TAGLINE 
+   ============================================================ */ 
+
+.tagline { 
+
+    color: 
+        rgba(255,255,255,0.82); 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 7px; 
+
+    font-weight: 500; 
+
+    letter-spacing: 2.2px; 
+
+    margin-top: 6px; 
+
+    line-height: 1; 
+
+    white-space: nowrap; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT DATE / TIME AREA 
+   ============================================================ */ 
+
+.psm-right { 
+
+    position: absolute; 
+
+    right: 16px; 
+
+    top: 0; 
+
+    width: 15%; 
+
+    height: 95px; 
+
+    display: flex; 
+
+    flex-direction: column; 
+
+    justify-content: center; 
+
+    align-items: flex-end; 
+
+    text-align: right; 
+
+    color: #ffffff; 
+
+    z-index: 30; 
+
+    padding-left: 18px; 
+
+    box-sizing: border-box; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT VERTICAL DIVIDER 
+   ============================================================ */ 
+
+.psm-right::before { 
+
+    content: ""; 
+
+    position: absolute; 
+
+    left: 0; 
+
+    top: 6px; 
+
+    width: 2px; 
+
+    height: 83px; 
+
+    background: 
+        rgba(255,255,255,0.65); 
+
+} 
+
+
+/* ============================================================ 
+   DATE 
+   ============================================================ */ 
+
+.date { 
+
+    color: 
+        rgba(255,255,255,0.95); 
+
+    font-family: 
+        Arial, 
+        sans-serif; 
+
+    font-size: 11px; 
+
+    font-weight: 400; 
+
+    letter-spacing: 0.7px; 
+
+    line-height: 1; 
+
+    margin: 0; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   TIME 
+   ============================================================ */ 
+
+.time { 
+
+    color: #ffffff; 
+
+    font-family: 
+        "Arial Narrow", 
+        "Roboto Condensed", 
+        Arial, 
+        sans-serif; 
+
+    font-size: 22px; 
+
+    font-weight: 800; 
+
+    margin-top: 4px; 
+
+    line-height: 1; 
+
+    padding: 0; 
+
+} 
+
+
+/* ============================================================ 
+   RIGHT HORIZONTAL LINE 
+   ============================================================ */ 
+
+.right-line { 
+
+    width: 80px; 
+
+    height: 2px; 
+
+    background: 
+        rgba(255,255,255,0.75); 
+
+    margin-top: 7px; 
+
+    flex-shrink: 0; 
+
+} 
+
+
+/* ============================================================ 
+   ORANGE BOTTOM BAR 
+   ============================================================ */ 
+
+.orange-bar { 
+
+    position: absolute; 
+
+    left: 0; 
+
+    bottom: 0; 
+
+    width: 100%; 
+
+    height: 4px; 
+
+    background: #f28c00; 
+
+    z-index: 50; 
+
+} 
+
+
+</style> 
+
+</head> 
+
+
+<body> 
+
+
+<!-- ============================================================ 
+     MAIN HEADER 
+     ============================================================ --> 
+
+<div class="psm-header"> 
+
+
+    <!-- ======================================================== 
+         LEFT LOGO AREA 
+         ======================================================== --> 
+
+    <div class="psm-left"> 
+
+
+        <!-- ==================================================== 
+             LOGO 
+             ==================================================== --> 
+
+        <div class="logo-panel"> 
+
+            <img 
+                class="company-logo" 
+                src="data:image/jpeg;base64,LOGO_IMAGE_BASE64" 
+                alt="JSW JFE Steel Limited" 
+            > 
+
+        </div> 
+
+
+        <!-- ==================================================== 
+             LEFT VERTICAL LINE 
+             ==================================================== --> 
+
+        <div class="vertical-line"></div> 
+
+
+        <!-- ==================================================== 
+             CENTER TITLE GROUP 
+             ==================================================== --> 
+
+        <div class="title-area"> 
+
+
+            <!-- MAIN TITLE --> 
+
+            <div class="main-title"> 
+
+                APEX COMMITTEE
+
+                <span class="main-title-orange"></span> 
+
+            </div> 
+
+
+            <!-- SUBTITLE --> 
+
+            <div class="subtitle"> 
+
+                PSM DIGITAL DASHBOARD 
+
+            </div> 
+
+
+            <!-- SUB-SUBTITLE --> 
+
+            <div class="tagline"> 
+
+                PEOPLE 
+                &nbsp; | &nbsp; 
+                PROCESS 
+                &nbsp; | &nbsp; 
+                RISK 
+                &nbsp; | &nbsp; 
+                COMPLIANCE 
+
+            </div> 
+
+
+        </div> 
+
+
+    </div> 
+
+
+    <!-- ======================================================== 
+         RIGHT DATE / TIME 
+         ======================================================== --> 
+
+    <div class="psm-right"> 
+
+
+        <div class="date"> 
+
+            CURRENT_DATE_VALUE 
+
+        </div> 
+
+
+        <div class="time"> 
+
+            CURRENT_TIME_VALUE 
+
+        </div> 
+
+
+        <div class="right-line"></div> 
+
+
+    </div> 
+
+
+    <!-- ======================================================== 
+         ORANGE BOTTOM BAR 
+         ======================================================== --> 
+
+    <div class="orange-bar"></div> 
+
+
+</div> 
+
+
+</body> 
+
+</html> 
+
+"""
+
+# ============================================================
+# INSERT LOGO
+# ============================================================
+
+header_html = header_html.replace(
+    "LOGO_IMAGE_BASE64",
+    logo_base64
+)
+
+# ============================================================
+# INSERT DATE
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_DATE_VALUE",
+    current_date
+)
+
+# ============================================================
+# INSERT TIME
+# ============================================================
+
+header_html = header_html.replace(
+    "CURRENT_TIME_VALUE",
+    current_time
+)
+
+# ============================================================
+# DISPLAY HEADER
+# ============================================================
+
+components.html(
+    header_html,
+    height=114,
+    scrolling=False
+)
+
+st.markdown(
+    "<div style='height:12px;'></div>",
+    unsafe_allow_html=True
+)
+# ============================================================
+# MOVE DEPARTMENT SECTION UP
+# ============================================================
+
+st.markdown("""
+<style>
+
+/* Move ONLY the department selector upward.
+   Do NOT move or resize the header. */
+div[data-testid="stSelectbox"] {
+    margin-top: -55px !important;
+}
+
+/* Keep department label close to selector */
+div[data-testid="stSelectbox"] label {
+    margin-top: 0px !important;
+    padding-top: 0px !important;
+}
+
+/* Remove extra spacing inside selector */
+div[data-testid="stSelectbox"] > div {
+    margin-top: 0px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # HELPERS
 # ============================================================
-def clean_number(value):
-    """Convert Excel values such as 11, 11.0, 50%, N/A to float/None."""
-    if value is None:
+def norm(value):
+    """Normalize text for safe column/department matching."""
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+
+
+def find_col(df, candidates):
+    """Find a column using exact normalized match, then partial match."""
+    if df is None or df.empty:
         return None
 
-    if isinstance(value, bool):
-        return float(value)
+    normalized = {norm(c): c for c in df.columns}
 
-    if isinstance(value, (int, float)):
-        if isinstance(value, float) and math.isnan(value):
-            return None
-        return float(value)
+    for candidate in candidates:
+        key = norm(candidate)
+        if key in normalized:
+            return normalized[key]
 
-    text = str(value).strip()
-    if not text:
-        return None
-
-    upper = text.upper()
-    if upper in {"N/A", "NA", "N.A.", "U/P", "UP", "-", "--", "NIL", "NONE"}:
-        return None
-
-    # Remove commas and extract first numeric value.
-    text = text.replace(",", "")
-    match = re.search(r"-?\d+(?:\.\d+)?", text)
-    if not match:
-        return None
-
-    try:
-        number = float(match.group())
-        if "%" in text:
-            return number
-        return number
-    except Exception:
-        return None
-
-
-def value_at(df, row, col):
-    """Safely read a value from the known Excel matrix."""
-    try:
-        if row >= len(df) or col >= len(df.columns):
-            return None
-        return clean_number(df.iloc[row, col])
-    except Exception:
-        return None
-
-
-def find_file(department):
-    """Match dashboard department name to the actual file name."""
-    if not DEPT_DIR.exists():
-        return None
-
-    files = list(DEPT_DIR.glob("*.xlsx")) + list(DEPT_DIR.glob("*.xls"))
-
-    target = department.lower().strip()
-
-    for f in files:
-        stem = f.stem.lower().strip()
-
-        if stem == target:
-            return f
-
-    # Current file is named Coke Oven.xlsx while dashboard department is Coke Oven-1.
-    if target == "coke oven-1":
-        for f in files:
-            if f.stem.lower().strip() == "coke oven":
-                return f
+    for column in df.columns:
+        ckey = norm(column)
+        for candidate in candidates:
+            nkey = norm(candidate)
+            if nkey in ckey or ckey in nkey:
+                return column
 
     return None
 
 
-def load_excel_data(file_path):
-    """Load a department Excel file without assuming column headers."""
+def clean_dataframe(df):
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    out = df.copy()
+    out.columns = [
+        str(c).strip().replace("\n", " ").replace("\r", " ")
+        for c in out.columns
+    ]
+
+    out = out.dropna(how="all").copy()
+
+    for c in out.columns:
+        if out[c].dtype == "object":
+            out[c] = out[c].astype(str).str.strip()
+
+    return out
+
+
+# ============================================================
+# GLOBAL DEPARTMENT FILTER
+# ============================================================
+
+def filter_selected_department(df, selected_department):
+    df = clean_dataframe(df)
+
+    if df.empty:
+        return df
+
+    # ALL DEPARTMENTS = no filtering
+    if selected_department == "All Departments":
+        return df.copy()
+
+    department_col = find_col(
+        df,
+        [
+            "Department",
+            "Departments",
+            "Dept",
+            "Department Name",
+            "Department_Name",
+            "Dept Name",
+            "Dept_Name",
+        ],
+    )
+
+    # If department column does not exist,
+    # return empty for an individual department.
+    if department_col is None:
+        return pd.DataFrame(columns=df.columns)
+
+    department_values = (
+        df[department_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    # Normalize both sides
+    selected_norm = norm(selected_department)
+
+    data_norm = department_values.map(norm)
+
+    # Normal exact match
+    mask = data_norm == selected_norm
+
+    # Additional handling for common department names
+    if selected_norm == "blastfurnace":
+        mask = department_values.str.contains(
+            r"blast\s*[-_/ ]*\s*furnace",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    elif selected_norm == "cokeoven":
+        mask = department_values.str.contains(
+            r"coke\s*[-_/ ]*oven",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+
+    elif selected_norm == "sms1":
+        mask = department_values.str.contains(
+            r"sms\s*[-_/ ]*1",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    elif selected_norm == "sms2":
+        mask = department_values.str.contains(
+            r"sms\s*[-_/ ]*2",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    elif selected_norm == "centralutility":
+        mask = department_values.str.contains(
+            r"central\s*[-_/ ]*utility",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    elif selected_norm == "tubeMill".lower():
+        mask = department_values.str.contains(
+            r"tube\s*[-_/ ]*mill",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    elif selected_norm == "pelletbeneficiation":
+        mask = department_values.str.contains(
+            r"pellet.*beneficiation|beneficiation.*pellet",
+            case=False,
+            regex=True,
+            na=False,
+        )
+
+    return df.loc[mask].copy()
+
+
+def load_csv_from_url(url):
+    response = requests.get(
+        url,
+        timeout=30,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    response.raise_for_status()
+
+    # Google export is normally UTF-8 CSV.
+    # Use StringIO so pandas gets a text stream.
+    return pd.read_csv(io.StringIO(response.content.decode("utf-8-sig")))
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_google_sheet(gid):
+    """
+    Load ONE exact Google Sheet tab by GID.
+
+    This avoids the previous problem where the code used sheet
+    names and could end up reading the wrong tab.
+    """
+    if not gid:
+        return pd.DataFrame()
+
+    export_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=csv&gid={gid}"
+    )
+
     try:
-        return pd.read_excel(file_path, header=None)
+        df = load_csv_from_url(export_url)
+        return clean_dataframe(df)
     except Exception:
-        return None
+        # Fallback to Google visualization endpoint.
+        gviz_url = (
+            f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/gviz/tq?"
+            f"tqx=out:csv&gid={gid}"
+        )
+
+        try:
+            df = load_csv_from_url(gviz_url)
+            return clean_dataframe(df)
+        except Exception:
+            return pd.DataFrame()
 
 
-def read_department(department):
+@st.cache_data(ttl=300, show_spinner=False)
+def load_interlock_sheet():
     """
-    Read actual monthly data from one department Excel.
+    Find and load the real Interlock tab from the Google workbook.
 
-    Returns a dictionary containing only values supported by the
-    current Excel template. No PSM score is invented.
+    The Interlock tab is identified by its actual register headers rather
+    than a hard-coded GID. This prevents the dashboard from accidentally
+    reading another tab when the GID is incorrect.
     """
-    file_path = find_file(department)
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
 
-    if file_path is None:
-        return {
-            "department": department,
-            "available": False,
-            "file": None,
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        required_headers = {
+            "sno",
+            "department",
+            "interlockdescription",
+            "datebypassed",
+            "presentstatusactionrequired",
         }
 
-    df = load_excel_data(file_path)
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+
+            # Look through the first 10 rows for the register header.
+            header_found = None
+            buffered = []
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                normalized_headers = {
+                    re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
+                    for value in row
+                    if value is not None
+                }
+
+                if required_headers.issubset(normalized_headers):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            data_rows = all_rows[header_found + 1:]
+
+            # Remove completely blank columns from the header.
+            valid_columns = [
+                i for i, value in enumerate(headers)
+                if value is not None and str(value).strip() != ""
+            ]
+
+            if not valid_columns:
+                continue
+
+            clean_headers = [str(headers[i]).strip() for i in valid_columns]
+            records = []
+
+            for row in data_rows:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    value is not None and str(value).strip() != ""
+                    for value in values
+                ):
+                    records.append(values)
+
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+    except Exception:
+        return pd.DataFrame()
+
+    return pd.DataFrame()
+
+
+class _AuditLinkParser(HTMLParser):
+    """Extract cell text and real hyperlinks from Google Sheets GViz HTML."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self._row = None
+        self._cell_open = False
+        self._cell_href = ""
+        self._cell_text = []
+        self._in_table = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "table":
+            self._in_table = True
+        elif self._in_table and tag == "tr":
+            self._row = []
+        elif self._in_table and tag in ("td", "th") and self._row is not None:
+            self._cell_open = True
+            self._cell_href = ""
+            self._cell_text = []
+        elif self._in_table and tag == "a" and self._cell_open:
+            self._cell_href = attrs.get("href", "") or ""
+
+    def handle_data(self, data):
+        if self._cell_open:
+            self._cell_text.append(data)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+
+        if tag in ("td", "th") and self._cell_open:
+            self._row.append({
+                "text": " ".join(self._cell_text).strip(),
+                "href": self._cell_href.strip(),
+            })
+            self._cell_open = False
+            self._cell_href = ""
+            self._cell_text = []
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+        elif tag == "table":
+            self._in_table = False
+
+
+def load_audit_with_links(gid):
+    """Load Audit tab and recover the live Audit Report hyperlinks.
+
+    The Google Sheet uses rich-text hyperlinks in the Audit Report column.
+    We first try XLSX hyperlinks, then GViz HTML, and finally create a
+    row-specific Google Sheet link so a report is never incorrectly shown
+    as 'Not attached' when the report name exists.
+    """
+    df = load_google_sheet(gid)
+    if df.empty or not gid:
+        return df
+
+    df = clean_dataframe(df).copy()
+    url_values = [""] * len(df)
+
+    # Identify the actual Audit Report column from the loaded sheet.
+    audit_report_col = find_col(
+        df,
+        ["Audit Report", "Audit Report Link", "Compliance Report", "Report"],
+    )
+
+    # ------------------------------------------------------------
+    # METHOD 1: XLSX cell hyperlinks
+    # ------------------------------------------------------------
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx&gid={gid}"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=False,
+            read_only=False,
+        )
+        ws = workbook.active
+
+        header_row = None
+        report_col_num = None
+
+        for row in ws.iter_rows():
+            for cell in row:
+                value = norm(cell.value)
+                if value in {
+                    "auditreport",
+                    "auditreportlink",
+                    "compliancereport",
+                    "compliancereportlink",
+                    "report",
+                }:
+                    header_row = cell.row
+                    report_col_num = cell.column
+                    break
+            if report_col_num is not None:
+                break
+
+        if report_col_num is not None:
+            for row_no in range((header_row or 1) + 1, ws.max_row + 1):
+                cell = ws.cell(row=row_no, column=report_col_num)
+                url = ""
+
+                if cell.hyperlink:
+                    try:
+                        url = str(cell.hyperlink.target or "").strip()
+                    except Exception:
+                        url = ""
+
+                if not url and isinstance(cell.value, str):
+                    match = re.search(
+                        r'HYPERLINK\s*\(\s*["\'](https?://[^"\']+)["\']',
+                        cell.value,
+                        flags=re.IGNORECASE,
+                    )
+                    if match:
+                        url = match.group(1).strip()
+
+                idx = row_no - (header_row or 1) - 1
+                if 0 <= idx < len(url_values) and url:
+                    url_values[idx] = url
+
+        workbook.close()
+    except Exception:
+        pass
+
+    # ------------------------------------------------------------
+    # METHOD 2: GViz HTML - preserves rich-text hyperlinks
+    # ------------------------------------------------------------
+    try:
+        gviz_html_url = (
+            f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/gviz/tq?"
+            f"tqx=out:html&gid={gid}"
+        )
+
+        gviz_response = requests.get(
+            gviz_html_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        gviz_response.raise_for_status()
+
+        parser = _AuditLinkParser()
+        parser.feed(gviz_response.text)
+
+        if parser.rows and audit_report_col:
+            report_index = list(df.columns).index(audit_report_col)
+            source_rows = parser.rows[1:]  # first row is the header
+
+            for i, parsed_row in enumerate(source_rows):
+                if i >= len(url_values) or url_values[i]:
+                    continue
+
+                if report_index < len(parsed_row):
+                    href = parsed_row[report_index].get("href", "").strip()
+                    if href:
+                        url_values[i] = href
+    except Exception:
+        pass
+
+    # ------------------------------------------------------------
+    # METHOD 3: if the rich-text URL cannot be exposed by Google,
+    # link directly to the corresponding Audit Report cell.
+    # This keeps the report accessible instead of showing Not attached.
+    # ------------------------------------------------------------
+    if audit_report_col:
+        for i in range(len(df)):
+            if url_values[i]:
+                continue
+
+            report_name = str(df.iloc[i][audit_report_col]).strip()
+            if report_name and report_name.lower() not in {"nan", "none"}:
+                sheet_row = i + 2  # header is row 1
+                url_values[i] = (
+                    f"https://docs.google.com/spreadsheets/d/"
+                    f"{SPREADSHEET_ID}/edit?gid={gid}"
+                    f"&range=E{sheet_row}"
+                )
+
+    df["__COMPLIANCE_REPORT_URL"] = url_values
+    return df
+
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_psm_ce_sheet():
+    """
+    Find and load the real PSM CE tab from the Google workbook.
+
+    The PSM CE tab is identified from its actual headers so it does not
+    depend on a possibly incorrect/hard-coded GID.
+    """
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        required_headers = {
+            "slno",
+            "month",
+            "department",
+            "noofpsmcefailedbreakdown",
+            "complianceofpsmcemo–mechanical–generated",
+            "complianceofpsmcemo–mechanical–completed",
+            "complianceofpsmcemo–e&i–generated",
+            "complianceofpsmcemo–e&i–completed",
+        }
+
+        def normalized_header(value):
+            text = str(value).strip().lower()
+            text = text.replace("–", "-").replace("—", "-")
+            text = text.replace("&", "and")
+            return re.sub(r"[^a-z0-9]+", "", text)
+
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+            buffered = []
+            header_found = None
+
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                normalized_headers = {
+                    normalized_header(value)
+                    for value in row
+                    if value is not None
+                }
+
+                # Use the distinctive PSM CE headers.  The exact wording
+                # can vary slightly in punctuation, so use key fragments.
+                has_slno = "slno" in normalized_headers
+                has_month = "month" in normalized_headers
+                has_department = "department" in normalized_headers
+                has_failed = any(
+                    "noofpsmcefailedbreakdown" in h
+                    for h in normalized_headers
+                )
+                has_mech_generated = any(
+                    "complianceofpsmcemo" in h
+                    and "mechanical" in h
+                    and "generated" in h
+                    for h in normalized_headers
+                )
+                has_mech_completed = any(
+                    "complianceofpsmcemo" in h
+                    and "mechanical" in h
+                    and "completed" in h
+                    for h in normalized_headers
+                )
+                has_ei_generated = any(
+                    "complianceofpsmcemo" in h
+                    and ("ei" in h or "eandl" in h or "eandi" in h)
+                    and "generated" in h
+                    for h in normalized_headers
+                )
+                has_ei_completed = any(
+                    "complianceofpsmcemo" in h
+                    and ("ei" in h or "eandl" in h or "eandi" in h)
+                    and "completed" in h
+                    for h in normalized_headers
+                )
+
+                if (
+                    has_slno
+                    and has_month
+                    and has_department
+                    and has_failed
+                    and has_mech_generated
+                    and has_mech_completed
+                    and has_ei_generated
+                    and has_ei_completed
+                ):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            valid_columns = [
+                i for i, value in enumerate(headers)
+                if value is not None and str(value).strip() != ""
+            ]
+
+            if not valid_columns:
+                continue
+
+            clean_headers = [
+                str(headers[i]).strip()
+                for i in valid_columns
+            ]
+            records = []
+
+            for row in all_rows[header_found + 1:]:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    value is not None and str(value).strip() != ""
+                    for value in values
+                ):
+                    records.append(values)
+
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+    except Exception:
+        return pd.DataFrame()
+
+    return pd.DataFrame()
+
+def load_module(name):
+    """Load the complete module data for all departments."""
+    return load_google_sheet(SHEETS.get(name))
+
+
+def status_counts(df, status_candidates=None):
+    result = {
+        "total": 0,
+        "completed": 0,
+        "ongoing": 0,
+        "pending": 0,
+        "overdue": 0,
+        "open": 0,
+        "closed": 0,
+    }
 
     if df is None or df.empty:
-        return {
-            "department": department,
-            "available": False,
-            "file": file_path.name,
-        }
+        return result
 
-    # Monthly incident / process-safety values.
-    l1 = value_at(df, MONTH_TOP_ROW, 1)
-    l2 = value_at(df, MONTH_TOP_ROW, 2)
-    l3 = value_at(df, MONTH_TOP_ROW, 3)
-    l4 = value_at(df, MONTH_TOP_ROW, 4)
-    investigation_30 = value_at(df, MONTH_TOP_ROW, 5)
-    soc = value_at(df, MONTH_TOP_ROW, 6)
-    sol = value_at(df, MONTH_TOP_ROW, 7)
-    equipment_failure = value_at(df, MONTH_TOP_ROW, 8)
+    result["total"] = len(df)
 
-    # Barrier.
-    barrier_total = value_at(df, MONTH_TOP_ROW, 19)
-    barrier_assessed = value_at(df, MONTH_TOP_ROW, 20)
-    barrier_unacceptable = value_at(df, MONTH_TOP_ROW, 21)
-
-    # Monthly bottom section.
-    third_party_close = value_at(df, MONTH_BOTTOM_ROW, 1)
-    third_party_delayed = value_at(df, MONTH_BOTTOM_ROW, 2)
-    incident_rec_close = value_at(df, MONTH_BOTTOM_ROW, 3)
-    incident_rec_delayed = value_at(df, MONTH_BOTTOM_ROW, 4)
-
-    pt_plan = value_at(df, MONTH_BOTTOM_ROW, 6)
-    pt_actual = value_at(df, MONTH_BOTTOM_ROW, 7)
-
-    pha_plan = value_at(df, MONTH_BOTTOM_ROW, 8)
-    pha_actual = value_at(df, MONTH_BOTTOM_ROW, 9)
-    pha_close = value_at(df, MONTH_BOTTOM_ROW, 10)
-    pha_delayed = value_at(df, MONTH_BOTTOM_ROW, 11)
-
-    audit_close = value_at(df, MONTH_BOTTOM_ROW, 12)
-    audit_delayed = value_at(df, MONTH_BOTTOM_ROW, 13)
-
-    moc_pending = value_at(df, MONTH_BOTTOM_ROW, 14)
-    kaizen_moc = value_at(df, MONTH_BOTTOM_ROW, 16)
-    emergency_moc = value_at(df, MONTH_BOTTOM_ROW, 18)
-    temporary_overdue = value_at(df, MONTH_BOTTOM_ROW, 20)
-
-    interlock_open = value_at(df, MONTH_BOTTOM_ROW, 22)
-    normalisation_overdue = value_at(df, MONTH_BOTTOM_ROW, 23)
-
-    incidents = sum(
-        x or 0 for x in [l1, l2, l3, l4]
-    )
-
-    recommendations_open = sum(
-        x or 0
-        for x in [
-            third_party_delayed,
-            incident_rec_delayed,
-            pha_delayed,
-            audit_delayed,
+    if status_candidates is None:
+        status_candidates = [
+            "Status",
+            "Current Status",
+            "Action Status",
+            "Completion Status",
+            "Investigation Status",
+            "Recommendation Status",
         ]
+
+    status_col = find_col(df, status_candidates)
+
+    if status_col is None:
+        return result
+
+    s = (
+        df[status_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
     )
 
-    # PSM pillar score is intentionally NOT calculated from these KPIs.
-    # It requires actual pillar assessment data.
-    return {
-        "department": department,
-        "available": True,
-        "file": file_path.name,
+    result["completed"] = int(
+        s.str.contains(r"\bcompleted?\b|\bcomplete\b", regex=True).sum()
+    )
 
-        "l1": l1 or 0,
-        "l2": l2 or 0,
-        "l3": l3 or 0,
-        "l4": l4 or 0,
-        "investigation_30": investigation_30 or 0,
-        "soc": soc or 0,
-        "sol": sol or 0,
-        "equipment_failure": equipment_failure or 0,
+    result["ongoing"] = int(
+        s.str.contains(r"ongoing|in progress|in-progress", regex=True).sum()
+    )
 
-        "barrier_total": barrier_total or 0,
-        "barrier_assessed": barrier_assessed or 0,
-        "barrier_unacceptable": barrier_unacceptable or 0,
+    result["pending"] = int(
+        s.str.contains(r"pending", regex=True).sum()
+    )
 
-        "third_party_close": third_party_close or 0,
-        "third_party_delayed": third_party_delayed or 0,
-        "incident_rec_close": incident_rec_close or 0,
-        "incident_rec_delayed": incident_rec_delayed or 0,
+    result["overdue"] = int(
+        s.str.contains(r"overdue", regex=True).sum()
+    )
 
-        "pt_plan": pt_plan or 0,
-        "pt_actual": pt_actual or 0,
+    result["open"] = int(
+        s.str.fullmatch(r"open", case=False, na=False).sum()
+    )
 
-        "pha_plan": pha_plan or 0,
-        "pha_actual": pha_actual or 0,
-        "pha_close": pha_close or 0,
-        "pha_delayed": pha_delayed or 0,
+    result["closed"] = int(
+        s.str.fullmatch(r"closed", case=False, na=False).sum()
+    )
 
-        "audit_close": audit_close or 0,
-        "audit_delayed": audit_delayed or 0,
-
-        "moc_pending": moc_pending or 0,
-        "kaizen_moc": kaizen_moc or 0,
-        "emergency_moc": emergency_moc or 0,
-        "temporary_overdue": temporary_overdue or 0,
-
-        "interlock_open": interlock_open or 0,
-        "normalisation_overdue": normalisation_overdue or 0,
-
-        "incidents": incidents,
-        "recommendations_open": recommendations_open,
-
-        "pillar_scores": [None] * 14,
-        "overall_score": None,
-    }
+    return result
 
 
-def load_all_departments():
-    return {
-        dept: read_department(dept)
-        for dept in DEPARTMENTS
-    }
+def make_register(df, id_names, description_names, status_names):
+    if df is None or df.empty:
+        return pd.DataFrame()
 
+    id_col = find_col(df, id_names)
+    desc_col = find_col(df, description_names)
+    status_col = find_col(df, status_names)
 
-def fmt_number(value):
-    if value is None:
-        return "—"
-    if float(value).is_integer():
-        return str(int(value))
-    return f"{value:.1f}"
+    result = pd.DataFrame(index=df.index)
+
+    # -----------------------------
+    # ID / NUMBER
+    # -----------------------------
+    if id_col:
+        result["No."] = (
+            df[id_col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+    else:
+        result["No."] = [
+            f"{i + 1:03d}" for i in range(len(df))
+        ]
+
+    # -----------------------------
+    # DESCRIPTION
+    # -----------------------------
+    if desc_col:
+        result["Description"] = (
+            df[desc_col]
+            .fillna("-")
+            .astype(str)
+            .str.strip()
+        )
+    else:
+        result["Description"] = "-"
+
+    # -----------------------------
+    # STATUS
+    # -----------------------------
+    if status_col:
+        result["Status"] = (
+            df[status_col]
+            .fillna("-")
+            .astype(str)
+            .str.strip()
+        )
+    else:
+        result["Status"] = "-"
+
+    return result.reset_index(drop=True)
 
 
 # ============================================================
-# LOAD REAL DATA
+# STATUS COLOUR
 # ============================================================
-data = load_all_departments()
-available = [d for d in DEPARTMENTS if data[d]["available"]]
-pending = [d for d in DEPARTMENTS if not data[d]["available"]]
+
+def status_style(value):
+    value = str(value).strip().lower()
+
+    if value in ["completed", "complete", "closed"]:
+        return "color: #008000; font-weight: 800;"
+
+    elif value in ["ongoing", "in progress", "in-progress", "pending"]:
+        return "color: #e67e00; font-weight: 800;"
+
+    elif value in ["overdue", "open"]:
+        return "color: #d71920; font-weight: 800;"
+
+    else:
+        return "color: #333333;"
+
 
 # ============================================================
-# HEADER
+# REGISTER DISPLAY
 # ============================================================
+
+def show_register(title, df, id_names, description_names, status_names):
+    st.markdown(
+        f'<div class="section-bar">{title}</div>',
+        unsafe_allow_html=True,
+    )
+
+    register_df = make_register(
+        df,
+        id_names,
+        description_names,
+        status_names,
+    )
+
+    if register_df.empty:
+
+        st.info("No records found.")
+
+    else:
+
+        # Apply colour ONLY to Status column
+        styled_df = (
+            register_df.style
+            .map(
+                status_style,
+                subset=["Status"]
+            )
+        )
+
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            hide_index=True,
+            height=260,
+        )
+
+
+def make_moc_register(df):
+    """Build the compact MOC register: MOC No., Description, Type, Status, Remarks."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    moc_no_col = find_col(
+        df,
+        [
+            "MOC No",
+            "MOC No.",
+            "MOC Number",
+            "MOC ID",
+            "Request No",
+            "Request ID",
+            "Sr No",
+            "Sr. No",
+            "Serial No",
+            "ID",
+        ],
+    )
+
+    desc_col = find_col(
+        df,
+        [
+            "Description of Change",
+            "Description of the Change",
+            "MOC Description",
+            "Change Description",
+            "Description",
+        ],
+    )
+
+    type_col = find_col(
+        df,
+        [
+            "Change Type (Permanent/Temporary/Emergency)",
+            "Change Type (Permanent / Temporary / Emergency)",
+            "Change Type",
+            "MOC Change Type",
+            "Type of Change",
+            "Type",
+        ],
+    )
+
+    status_col = find_col(
+        df,
+        [
+            "Status (Open/Close)",
+            "Status (Open / Close)",
+            "Status",
+            "Current Status",
+            "MOC Status",
+        ],
+    )
+
+    remarks_col = find_col(
+        df,
+        [
+            "Remarks",
+            "Remark",
+            "Comments",
+            "Comment",
+        ],
+    )
+
+    result = pd.DataFrame(index=df.index)
+
+    if moc_no_col:
+        result["MOC No."] = (
+            df[moc_no_col].fillna("").astype(str).str.strip()
+        )
+    else:
+        result["MOC No."] = [
+            f"{i + 1:03d}" for i in range(len(df))
+        ]
+
+    result["Description"] = (
+        df[desc_col].fillna("-").astype(str).str.strip()
+        if desc_col else "-"
+    )
+
+    result["Type"] = (
+        df[type_col].fillna("-").astype(str).str.strip()
+        if type_col else "-"
+    )
+
+    result["Status"] = (
+        df[status_col].fillna("-").astype(str).str.strip()
+        if status_col else "-"
+    )
+
+    result["Remarks"] = (
+        df[remarks_col].fillna("-").astype(str).str.strip()
+        if remarks_col else "-"
+    )
+
+    return result.reset_index(drop=True)
+
+
+def show_moc_register(df):
+    st.markdown(
+        '<div class="section-bar">MOC REGISTER</div>',
+        unsafe_allow_html=True,
+    )
+
+    register_df = make_moc_register(df)
+
+    if register_df.empty:
+        st.info("No MOC records found.")
+        return
+
+    styled_df = (
+        register_df.style
+        .map(
+            status_style,
+            subset=["Status"]
+        )
+    )
+
+    st.dataframe(
+        styled_df,
+        use_container_width=True,
+        hide_index=True,
+        height=120,
+        column_config={
+            "MOC No.": st.column_config.TextColumn("MOC No.", width="small"),
+            "Description": st.column_config.TextColumn("Description", width="small"),
+            "Type": st.column_config.TextColumn("Type", width="small"),
+            "Status": st.column_config.TextColumn("Status", width="small"),
+            "Remarks": st.column_config.TextColumn("Remarks", width="small"),
+        },
+    )
+
+
+# ============================================================
+# MODULE PAGE LINKS
+# ============================================================
+
+MODULE_PAGE_LINKS = {
+    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
+    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
+    "PHA RECOMMENDATION": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
+    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
+    "TRAINING": "pages/13_Training.py",
+    "INTERLOCK BYPASS": "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
+    "PSM CE": "pages/20_PSM CE & BARRIER HEALTH.py",
+}
+
+
+def show_module_title(number, icon, title):
+    page = MODULE_PAGE_LINKS.get(title)
+
+    if page:
+        st.page_link(
+            page,
+            label=f"🔴 {number} {icon} {title}",
+        )
+    else:
+        st.markdown(
+            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def show_metric_row(items):
+    cols = st.columns(len(items), gap="small")
+    for c, (label, value) in zip(cols, items):
+        with c:
+            st.metric(label, value)
+
+
+def get_date_column(df):
+    return find_col(
+        df,
+        [
+            "Date",
+            "Audit Date",
+            "Last Audit Date",
+            "Deviation Date",
+            "Record Date",
+            "Incident Date",
+        ],
+    )
+
+
+# ============================================================
+# LOAD DATA
+# ============================================================
+loaded = {}
+
+for module_name in SHEETS:
+    loaded[module_name] = load_module(module_name)
+
+pt = loaded["PT"]
+pha = loaded["PHA"]
+rec = loaded["PHA Recommendation"]
+moc = loaded["MOC"]
+pssr = loaded["PSSR"]
+training = loaded["Training"]
+soc = loaded["SOC-SOL"]
+incident = loaded["PS Incident"]
+interlock = load_interlock_sheet()
+psm_ce = load_psm_ce_sheet()
+loaded["PSM CE "] = psm_ce
+audit = load_audit_with_links(SHEETS["Audit Compliance"])
+failure_data = loaded["Failure Data"]
+
+# ============================================================
+# COMMON DEPARTMENT SELECTOR
+# ============================================================
+
+ALL_DEPARTMENTS = [
+    "All Departments",
+    "Blast Furnace",
+    "Coke Oven",
+    "SMS-1",
+    "SMS-2",
+    "DRI",
+    "Central Utility",
+    "CRM",
+    "WRM",
+    "CPP",
+    "Sinter",
+    "Tube Mill",
+    "CSP",
+    "Pellet & Beneficiation",
+    "LCP",
+]
+
+selected_department = st.selectbox(
+    "Department Status",
+    ALL_DEPARTMENTS,
+    index=0,
+    key="global_department_selector",
+)
+# ============================================================
+# APPLY GLOBAL DEPARTMENT FILTER
+# ============================================================
+
+pt = filter_selected_department(
+    pt,
+    selected_department
+)
+
+pha = filter_selected_department(
+    pha,
+    selected_department
+)
+
+rec = filter_selected_department(
+    rec,
+    selected_department
+)
+
+moc = filter_selected_department(
+    moc,
+    selected_department
+)
+
+pssr = filter_selected_department(
+    pssr,
+    selected_department
+)
+
+training = filter_selected_department(
+    training,
+    selected_department
+)
+
+soc = filter_selected_department(
+    soc,
+    selected_department
+)
+
+incident = filter_selected_department(
+    incident,
+    selected_department
+)
+
+interlock = filter_selected_department(
+    interlock,
+    selected_department
+)
+
+# Apply the same department selector to PSM CE so that KPI values
+# and department-wise progress show the selected department only.
+psm_ce = filter_selected_department(
+    psm_ce,
+    selected_department
+)
+
+# IMPORTANT: APEX KPIs must also follow the global department selector.
+# Previously Barrier Audit and Audit Compliance were left unfiltered,
+# which made their values appear fixed when the department was changed.
+barrier_audit = filter_selected_department(
+    loaded.get("Barrier Audit"),
+    selected_department
+)
+
+audit = filter_selected_department(
+    audit,
+    selected_department
+)
+
+# ============================================================
+# LIVE DATA BAR
+# ============================================================
+module_count = sum(
+    1 for df in loaded.values()
+    if df is not None and not df.empty
+)
+
 st.markdown(
-    """
-    <div class="main-header">
-        <div class="main-title">PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL</div>
-        <div class="screen-title">SCREEN 02 : APEX COMMITTEE PERFORMANCE DASHBOARD</div>
-        <div class="main-subtitle">Apex Committee Overview of PSM Implementation Across Plant</div>
-        <div class="online">PLANT STATUS : ONLINE ●</div>
+    f"""
+    <div class="live-bar">
+        <b>LIVE DATA: Google Sheet → All Departments</b>
+        &nbsp; | &nbsp;
+        Refresh: 5 minutes
+        &nbsp; | &nbsp;
+        Modules with data: <b>{module_count}</b>
+        &nbsp; | &nbsp;
+        Last load: <b>{datetime.now().strftime("%d-%b-%Y %H:%M:%S")}</b>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 # ============================================================
-# CONTROL BAR
+# APEX COMMITTEE DASHBOARD
 # ============================================================
-c1, c2, c3 = st.columns([1.2, 1.2, 1.2])
 
-with c1:
-    reporting_month = st.selectbox(
-        "REPORTING MONTH",
-        [
-            "January 2026",
-            "February 2026",
-            "March 2026",
-            "April 2026",
-            "May 2026",
-            "June 2026",
-            "July 2026",
-            "August 2026",
-            "September 2026",
-            "October 2026",
-            "November 2026",
-            "December 2026",
-        ],
-        index=6,
-    )
+st.markdown("""
+<style>
+.apex-hero{background:linear-gradient(135deg,#061a2d 0%,#073f78 55%,#0b6fa4 100%);border-radius:12px;padding:18px 22px;margin:4px 0 10px;box-shadow:0 5px 18px rgba(5,35,60,.20)}
+.apex-title{color:#fff;font-size:28px;font-weight:900;letter-spacing:1px;line-height:1.05}
+.apex-sub{color:#c7e4f5;font-size:10px;font-weight:800;letter-spacing:2.5px;margin-top:6px}
+.apex-live{color:#9de7bb;font-size:9px;font-weight:800;margin-top:9px}
+.apex-section{background:linear-gradient(90deg,#073f78,#0b6096);color:#fff;border-radius:7px;padding:7px 11px;font-size:10px;font-weight:900;letter-spacing:.7px;margin:9px 0 6px}
+.apex-kpi{background:#fff;border:1px solid #d5e2ec;border-radius:9px;padding:10px 10px 9px;min-height:86px;box-shadow:0 2px 9px rgba(17,57,84,.08)}
+.apex-kpi-label{color:#64788b;font-size:8px;font-weight:900;line-height:1.15;min-height:20px}
+.apex-kpi-value{color:#073f78;font-size:25px;font-weight:900;margin-top:3px;line-height:1.1}
+.apex-kpi-note{color:#8293a2;font-size:7px;margin-top:3px;line-height:1.15}
+.apex-panel{background:#fff;border:1px solid #d5e2ec;border-radius:9px;padding:10px;box-shadow:0 2px 9px rgba(17,57,84,.07);height:100%}
+.apex-panel-title{color:#073f78;font-size:10px;font-weight:900;letter-spacing:.4px;margin-bottom:4px}
+.apex-att{border-radius:6px;padding:7px 9px;margin:5px 0;border-left:4px solid #d71920;background:#fff1f1}
+.apex-att.warn{border-left-color:#e5a400;background:#fff8e5}
+.apex-att.good{border-left-color:#279650;background:#eef9f1}
+.apex-att-label{color:#627689;font-size:8px;font-weight:900}
+.apex-att-value{color:#173f70;font-size:17px;font-weight:900;margin-top:2px}
+.apex-footer{background:#061f35;color:#c7dce9;border-radius:7px;padding:8px;text-align:center;font-size:8px;font-weight:800;letter-spacing:.6px;margin-top:10px}
+</style>
+""", unsafe_allow_html=True)
 
-with c2:
-    st.metric("EXCEL DATA AVAILABLE", f"{len(available)} / {len(DEPARTMENTS)}")
-
-with c3:
-    st.metric("LAST REFRESH", datetime.now().strftime("%d-%b-%Y %H:%M:%S"))
-
-if available:
-    st.markdown(
-        f'<div class="data-note">🟢 REAL EXCEL DATA LOADED: '
-        f'{", ".join(available)}</div>',
-        unsafe_allow_html=True,
-    )
-
-if pending:
-    st.markdown(
-        f'<div class="pending-note">🟡 DATA PENDING: {len(pending)} '
-        f'departments have no Excel file yet. Their values are shown as "—".</div>',
-        unsafe_allow_html=True,
-    )
 
 # ============================================================
-# CONSOLIDATED REAL KPIs
+# RAW DATA FOR EXECUTIVE COMPARISON
+# Keep the existing selected-department data untouched above;
+# use loaded/raw sheets for the department ranking below.
 # ============================================================
-total_incidents = sum(data[d]["incidents"] for d in available)
-total_equipment_failures = sum(data[d]["equipment_failure"] for d in available)
-total_unacceptable_barriers = sum(data[d]["barrier_unacceptable"] for d in available)
-total_interlocks = sum(data[d]["interlock_open"] for d in available)
-total_open_recommendations = sum(data[d]["recommendations_open"] for d in available)
-
-# ============================================================
-# TOP KPI STRIP
-# ============================================================
-st.markdown(
-    '<div class="section-title">📊 EXECUTIVE DATA SNAPSHOT</div>',
-    unsafe_allow_html=True,
-)
-
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-
-with k1:
-    st.metric("TOTAL DEPARTMENTS", len(DEPARTMENTS))
-
-with k2:
-    st.metric("DATA AVAILABLE", f"{len(available)}/{len(DEPARTMENTS)}")
-
-with k3:
-    st.metric("PS INCIDENTS (L1-L4)", fmt_number(total_incidents))
-
-with k4:
-    st.metric("EQUIPMENT FAILURE", fmt_number(total_equipment_failures))
-
-with k5:
-    st.metric("UNACCEPTABLE BARRIERS", fmt_number(total_unacceptable_barriers))
-
-with k6:
-    st.metric("INTERLOCK OPEN", fmt_number(total_interlocks))
-
-# ============================================================
-# MAIN 3-PANEL AREA
-# ============================================================
-left, middle, right = st.columns([1.0, 1.45, 1.2])
+raw_pt = loaded.get("PT")
+raw_pha = loaded.get("PHA")
+raw_pssr = loaded.get("PSSR")
+raw_moc = loaded.get("MOC")
+raw_incident = loaded.get("PS Incident")
+raw_interlock = loaded.get("Interlock ")
+raw_barrier = loaded.get("Barrier Audit")
+raw_audit = loaded.get("Audit Compliance")
 
 # ------------------------------------------------------------
-# 1. OVERALL PSM IMPLEMENTATION
+# STATUS HELPERS
+# ------------------------------------------------------------
+def safe_status(df, candidates=None):
+    return status_counts(df, candidates)
+
+# ============================================================
+# CURRENT FILTER KPI CALCULATIONS
+# ============================================================
+pha_s = safe_status(pha)
+pt_s = safe_status(pt)
+
+pssr_s = safe_status(
+    pssr,
+    [
+        "Overdue/Pending/Completed",
+        "Overdue / Pending / Completed",
+        "Status",
+        "Current Status",
+    ],
+)
+
+moc_s = safe_status(
+    moc,
+    [
+        "Status (Open/Close)",
+        "Status",
+        "Current Status",
+        "MOC Status",
+    ],
+)
+
+# ------------------------------------------------------------
+# INCIDENT
+# ------------------------------------------------------------
+incident_total = 0
+incident_completed = 0
+incident_pending = 0
+
+if incident is not None and not incident.empty:
+    incident_total = len(incident)
+    inv_col = find_col(
+        incident,
+        ["Investigation status", "Investigation Status", "Investigation", "Status"],
+    )
+    if inv_col:
+        inv = incident[inv_col].fillna("").astype(str).str.strip().str.lower()
+        incident_completed = int(inv.isin(["completed", "complete", "closed", "done"]).sum())
+        incident_pending = int(inv.isin(["pending", "ongoing", "open", "in progress", "in-progress"]).sum())
+
+# ------------------------------------------------------------
+# INTERLOCK
+# ------------------------------------------------------------
+interlock_pending = 0
+if interlock is not None and not interlock.empty:
+    il_status_col = find_col(
+        interlock,
+        ["Present Status / Action Required", "Present Status", "Status / Action Required", "Status"],
+    )
+    if il_status_col:
+        il_status = interlock[il_status_col].fillna("").astype(str).str.lower()
+        interlock_pending = int(il_status.str.contains(r"due\s*for\s*normalization|normalization\s*pending", regex=True, na=False).sum())
+
+# ------------------------------------------------------------
+# BARRIER
+# ------------------------------------------------------------
+barrier_assessed = 0
+barrier_unacceptable = 0
+barrier_df = clean_dataframe(barrier_audit)
+if not barrier_df.empty:
+    b_assessed = find_col(barrier_df, ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"])
+    b_unacceptable = find_col(barrier_df, ["Barrier Health (C4/C5) (Number) Unacceptable", "Unacceptable Barrier", "Unacceptable"])
+    if b_assessed:
+        barrier_assessed = int(pd.to_numeric(barrier_df[b_assessed], errors="coerce").fillna(0).sum())
+    if b_unacceptable:
+        barrier_unacceptable = int(pd.to_numeric(barrier_df[b_unacceptable], errors="coerce").fillna(0).sum())
+
+# ------------------------------------------------------------
+# AUDIT
+# ------------------------------------------------------------
+audit_done = 0
+audit_pending = 0
+if audit is not None and not audit.empty:
+    audit_date_col = find_col(audit, ["Audit Date", "Last Audit Date", "Date"])
+    if audit_date_col:
+        ad = pd.to_datetime(audit[audit_date_col], errors="coerce")
+        audit_done = int(ad.notna().sum())
+        audit_pending = int(ad.isna().sum())
+    else:
+        audit_pending = len(audit)
+
+# ============================================================
+# OVERALL PSM HEALTH
+# ============================================================
+score_parts = []
+if pha_s["total"] > 0:
+    score_parts.append(pha_s["completed"] / pha_s["total"] * 100)
+if pt_s["total"] > 0:
+    score_parts.append(pt_s["completed"] / pt_s["total"] * 100)
+if pssr_s["total"] > 0:
+    score_parts.append(pssr_s["completed"] / pssr_s["total"] * 100)
+if moc_s["total"] > 0:
+    score_parts.append(moc_s["closed"] / moc_s["total"] * 100)
+if incident_total > 0:
+    score_parts.append(incident_completed / incident_total * 100)
+if barrier_assessed > 0:
+    score_parts.append(max(0, (barrier_assessed - barrier_unacceptable) / barrier_assessed * 100))
+
+overall_score = sum(score_parts) / len(score_parts) if score_parts else 0
+overall_score = max(0, min(100, overall_score))
+
+# ============================================================
+# EXECUTIVE SCORECARD
+# ============================================================
+st.markdown('<div class="apex-section">EXECUTIVE SAFETY SCORECARD</div>', unsafe_allow_html=True)
+
+kpis = [
+    ("OVERALL PSM HEALTH", f"{overall_score:.1f}%", "Integrated management health"),
+    ("PSSR OVERDUE", f"{pssr_s['overdue']:,}", "Immediate attention"),
+    ("OPEN MOC", f"{moc_s['open']:,}", "Changes requiring closure"),
+    ("PS INCIDENTS", f"{incident_total:,}", "Recorded process incidents"),
+    ("INVESTIGATION PENDING", f"{incident_pending:,}", "Incident closure"),
+    ("INTERLOCK PENDING", f"{interlock_pending:,}", "Normalization required"),
+    ("UNACCEPTABLE BARRIERS", f"{barrier_unacceptable:,}", "Critical barrier health"),
+    ("AUDIT PENDING", f"{audit_pending:,}", "Audit coverage gap"),
+]
+
+cols = st.columns(8, gap="small")
+for col, (label, value, note) in zip(cols, kpis):
+    with col:
+        st.markdown(
+            f'<div class="apex-kpi"><div class="apex-kpi-label">{label}</div><div class="apex-kpi-value">{value}</div><div class="apex-kpi-note">{note}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+# ============================================================
+# EXECUTIVE MANAGEMENT VIEW
+# ============================================================
+st.markdown('<div class="apex-section">APEX MANAGEMENT VIEW</div>', unsafe_allow_html=True)
+
+left, center, right = st.columns([1.0, 1.45, 1.0], gap="small")
+
+# ------------------------------------------------------------
+# HEALTH GAUGE
 # ------------------------------------------------------------
 with left:
-    st.markdown(
-        '<div class="panel"><div class="panel-title">'
-        '1. OVERALL PSM IMPLEMENTATION PROGRESS'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    # No fake overall score.
-    gauge = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=0,
-            number={
-                "suffix": "",
-                "font": {"size": 38, "color": "#8b8b8b"},
-            },
-            title={
-                "text": "DATA PENDING",
-                "font": {"size": 20, "color": "#8b8b8b"},
-            },
-            gauge={
-                "axis": {
-                    "range": [0, 100],
-                    "tickvals": [0, 25, 50, 75, 100],
-                },
-                "bar": {"color": "#9daab5"},
-                "steps": [
-                    {"range": [0, 70], "color": "#ffd7d7"},
-                    {"range": [70, 90], "color": "#fff0b8"},
-                    {"range": [90, 100], "color": "#d7f3dc"},
-                ],
-                "threshold": {
-                    "line": {"color": "#333333", "width": 5},
-                    "thickness": 0.75,
-                    "value": 0,
-                },
-            },
-        )
-    )
-
-    gauge.update_layout(
-        height=285,
-        margin=dict(l=15, r=15, t=25, b=10),
-        paper_bgcolor="white",
-        font=dict(color="#173b59"),
-    )
-
-    st.plotly_chart(
-        gauge,
-        use_container_width=True,
-        config={"displayModeBar": False},
-    )
-
-    st.caption("Overall PSM score will be available when pillar assessment data is provided.")
-    st.caption(f"Real department files loaded: {len(available)} / {len(DEPARTMENTS)}")
-
-# ------------------------------------------------------------
-# 2. 14 PSM PILLARS
-# ------------------------------------------------------------
-with middle:
-    st.markdown(
-        '<div class="panel"><div class="panel-title">'
-        '2. 14 PSM PILLARS PROGRESS'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    pillar_df = pd.DataFrame({
-        "PILLAR": range(1, 15),
-        "PILLAR NAME": PILLARS,
-        "WEIGHTAGE": [
-            "7%", "7%", "7%", "10%", "7%", "8%", "6%",
-            "6%", "6%", "6%", "6%", "4%", "2%", "4%"
-        ],
-        "SCORE (%)": ["—"] * 14,
-        "STATUS": ["DATA PENDING"] * 14,
-    })
-
-    st.dataframe(
-        pillar_df,
-        use_container_width=True,
-        hide_index=True,
-        height=440,
-        column_config={
-            "PILLAR": st.column_config.NumberColumn(width="small"),
-            "PILLAR NAME": st.column_config.TextColumn(width="large"),
-            "WEIGHTAGE": st.column_config.TextColumn(width="small"),
-            "SCORE (%)": st.column_config.TextColumn(width="small"),
-            "STATUS": st.column_config.TextColumn(width="medium"),
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">OVERALL PSM HEALTH</div>', unsafe_allow_html=True)
+    gauge_color = "#159447" if overall_score >= 80 else "#e5a400" if overall_score >= 60 else "#d71920"
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=overall_score,
+        number={"suffix": "%", "font": {"size": 30, "color": gauge_color}},
+        gauge={
+            "axis": {"range": [0, 100], "tickfont": {"size": 8}},
+            "bar": {"color": gauge_color, "thickness": 0.25},
+            "steps": [
+                {"range": [0, 60], "color": "#fdeaea"},
+                {"range": [60, 80], "color": "#fff4d6"},
+                {"range": [80, 100], "color": "#eaf7ef"},
+            ],
+            "threshold": {"line": {"color": "#173f70", "width": 3}, "thickness": 0.8, "value": 90},
         },
-    )
-
-    st.caption("Pillar scores are not inferred from incident/KPI counts.")
+    ))
+    fig_gauge.update_layout(height=215, margin=dict(l=12, r=12, t=8, b=0), paper_bgcolor="white")
+    st.plotly_chart(fig_gauge, use_container_width=True, config={"displayModeBar": False}, key="apex_health_gauge")
+    state = "HEALTHY" if overall_score >= 80 else "WATCH" if overall_score >= 60 else "CRITICAL"
+    st.markdown(f'<div style="text-align:center;font-size:10px;font-weight:900;color:{gauge_color};">● {state}</div></div>', unsafe_allow_html=True)
 
 # ------------------------------------------------------------
-# 3. DEPARTMENT WISE SCORE / DATA STATUS
+# MODULE PERFORMANCE
+# ------------------------------------------------------------
+with center:
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">CORE PSM MODULE PERFORMANCE</div>', unsafe_allow_html=True)
+    module_names = ["PT / PROCESS TECHNOLOGY", "PHA", "PSSR", "MOC", "INCIDENT INVESTIGATION", "BARRIER HEALTH"]
+    module_scores = [
+        pt_s["completed"] / pt_s["total"] * 100 if pt_s["total"] else 0,
+        pha_s["completed"] / pha_s["total"] * 100 if pha_s["total"] else 0,
+        pssr_s["completed"] / pssr_s["total"] * 100 if pssr_s["total"] else 0,
+        moc_s["closed"] / moc_s["total"] * 100 if moc_s["total"] else 0,
+        incident_completed / incident_total * 100 if incident_total else 0,
+        (barrier_assessed - barrier_unacceptable) / barrier_assessed * 100 if barrier_assessed else 0,
+    ]
+    fig_mod = go.Figure(go.Bar(
+        x=module_scores,
+        y=module_names,
+        orientation="h",
+        text=[
+            (
+                f"{x:.0f}%"
+                if total > 0
+                else "N/A"
+            )
+            for x, total in [
+                (module_scores[0], pt_s["total"]),
+                (module_scores[1], pha_s["total"]),
+                (module_scores[2], pssr_s["total"]),
+                (module_scores[3], moc_s["total"]),
+                (module_scores[4], incident_total),
+                (module_scores[5], barrier_assessed),
+            ]
+        ],
+        textposition="outside",
+        marker=dict(color=["#159447" if x >= 80 else "#e5a400" if x >= 60 else "#d71920" for x in module_scores]),
+    ))
+    fig_mod.update_layout(
+        height=270,
+        margin=dict(l=5, r=42, t=4, b=4),
+        xaxis=dict(range=[0, 110], ticksuffix="%", showgrid=True, gridcolor="#e4ebf1"),
+        yaxis=dict(autorange="reversed", tickfont=dict(size=8)),
+        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
+    )
+    st.plotly_chart(fig_mod, use_container_width=True, config={"displayModeBar": False}, key="apex_module_scores")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------------------------------------------
+# MANAGEMENT ATTENTION
 # ------------------------------------------------------------
 with right:
-    st.markdown(
-        '<div class="panel"><div class="panel-title">'
-        '3. DEPARTMENT WISE IMPLEMENTATION SCORE'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    rows = []
-    for rank, dept in enumerate(DEPARTMENTS, start=1):
-        item = data[dept]
-
-        rows.append({
-            "RANK": rank,
-            "DEPARTMENT": dept,
-            "SCORE (%)": "—",
-            "DATA STATUS": "DATA AVAILABLE" if item["available"] else "DATA PENDING",
-            "FILE": item["file"] or "—",
-        })
-
-    dept_df = pd.DataFrame(rows)
-
-    st.dataframe(
-        dept_df,
-        use_container_width=True,
-        hide_index=True,
-        height=440,
-        column_config={
-            "RANK": st.column_config.NumberColumn(width="small"),
-            "DEPARTMENT": st.column_config.TextColumn(width="medium"),
-            "SCORE (%)": st.column_config.TextColumn(width="small"),
-            "DATA STATUS": st.column_config.TextColumn(width="medium"),
-            "FILE": st.column_config.TextColumn(width="medium"),
-        },
-    )
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">MANAGEMENT ATTENTION</div>', unsafe_allow_html=True)
+    attention = [
+        ("PSSR OVERDUE", pssr_s["overdue"], "critical"),
+        ("OPEN MOC", moc_s["open"], "warn"),
+        ("INTERLOCK PENDING", interlock_pending, "critical"),
+        ("UNACCEPTABLE BARRIER", barrier_unacceptable, "critical"),
+        ("AUDIT PENDING", audit_pending, "warn"),
+    ]
+    for label, value, cls in attention:
+        st.markdown(f'<div class="apex-att {cls if cls != "critical" else ""}"><div class="apex-att-label">{label}</div><div class="apex-att-value">{value:,}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
-# REAL DATA GRAPHICS
+# DEPARTMENT-WISE EXECUTIVE RANKING
 # ============================================================
-st.markdown(
-    '<div class="section-title">📈 REAL DEPARTMENT DATA ANALYSIS</div>',
-    unsafe_allow_html=True,
+st.markdown('<div class="apex-section">DEPARTMENT-WISE PSM PERFORMANCE</div>', unsafe_allow_html=True)
+
+raw_sets = [raw_pt, raw_pha, raw_pssr, raw_moc, raw_incident]
+department_scores = []
+
+# Department ranking:
+# - All Departments -> show every department
+# - Individual department -> show only the selected department
+ranking_departments = (
+    ALL_DEPARTMENTS[1:]
+    if selected_department == "All Departments"
+    else [selected_department]
 )
 
-g1, g2, g3 = st.columns(3)
+for department in ranking_departments:
+    scores = []
+    for dataset in raw_sets:
+        if dataset is None or dataset.empty:
+            continue
+        ddf = filter_selected_department(dataset, department)
+        if ddf.empty:
+            continue
+        if dataset is raw_incident:
+            inv_col = find_col(ddf, ["Investigation status", "Investigation Status", "Investigation", "Status"])
+            if inv_col:
+                total = len(ddf)
+                inv = ddf[inv_col].fillna("").astype(str).str.strip().str.lower()
+                done = int(inv.isin(["completed", "complete", "closed", "done"]).sum())
+                scores.append(done / total * 100 if total else 100)
+        else:
+            ss = safe_status(ddf)
+            if ss["total"]:
+                if dataset is raw_moc:
+                    scores.append(ss["closed"] / ss["total"] * 100)
+                else:
+                    scores.append(ss["completed"] / ss["total"] * 100)
+    if scores:
+        department_scores.append({"Department": department, "PSM Score": sum(scores) / len(scores)})
 
-# ------------------------------------------------------------
-# Incident chart
-# ------------------------------------------------------------
-with g1:
-    incident_rows = []
-    for dept in available:
-        incident_rows.append({
-            "Department": dept,
-            "L1": data[dept]["l1"],
-            "L2": data[dept]["l2"],
-            "L3": data[dept]["l3"],
-            "L4": data[dept]["l4"],
-        })
+department_df = pd.DataFrame(department_scores)
 
-    if incident_rows:
-        inc_df = pd.DataFrame(incident_rows)
-
-        fig = go.Figure()
-        for level in ["L1", "L2", "L3", "L4"]:
-            fig.add_trace(
-                go.Bar(
-                    x=inc_df["Department"],
-                    y=inc_df[level],
-                    name=level,
-                )
-            )
-
-        fig.update_layout(
-            title="PROCESS SAFETY INCIDENTS",
-            barmode="stack",
-            height=330,
-            margin=dict(l=10, r=10, t=45, b=80),
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            legend=dict(orientation="h"),
-            xaxis=dict(tickangle=-35),
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
-    else:
-        st.info("No department Excel data available.")
-
-# ------------------------------------------------------------
-# Recommendations chart
-# ------------------------------------------------------------
-with g2:
-    if available:
-        rec_df = pd.DataFrame([
-            {
-                "Department": d,
-                "Open Recommendations": data[d]["recommendations_open"],
-            }
-            for d in available
-        ])
-
-        fig = go.Figure(
-            go.Bar(
-                x=rec_df["Department"],
-                y=rec_df["Open Recommendations"],
-                text=rec_df["Open Recommendations"],
-                textposition="outside",
-            )
-        )
-
-        fig.update_layout(
-            title="OPEN RECOMMENDATIONS",
-            height=330,
-            margin=dict(l=10, r=10, t=45, b=80),
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            xaxis=dict(tickangle=-35),
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
-    else:
-        st.info("No department Excel data available.")
-
-# ------------------------------------------------------------
-# Interlock chart
-# ------------------------------------------------------------
-with g3:
-    if available:
-        interlock_df = pd.DataFrame([
-            {
-                "Department": d,
-                "Interlock Open": data[d]["interlock_open"],
-                "Normalization Overdue": data[d]["normalisation_overdue"],
-            }
-            for d in available
-        ])
-
-        fig = go.Figure()
-        fig.add_trace(
-            go.Bar(
-                x=interlock_df["Department"],
-                y=interlock_df["Interlock Open"],
-                name="Interlock Open",
-            )
-        )
-        fig.add_trace(
-            go.Bar(
-                x=interlock_df["Department"],
-                y=interlock_df["Normalization Overdue"],
-                name="Normalization Overdue",
-            )
-        )
-
-        fig.update_layout(
-            title="INTERLOCK / NORMALISATION STATUS",
-            barmode="group",
-            height=330,
-            margin=dict(l=10, r=10, t=45, b=80),
-            paper_bgcolor="white",
-            plot_bgcolor="white",
-            legend=dict(orientation="h"),
-            xaxis=dict(tickangle=-35),
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
-    else:
-        st.info("No department Excel data available.")
-
-# ============================================================
-# ACTION TRACKER
-# ============================================================
-st.markdown(
-    '<div class="section-title">4. APEX COMMITTEE ACTION / RECOMMENDATION TRACKER</div>',
-    unsafe_allow_html=True,
-)
-
-a1, a2, a3, a4 = st.columns(4)
-
-with a1:
-    st.metric("OPEN RECOMMENDATIONS", fmt_number(total_open_recommendations))
-
-with a2:
-    st.metric(
-        "THIRD PARTY DELAYED",
-        fmt_number(sum(data[d]["third_party_delayed"] for d in available)),
-    )
-
-with a3:
-    st.metric(
-        "PHA DELAYED",
-        fmt_number(sum(data[d]["pha_delayed"] for d in available)),
-    )
-
-with a4:
-    st.metric(
-        "AUDIT DELAYED",
-        fmt_number(sum(data[d]["audit_delayed"] for d in available)),
-    )
-
-# ============================================================
-# REAL DATA DETAIL TABLE
-# ============================================================
-st.markdown(
-    '<div class="section-title">5. DEPARTMENT KPI DETAIL — REAL EXCEL DATA</div>',
-    unsafe_allow_html=True,
-)
-
-detail_rows = []
-
-for dept in available:
-    x = data[dept]
-
-    detail_rows.append({
-        "Department": dept,
-        "Incidents L1-L4": fmt_number(x["incidents"]),
-        "Equipment Failure": fmt_number(x["equipment_failure"]),
-        "Barrier Unacceptable": fmt_number(x["barrier_unacceptable"]),
-        "Open Recommendations": fmt_number(x["recommendations_open"]),
-        "MOC Pending": fmt_number(x["moc_pending"]),
-        "Interlock Open": fmt_number(x["interlock_open"]),
-        "Normalization Overdue": fmt_number(x["normalisation_overdue"]),
-        "PT Actual": fmt_number(x["pt_actual"]),
-        "PT Planned": fmt_number(x["pt_plan"]),
-        "PHA Actual": fmt_number(x["pha_actual"]),
-        "PHA Planned": fmt_number(x["pha_plan"]),
-    })
-
-if detail_rows:
-    detail_df = pd.DataFrame(detail_rows)
-
-    st.dataframe(
-        detail_df,
-        use_container_width=True,
-        hide_index=True,
-        height=250,
-    )
+if not department_df.empty:
+    department_df = department_df.sort_values("PSM Score", ascending=False).reset_index(drop=True)
+    rank_cols = st.columns([0.9, 2.4, 1.2, 1.2], gap="small")
+    for c, h in zip(rank_cols, ["RANK", "DEPARTMENT", "PSM SCORE", "STATUS"]):
+        c.markdown(f'<div style="background:#073f78;color:#fff;padding:7px 8px;font-size:10px;font-weight:900;">{h}</div>', unsafe_allow_html=True)
+    for idx, row in department_df.iterrows():
+        score = float(row["PSM Score"])
+        cls = "#159447" if score >= 80 else "#e5a400" if score >= 60 else "#d71920"
+        status = "HEALTHY" if score >= 80 else "WATCH" if score >= 60 else "CRITICAL"
+        vals = [str(idx + 1), str(row["Department"]), f"{score:.1f}%", status]
+        row_cols = st.columns([0.9, 2.4, 1.2, 1.2], gap="small")
+        for j, (c, val) in enumerate(zip(row_cols, vals)):
+            extra = f"color:{cls};font-weight:900;" if j >= 2 else "color:#173f70;"
+            c.markdown(f'<div style="background:#fff;border-bottom:1px solid #e2e9ef;padding:8px 8px;font-size:12px;{extra}">{val}</div>', unsafe_allow_html=True)
 else:
-    st.info("No actual department Excel data is currently available.")
+    st.info("Department-wise performance data is not available.")
+
+# ============================================================
+# CRITICAL MODULE SNAPSHOT
+# ============================================================
+st.markdown('<div class="apex-section">CRITICAL MODULE SNAPSHOT</div>', unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3, gap="small")
+
+with c1:
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">PSSR GOVERNANCE</div>', unsafe_allow_html=True)
+    a, b, c = st.columns(3, gap="small")
+    a.metric("TOTAL", pssr_s["total"])
+    b.metric("COMPLETED", pssr_s["completed"])
+    c.metric("OVERDUE", pssr_s["overdue"])
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with c2:
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">MANAGEMENT OF CHANGE</div>', unsafe_allow_html=True)
+    a, b = st.columns(2, gap="small")
+    a.metric("OPEN", moc_s["open"])
+    b.metric("CLOSED", moc_s["closed"])
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with c3:
+    st.markdown('<div class="apex-panel"><div class="apex-panel-title">PROCESS SAFETY INCIDENT</div>', unsafe_allow_html=True)
+    a, b = st.columns(2, gap="small")
+    a.metric("TOTAL", incident_total)
+    b.metric("PENDING", incident_pending)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================
+# APEX DECISION BOARD
+# ============================================================
+st.markdown('<div class="apex-section">APEX COMMITTEE DECISION BOARD</div>', unsafe_allow_html=True)
+d1, d2, d3, d4 = st.columns(4, gap="small")
+
+cards = [
+    (d1, "🔴", "IMMEDIATE ACTION", pssr_s["overdue"] + interlock_pending + barrier_unacceptable, "Critical safety exposure"),
+    (d2, "🟠", "MANAGEMENT FOLLOW-UP", moc_s["open"] + audit_pending, "Governance actions"),
+    (d3, "⚠️", "INVESTIGATION", incident_pending, "Incident closure"),
+    (d4, "🟢", "PSM HEALTH", f"{overall_score:.1f}%", "Current integrated score"),
+]
+
+for container, icon, title, value, note in cards:
+    with container:
+        st.markdown(f'<div class="apex-kpi" style="text-align:center;min-height:96px;"><div style="font-size:20px;">{icon}</div><div class="apex-kpi-label">{title}</div><div class="apex-kpi-value">{value}</div><div class="apex-kpi-note">{note}</div></div>', unsafe_allow_html=True)
 
 # ============================================================
 # FOOTER
 # ============================================================
-st.markdown(
-    """
-    <div style="
-        text-align:center;
-        color:#52718a;
-        padding:12px;
-        font-size:12px;
-        font-weight:600;
-    ">
-        PSM Dashboard • Screen 02 • Apex Committee Performance
-        • Real Excel data where available
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown('''
+<div class="apex-footer">
+APEX COMMITTEE • PROCESS SAFETY MANAGEMENT • EXECUTIVE GOVERNANCE VIEW • LIVE DATA FROM GOOGLE SHEETS
+</div>
+''', unsafe_allow_html=True)
+
+

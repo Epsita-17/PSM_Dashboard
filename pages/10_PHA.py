@@ -1,1810 +1,205 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
-import os
-import base64
+import requests
 import re
-import mimetypes
-from datetime import datetime
-from pathlib import Path
-from io import BytesIO
-from urllib.request import Request, urlopen
-from openpyxl import load_workbook
-from streamlit_autorefresh import st_autorefresh
+from io import StringIO
+from difflib import SequenceMatcher
+from html import escape
+from html.parser import HTMLParser
 
-
-# =========================================================
+# ============================================================
 # PAGE CONFIG
-# =========================================================
+# ============================================================
 
 st.set_page_config(
-    page_title="PSM Dashboard - PHA",
-    page_icon="📊",
+    page_title="PHA Dashboard",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-
-if "status_filter" not in st.session_state:
-    st.session_state.status_filter = "All"
-
-if "page_number" not in st.session_state:
-    st.session_state.page_number = 1
-
-if "recommendation_page_number" not in st.session_state:
-    st.session_state.recommendation_page_number = 1
-
-if "department_selector" not in st.session_state:
-    st.session_state.department_selector = "All Departments"
-
-if "upload_pha_no" not in st.session_state:
-    st.session_state.upload_pha_no = ""
-
-if "open_upload_dialog" not in st.session_state:
-    st.session_state.open_upload_dialog = False
-
-if "view_pha_no" not in st.session_state:
-    st.session_state.view_pha_no = ""
-
-if "open_view_dialog" not in st.session_state:
-    st.session_state.open_view_dialog = False
-
-# =========================================================
-# AUTO REFRESH
-# IMPORTANT:
-# Do not refresh while upload dialog is open.
-# This prevents the upload popup from unexpectedly closing.
-# =========================================================
-
-if not st.session_state.open_upload_dialog:
-    st_autorefresh(
-        interval=100000,
-        key="psm_auto_refresh"
-    )
-
-# =========================================================
-# GOOGLE SHEET - SHEET2
-# =========================================================
-
-SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
-
-SHEET2_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/"
-    f"{SPREADSHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet=PHA"
-)
-PHA_RECOMMENDATION_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/"
-    f"{SPREADSHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet=PHA%20RECOMENDATION"
-)
-
-
-@st.cache_data(ttl=60)
-def get_pha_data():
-    try:
-        data = pd.read_csv(SHEET2_CSV_URL)
-
-        data.columns = (
-            data.columns
-            .astype(str)
-            .str.replace("\xa0", " ", regex=False)
-            .str.replace("\n", " ", regex=False)
-            .str.strip()
-        )
-
-        for col in data.columns:
-
-            if data[col].dtype == "object":
-                data[col] = (
-                    data[col]
-                    .astype(str)
-                    .str.replace("\xa0", " ", regex=False)
-                    .str.strip()
-                )
-
-        data = data.replace(
-            {
-                "nan": "",
-                "NaN": "",
-                "NAN": ""
-            }
-        )
-
-        return data
-
-    except Exception as exc:
-
-        st.error(
-            f"Unable to load Google Sheet Sheet2: {exc}"
-        )
-
-        return pd.DataFrame()
-
-
-df = get_pha_data()
-
-
-# =========================================================
-# GOOGLE SHEET UPLOAD DOCUMENT LINKS
-# =========================================================
-# The PHA "View Document" dashboard column uses the link
-# from the SAME Google Sheet row's "Upload Document" cell.
-#
-# This supports:
-#   1. A normal URL stored directly in the cell.
-#   2. A Google Sheets rich-text hyperlink.
-#   3. A HYPERLINK(...) formula.
-# =========================================================
-
-PHA_UPLOAD_COLUMN = "Upload Document"
-PHA_NO_COLUMN = "PHA No"
-
-
-@st.cache_data(ttl=60)
-def get_pha_upload_document_links():
-    links = {}
-
-    try:
-        xlsx_url = (
-            f"https://docs.google.com/spreadsheets/d/"
-            f"{SPREADSHEET_ID}/export?format=xlsx"
-        )
-
-        request = Request(
-            xlsx_url,
-            headers={"User-Agent": "Mozilla/5.0"}
-        )
-
-        with urlopen(request, timeout=30) as response:
-            workbook_bytes = response.read()
-
-        workbook = load_workbook(
-            filename=BytesIO(workbook_bytes),
-            read_only=False,
-            data_only=False
-        )
-
-        if "PHA" not in workbook.sheetnames:
-            workbook.close()
-            return links
-
-        worksheet = workbook["PHA"]
-
-        headers = {}
-
-        for cell in worksheet[1]:
-            if cell.value is not None:
-                header = (
-                    str(cell.value)
-                    .replace("\xa0", " ")
-                    .replace("\n", " ")
-                    .strip()
-                )
-                headers[header] = cell.column
-
-        pha_col = headers.get(PHA_NO_COLUMN)
-        upload_col = headers.get(PHA_UPLOAD_COLUMN)
-
-        if not pha_col or not upload_col:
-            workbook.close()
-            return links
-
-        formula_pattern = re.compile(
-            r'=HYPERLINK\s*\(\s*["\']([^"\']+)["\']',
-            re.IGNORECASE
-        )
-
-        for row_number in range(
-            2,
-            worksheet.max_row + 1
-        ):
-
-            pha_cell = worksheet.cell(
-                row=row_number,
-                column=pha_col
-            )
-
-            upload_cell = worksheet.cell(
-                row=row_number,
-                column=upload_col
-            )
-
-            pha_number = (
-                ""
-                if pha_cell.value is None
-                else str(pha_cell.value).strip()
-            )
-
-            if not pha_number:
-                continue
-
-            document_link = ""
-
-            # Rich-text / normal Excel hyperlink target.
-            if (
-                upload_cell.hyperlink
-                and upload_cell.hyperlink.target
-            ):
-                document_link = (
-                    str(upload_cell.hyperlink.target)
-                    .strip()
-                )
-
-            # HYPERLINK("url","text") formula.
-            if (
-                not document_link
-                and isinstance(upload_cell.value, str)
-            ):
-                match = formula_pattern.search(
-                    upload_cell.value
-                )
-
-                if match:
-                    document_link = (
-                        match.group(1)
-                        .strip()
-                    )
-
-            # Plain URL.
-            if (
-                not document_link
-                and isinstance(upload_cell.value, str)
-            ):
-                candidate = upload_cell.value.strip()
-
-                if re.match(
-                    r"^https?://",
-                    candidate,
-                    re.IGNORECASE
-                ):
-                    document_link = candidate
-
-            if document_link:
-                links[pha_number] = document_link
-
-        workbook.close()
-
-    except Exception:
-        # CSV fallback below will still work when the cell
-        # itself contains the actual URL.
-        return links
-
-    return links
-
-
-pha_upload_document_links = (
-    get_pha_upload_document_links()
-)
-
-
-@st.cache_data(ttl=60)
-def get_pha_recommendation_data():
-    try:
-
-        data = pd.read_csv(
-            PHA_RECOMMENDATION_CSV_URL
-        )
-
-        data.columns = (
-            data.columns
-            .astype(str)
-            .str.replace("\xa0", " ", regex=False)
-            .str.replace("\n", " ", regex=False)
-            .str.strip()
-        )
-
-        for col in data.columns:
-
-            if data[col].dtype == "object":
-                data[col] = (
-                    data[col]
-                    .astype(str)
-                    .str.replace(
-                        "\xa0",
-                        " ",
-                        regex=False
-                    )
-                    .str.strip()
-                )
-
-        data = data.replace(
-            {
-                "nan": "",
-                "NaN": "",
-                "NAN": ""
-            }
-        )
-
-        return data
-
-    except Exception as exc:
-
-        st.error(
-            f"Unable to load PHA RECOMENDATION sheet: {exc}"
-        )
-
-        return pd.DataFrame()
-
-
-pha_recommendation_df = get_pha_recommendation_data()
-
-# =========================================================
-# DOCUMENT STORAGE
-# PT.PY IMPLEMENTATION ADAPTED ONLY FOR PHA
-# =========================================================
-
-DOCUMENT_FOLDER = Path(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "pha_documents"
-    )
-)
-
-DOCUMENT_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True
-)
-
-
-def safe_pha_folder_name(pha_no):
-    value = str(pha_no).strip()
-    value = re.sub(r"[^A-Za-z0-9._-]+", "_", value)
-    return value or "unknown_pha"
-
-
-def get_pha_document_folder(pha_no):
-    folder = DOCUMENT_FOLDER / safe_pha_folder_name(pha_no)
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
-
-
-def get_pha_documents(pha_no):
-    folder = get_pha_document_folder(pha_no)
-    return sorted(
-        [p for p in folder.iterdir() if p.is_file()],
-        key=lambda p: p.name.lower()
-    )
-
-
-def save_pha_document(pha_no, uploaded_file):
-    folder = get_pha_document_folder(pha_no)
-
-    # Delete the previous document for this PHA.
-    for old_file in folder.iterdir():
-        if old_file.is_file():
-            try:
-                old_file.unlink()
-            except OSError:
-                pass
-
-    # Save only the newly uploaded document.
-    original_name = Path(uploaded_file.name).name
-    stem = Path(original_name).stem
-    suffix = Path(original_name).suffix
-
-    safe_stem = re.sub(
-        r"[^A-Za-z0-9._-]+",
-        "_",
-        stem
-    ).strip("._-")
-
-    safe_stem = safe_stem or "document"
-
-    target = folder / f"{safe_stem}{suffix}"
-
-    target.write_bytes(
-        uploaded_file.getbuffer()
-    )
-
-    return target
-
-
-def get_document_mime_type(path):
-    mime_type, _ = mimetypes.guess_type(str(path))
-    return mime_type or "application/octet-stream"
-
-
-# =========================================================
-# REQUIRED COLUMNS
-# =========================================================
-
-required_columns = [
-
-    "Sr No",
-    "PHA No",
-    "Department",
-    "Name of PHA",
-    "Status  (Ongoing/Completed)",
-    "Upload Document"
-]
-
-STATUS_COLUMN = "Status  (Ongoing/Completed)"
-
-# =========================================================
-# CHECK DATA
-# =========================================================
-
-if df.empty:
-    st.error(
-        "No data found in Google Sheet PHA."
-    )
-
-    st.stop()
-
-missing_columns = [
-    column
-    for column in required_columns
-    if column not in df.columns
-]
-
-if missing_columns:
-    st.error(
-        "Some required columns are missing from PHA."
-    )
-
-    st.write("Missing columns:")
-    st.write(missing_columns)
-
-    st.write("Columns found in PHA:")
-    st.write(df.columns.tolist())
-
-    st.stop()
-
-# =========================================================
-# GLOBAL CSS
-# STEEL BLUE INDUSTRIAL THEME
-# FONT SIZES AND LETTER SPACING RETAINED
-# =========================================================
-
+# ============================================================
+# STYLE
+# ============================================================
 st.markdown(
     """
-<style>
-/* =====================================================
-   REFERENCE-STYLE WHITE / NAVY INDUSTRIAL THEME
-   VISUAL ONLY — NO DATA / LOGIC CHANGES
-   ===================================================== */
+    <style>
 
-* {
-    box-sizing: border-box;
-}
+    .stApp {
+        background:#f3f8fc;
+    }
 
-html,
-body,
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > .main {
-    margin: 0 !important;
-    padding: 0 !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-}
+    #MainMenu, footer {
+        visibility:hidden;
+    }
 
-#MainMenu,
-header,
-footer,
-[data-testid="stHeader"],
-[data-testid="stToolbar"] {
-    display: none !important;
-}
 
-[data-testid="stMainBlockContainer"],
-[data-testid="stAppViewBlockContainer"],
+
 .block-container {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 6px !important;
+    padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-35px !important;
+    margin-bottom:0px !important;
+    max-width:100%;
 }
 
-[data-testid="stAppViewContainer"] > .main > div {
-    padding: 0 !important;
+/* REMOVE BOTTOM SPACE */
+[data-testid="stAppViewContainer"] {
+    padding-bottom:0px !important;
 }
 
-iframe {
-    display: block !important;
-    border: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
+[data-testid="stMainBlockContainer"] {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
 }
 
-
-/* =====================================================
-   MAIN BACKGROUND
-   ===================================================== */
-
-.stApp {
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #f7faff 55%,
-            #eef4fa 100%
-        ) !important;
-
-    color: #092d5c !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-}
-
-.stApp * {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
-}
-
-
-/* =====================================================
-   SPACING
-   ===================================================== */
-
-[data-testid="stVerticalBlock"] {
-    gap: 0.00rem !important;
-}
-
-[data-testid="stHorizontalBlock"] {
-    gap: 8px !important;
-}
-
-
-/* =====================================================
-   FILTER LABELS
-   ===================================================== */
-
-[data-testid="stSelectbox"] label {
-    color: #092d5c !important;
-    font-size: 12px !important;
-    font-weight: 900 !important;
-    letter-spacing: .35px !important;
-    margin-bottom: 3px !important;
-    padding-left: 4px !important;
-}
-
-
-/* =====================================================
-   SELECT BOX
-   ===================================================== */
-
-div[data-baseweb="select"] > div {
-    height: 38px !important;
-    min-height: 38px !important;
-    border-radius: 6px !important;
-
-    background:
-        #ffffff !important;
-
-    border:
-        1.5px solid #a9bfd8 !important;
-
-    box-shadow:
-        0 2px 5px rgba(8,45,92,.10),
-        inset 0 1px 0 rgba(255,255,255,.95) !important;
-}
-
-div[data-baseweb="select"]:hover > div {
-    border-color: #176fc1 !important;
-    box-shadow:
-        0 3px 8px rgba(8,76,135,.16) !important;
-}
-
-div[data-baseweb="select"] * {
-    color: #092d5c !important;
-    font-size: 12px !important;
-    font-weight: 700 !important;
-}
-
-div[data-baseweb="select"] svg {
-    fill: #0a4e91 !important;
-}
-
-
-/* =====================================================
-   MONTH + DEPARTMENT — ALIGN WITH RESET FILTERS
-   ===================================================== */
-
-/*
-   IMPORTANT:
-   Move only the two selectbox widgets.
-   The 22px spacers and the Reset Filters 46px spacer
-   remain unchanged, so the Reset Filters position is
-   not affected.
-*/
-
-/* Month */
-div[data-testid="stColumn"]:has(.month-filter-anchor)
-div[data-testid="stSelectbox"],
-div[data-testid="column"]:has(.month-filter-anchor)
-div[data-testid="stSelectbox"] {
-    transform: translateY(-5px) !important;
-}
-
-/* Department */
-div[data-testid="stColumn"]:has(.department-filter-anchor)
-div[data-testid="stSelectbox"],
-div[data-testid="column"]:has(.department-filter-anchor)
-div[data-testid="stSelectbox"] {
-    transform: translateY(-5px) !important;
-}
-
-
-/* =====================================================
-   TEXT INPUT
-   ===================================================== */
-
-div[data-testid="stTextInput"] input {
-    height: 40px !important;
-    min-height: 40px !important;
-    border-radius: 6px !important;
-
-    background:
-        #ffffff !important;
-
-    border:
-        1.5px solid #a9bfd8 !important;
-
-    color: #092d5c !important;
-
-    font-size: 12px !important;
-    font-weight: 600 !important;
-
-    box-shadow:
-        0 2px 5px rgba(8,45,92,.09),
-        inset 0 1px 2px rgba(0,0,0,.025) !important;
-}
-
-div[data-testid="stTextInput"] input:focus {
-    border-color: #126bc0 !important;
-
-    box-shadow:
-        0 0 0 1px #126bc0,
-        0 3px 9px rgba(18,107,192,.15) !important;
-}
-
-div[data-testid="stTextInput"] input::placeholder {
-    color: #657990 !important;
-    opacity: 1 !important;
-}
-
-
-/* =====================================================
-   3D INDUSTRIAL BUTTONS
-   ===================================================== */
-
-div.stButton > button {
-    height: 36px !important;
-    min-height: 36px !important;
-
-    border-radius: 6px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #e8f0f8 100%
-        ) !important;
-
-    border:
-        1.5px solid #9db7d2 !important;
-
-    color: #07366d !important;
-
-    font-size: 12px !important;
-    font-weight: 900 !important;
-
-    box-shadow:
-        0 3px 0 #7897b6,
-        0 5px 9px rgba(6,48,91,.13),
-        inset 0 1px 0 rgba(255,255,255,.95) !important;
-
-    transition:
-        transform .12s ease,
-        box-shadow .12s ease,
-        background .12s ease !important;
-}
-
-div.stButton > button:hover {
-    border-color: #126bc0 !important;
-
-    color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #1685db 0%,
-            #075ca8 100%
-        ) !important;
-
-    transform:
-        translateY(-1px) !important;
-
-    box-shadow:
-        0 4px 0 #06477f,
-        0 7px 13px rgba(4,74,135,.24),
-        inset 0 1px 0 rgba(255,255,255,.28) !important;
-}
-
-div.stButton > button:active {
-    transform:
-        translateY(2px) !important;
-
-    box-shadow:
-        0 1px 0 #06477f,
-        0 3px 6px rgba(4,74,135,.18) !important;
-}
-
-div.stButton > button:disabled {
-    color: #8293a7 !important;
-    background: #eef3f7 !important;
-    border-color: #c5d2df !important;
-    box-shadow: none !important;
-}
-
-
-/* =====================================================
-   PT REGISTER TOOLBAR — ONLY THESE 4 BUTTONS
-   ALL / COMPLETED / ONGOING / REFRESH DATA
-   NORMAL = WHITE SHINING
-   HOVER = DEEP OCEAN BLUE
-   ===================================================== */
-
-/* The toolbar is the horizontal block containing the
-   Search input. Columns 2–5 are the four buttons. */
-
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(2) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(3) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(4) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(5) button {
-
-    background: #ffffff !important;
-    background-image: none !important;
-
-    color:
-        #075985 !important;
-
-    border:
-        1.5px solid #b8cfe0 !important;
-
-    box-shadow:
-        0 2px 4px rgba(0,0,0,.12),
-        inset 0 1px 0 #ffffff !important;
-
-    transition:
-        background .15s ease,
-        color .15s ease,
-        border-color .15s ease,
-        transform .15s ease,
-        box-shadow .15s ease !important;
-}
-
-
-/* Mouse over ONLY the four toolbar buttons */
-
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(2) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(3) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(4) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(5) button:hover {
-
-    background:
-        linear-gradient(
-            180deg,
-            #0b6f9f 0%,
-            #064f73 52%,
-            #043d5c 100%
-        ) !important;
-
-    color:
-        #ffffff !important;
-
-    border-color:
-        #064f73 !important;
-
-    transform:
-        translateY(-1px) !important;
-
-    box-shadow:
-        0 4px 0 #032f46,
-        0 8px 15px rgba(4,79,115,.30),
-        inset 0 1px 0 rgba(255,255,255,.28) !important;
-}
-
-
-/* =====================================================
-   KPI CARDS
-   ===================================================== */
-
-.kpi-card {
-    position: relative;
-    height: 145px;
-    overflow: hidden;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        );
-
-    border:
-        1.5px solid #c2d3e4;
-
-    border-top:
-        4px solid #176fc1;
-
-    border-radius: 8px;
-
-    padding: 17px 16px;
-
-    box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98);
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease;
-}
-
-.kpi-card:hover {
-    transform: translateY(-2px);
-
-    box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1);
-}
-
-.kpi-card.completed {
-    border-top-color: #19a657;
-}
-
-.kpi-card.ongoing {
-    border-top-color: #f18d05;
-}
-
-
-/* =====================================================
-   KPI ICONS
-   ===================================================== */
-
-.kpi-icon {
-    display: none !important;
-}
-
-
-
-
-/* =====================================================
-   TOTAL PT — REMOVE ICON ONLY
-   ===================================================== */
-
-.kpi-card.total .kpi-icon {
-    display: none;
-}
-
-.kpi-card.total .kpi-content {
-    margin-left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    text-align: center !important;
-}
-
-
-/* =====================================================
-   KPI TEXT — HIGH CONTRAST
-   ===================================================== */
-
-.kpi-content {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    text-align: center !important;
-}
-
-.kpi-card .kpi-label,
-.kpi-card .kpi-value {
-    width: 100% !important;
-    text-align: center !important;
-    align-self: center !important;
-}
-
-.kpi-card .kpi-description {
-    display: none !important;
-}
-
-.kpi-label {
-    color: #092d5c;
-    font-size: 15px;
-    font-weight: 900;
-    letter-spacing: .15px;
-
-    text-align: center;
-}
-
-.kpi-card.completed .kpi-label {
-    color: #08783c;
-}
-
-.kpi-card.ongoing .kpi-label {
-    color: #b96700;
-}
-
-.kpi-value {
-    font-size: 42px;
-    line-height: 1;
-    font-weight: 900;
-    margin-top: 6px;
-    color: #092d5c !important;
-
-    text-align: center;
-}
-
-/* KPI NUMBER = SAME COLOR AS KPI TEXT */
-.kpi-card.total .kpi-value {
-    color: #092d5c !important;
-}
-
-.kpi-card.completed .kpi-value {
-    color: #08783c !important;
-}
-
-.kpi-card.ongoing .kpi-value {
-    color: #b96700 !important;
-}
-
-.kpi-value.green {
-    color: #08783c !important;
-}
-
-.kpi-value.orange {
-    color: #b96700 !important;
-}
-
-.kpi-description {
-    color: #0a4e91 !important;
-    font-size: 11px;
-    font-weight: 700;
-    margin-top: 7px;
-
-    text-align: center;
-}
-
-.kpi-pattern {
-    display: none !important;
-}
-
-
-
-.kpi-arrow {
-    display: none !important;
-}
-
-
-/* =====================================================
-   PT REGISTER PANEL
-   ===================================================== */
-
-.register-wrap {
-    background: #ffffff;
-
-    border:
-        1.5px solid #b7cce1;
-
-    border-radius:
-        7px 7px 0 0;
-
-    overflow: hidden;
-
-    box-shadow:
-        0 4px 10px rgba(7,45,82,.12);
-}
-
-.register-title {
-    height: 40px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 17px;
-
-    color: #ffffff;
-
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: .25px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0a4f91 0%,
-            #063b70 100%
-        );
-
-    border-bottom:
-        2px solid #176fc1;
-
-    text-shadow:
-        0 1px 2px rgba(0,0,0,.25);
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.16);
-}
-
-.register-icon {
-    margin-right: 9px;
-    color: #ffffff;
-}
-
-
-/* =====================================================
-   TABLE HEADER — REFERENCE MATCH
-   ===================================================== */
-
-.table-head {
-    min-height: 43px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0b4f91 0%,
-            #063c73 100%
-        );
-
-    color: #ffffff;
-
-    border-right:
-        1px solid #8caecc;
-
-    border-top:
-        1px solid #2879ba;
-
-    border-bottom:
-        1px solid #052f5b;
-
-    font-size: 12px;
-    line-height: 1.15;
-    font-weight: 900;
-
-    text-align: center;
-    padding: 5px 3px;
-
-    text-shadow:
-        0 1px 2px rgba(0,0,0,.30);
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.16);
-}
-
-
-/* =====================================================
-   TABLE CELLS — DARK BLUE CLEAR TEXT
-   ===================================================== */
-
-.table-cell {
-    min-height: 43px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        #ffffff;
-
-    border-right:
-        1px solid #c8d6e4;
-
-    border-bottom:
-        1px solid #c8d6e4;
-
-    color:
-        #092d5c;
-
-    font-size:
-        11px;
-
-    line-height:
-        1.18;
-
-    font-weight:
-        600;
-
-    text-align:
-        center;
-
-    padding:
-        5px 4px;
-
-    word-break:
-        break-word;
-}
-
-.table-cell.alt {
-    background:
-        #f3f7fb;
-}
-
-.table-cell.left {
-    justify-content:
-        flex-start;
-
-    text-align:
-        left;
-
-    font-weight:
-        650;
-}
-/* =====================================================
-   STATUS — TEXT ONLY
-   ===================================================== */
-
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    min-width: auto;
-    padding: 0;
-
-    border-radius: 0;
-
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: .1px;
-
-    white-space: nowrap;
-}
-
-
-/* COMPLETED — GREEN TEXT ONLY */
-
-.status-completed {
-    background: transparent !important;
-    border: none !important;
-    color: #16A34A !important;
-    box-shadow: none !important;
-}
-
-
-/* ONGOING — ORANGE TEXT ONLY */
-
-.status-ongoing {
-    background: transparent !important;
-    border: none !important;
-    color: #EA8A00 !important;
-    box-shadow: none !important;
-}
-/* =====================================================
-   STREAMLIT TABLE ACTION BUTTONS
-   ===================================================== */
-
-.table-cell + div button,
-div[data-testid="column"] div.stButton > button {
-    font-size: 11px !important;
-    font-weight: 900 !important;
-}
-/* =====================================================
-   RECORD BAR / PAGINATION
-   ===================================================== */
-
-.record-bar {
-    height: 38px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 12px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #edf3f8 100%
-        );
-
-    color:
-        #173f6d;
-
-    font-size:
-        11px;
-
-    font-weight:
-        800;
-
-    border-top:
-        1px solid #c4d4e3;
-
-    border-bottom:
-        1px solid #c4d4e3;
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.9);
-}
-
-
-/* =====================================================
-   DOWNLOAD BUTTON
-   ===================================================== */
-
-div.stDownloadButton > button {
-    border-radius: 6px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff,
-            #e9f1f8
-        ) !important;
-
-    border:
-        1.5px solid #9eb8d2 !important;
-
-    color:
-        #083c76 !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        900 !important;
-
-    box-shadow:
-        0 3px 0 #7895b1,
-        0 5px 8px rgba(8,53,94,.12) !important;
-}
-
-div.stDownloadButton > button:hover {
-    color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #1685db,
-            #075ca8
-        ) !important;
-
-    border-color:
-        #075ca8 !important;
-}
-
-
-/* =====================================================
-   INFO / ALERT
-   ===================================================== */
-
-div[data-testid="stAlert"] {
-    border-radius: 6px !important;
-
-    color: #123b68 !important;
-
-    box-shadow:
-        0 2px 7px rgba(20,70,100,.08) !important;
-}
-
-
-/* =====================================================
-   FOOTER
-   ===================================================== */
-
-.footer {
-    height: 34px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: #ffffff;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0a4f91 0%,
-            #063563 100%
-        );
-
-    font-size:
-        11px;
-
-    font-weight:
-        800;
-
-    border-top:
-        2px solid #176fc1;
-
-    box-shadow:
-        0 -2px 8px rgba(0,0,0,.12);
-}
-
-
-/* =====================================================
-   SCROLLBAR
-   ===================================================== */
-
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #e9f0f6;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #8daac4;
-    border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #527fa6;
-}
-/* =====================================================
-   PHA-ONLY SECTIONS
-   Same white / navy industrial visual language as reference
-   ===================================================== */
-
-.pha-recommendation-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    padding: 8px 0 4px 0;
-}
-
-.pha-recommendation-card {
-    position: relative;
-    min-height: 155px;
-    overflow: hidden;
-    background: linear-gradient(145deg,#ffffff 0%,#ffffff 72%,#edf4fa 100%);
-    border: 1.5px solid #c2d3e4;
-    border-top: 4px solid #176fc1;
-    border-radius: 7px;
-    padding: 12px 13px;
-    box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98);
-}
-
-.pha-recommendation-card:hover {
-    border-top-color: #0a4f91;
-    transform: translateY(-1px);
-    box-shadow:
-        0 6px 14px rgba(6,48,91,.17),
-        inset 0 1px 0 rgba(255,255,255,1);
-}
-
-.pha-rec-number {
-    position:absolute;
-    top:9px;
-    right:10px;
-    min-width:28px;
-    height:25px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:0 6px;
-    border-radius:5px;
-    background:#eaf2f8;
-    border:1px solid #a9bfd8;
-    color:#0a4e91;
-    font-size:12px;
-    font-weight:900;
-}
-
-.pha-rec-title {
-    color:#092d5c;
-    font-size:14px;
-    font-weight:900;
-    padding-right:38px;
-    margin-bottom:8px;
-    line-height:1.15;
-}
-
-.pha-rec-recommendation {
-    min-height:52px;
-    padding:7px 8px;
-    margin-bottom:8px;
-    border-radius:5px;
-    background:#f3f7fb;
-    border-left:3px solid #176fc1;
-    border-top:1px solid #c8d6e4;
-    border-right:1px solid #c8d6e4;
-    border-bottom:1px solid #c8d6e4;
-    color:#092d5c;
-    font-size:10.5px;
-    font-weight:700;
-    line-height:1.3;
-}
-
-.pha-rec-label {
-    display:block;
-    color:#657990;
-    font-size:8px;
-    font-weight:900;
-    text-transform:uppercase;
-    letter-spacing:.3px;
-    margin-bottom:2px;
-}
-
-.pha-rec-value {
-    color:#092d5c;
-    font-size:10px;
-    font-weight:700;
-    line-height:1.2;
-    word-break:break-word;
-}
-
-.pha-rec-details {
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:6px;
+section.main {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
 }
 
-.pha-rec-detail {
-    min-height:36px;
-    padding:6px 7px;
+   div[data-testid="stMetric"] {
     background:#ffffff;
-    border:1px solid #c8d6e4;
-    border-radius:5px;
-}
-
-.pha-rec-status,
-.pha-rec-approval {
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-height:22px;
-    padding:2px 7px;
-    border-radius:4px;
-    font-size:9px;
-    font-weight:900;
-    line-height:1.1;
-}
-
-.pha-rec-status {
-    background:#fff5e5;
-    border:1px solid #e5b66b;
-    color:#b96700;
-}
-
-.pha-rec-approval {
-    background:#edf8f1;
-    border:1px solid #7bc59a;
-    color:#08783c;
-}
-
-.pha-recommendation-empty {
-    padding:18px;
-    text-align:center;
-    color:#657990;
-    background:#ffffff;
-    border:1px solid #b7cce1;
-    border-radius:6px;
-}
-
-.pha-rec-summary {
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:8px;
-    padding:8px 0 6px 0;
-}
-
-.pha-rec-kpi {
-    position:relative;
-    height:105px;
-    overflow:hidden;
-    background:linear-gradient(145deg,#ffffff 0%,#ffffff 72%,#edf4fa 100%);
-    border:1.5px solid #c2d3e4;
-    border-top:4px solid #176fc1;
+    border:1px solid #cbddea;
     border-radius:7px;
-    padding:15px 16px;
-    box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        inset 0 1px 0 rgba(255,255,255,.98);
+    padding:6px 6px !important;
+    min-height:72px;
+    overflow:visible !important;
 }
 
-.pha-rec-kpi.total { border-top-color:#176fc1; }
-.pha-rec-kpi.approved,
-.pha-rec-kpi.completed { border-top-color:#19a657; }
-.pha-rec-kpi.rejected,
-.pha-rec-kpi.overdue { border-top-color:#d9534f; }
-.pha-rec-kpi.pending { border-top-color:#f18d05; }
-
-.pha-rec-kpi-icon,
-.pha-rec-kpi-pattern,
-.pha-rec-kpi-arrow {
-    display:none !important;
+    div[data-testid="stMetricLabel"] {
+    font-size:9px !important;
+    font-weight:800 !important;
+    color:#20384f !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    line-height:1.1 !important;
+}
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] > div,
+div[data-testid="stMetricLabel"] p {
+    overflow:visible !important;
+    text-overflow:clip !important;
+    white-space:nowrap !important;
+    max-width:none !important;
 }
 
-.pha-rec-kpi-content {
-    margin-left:0 !important;
-    width:100%;
-    height:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
+div[data-testid="stMetricLabel"] p {
+    margin:0 !important;
+    padding:0 !important;
+    font-size:8px !important;
+    line-height:1.1 !important;
 }
-
-.pha-rec-kpi-label {
-    color:#092d5c;
-    font-size:14px;
-    font-weight:900;
-}
-
-.pha-rec-kpi.approved .pha-rec-kpi-label,
-.pha-rec-kpi.completed .pha-rec-kpi-label { color:#08783c; }
-
-.pha-rec-kpi.rejected .pha-rec-kpi-label,
-.pha-rec-kpi.overdue .pha-rec-kpi-label { color:#c63f3a; }
-
-.pha-rec-kpi.pending .pha-rec-kpi-label { color:#b96700; }
-
-.pha-rec-kpi-value {
-    font-size:38px;
-    line-height:1;
-    font-weight:900;
-    margin-top:5px;
-    color:#0a4e91;
-}
-
-.pha-rec-kpi-description {
-    color:#304d6d;
-    font-size:10px;
-    font-weight:700;
-    margin-top:5px;
-}
-
-.recommendation-wrap {
-    margin-top:5px;
-    margin-bottom: 5px;
-    background:#ffffff;
-    border:1.5px solid #b7cce1;
-    border-radius:7px 7px 0 0;
-    overflow:hidden;
-    box-shadow:0 4px 10px rgba(7,45,82,.12);
-}
-
-.recommendation-title {
-    height:40px;
-    display:flex;
-    align-items:center;
-    padding:0 17px;
-    color:#ffffff;
-    font-size:18px;
-    font-weight:900;
-    letter-spacing:.25px;
-    background:linear-gradient(180deg,#0a4f91 0%,#063b70 100%);
-    border-bottom:2px solid #176fc1;
-}
-
-.recommendation-icon { margin-right:9px; color:#ffffff; }
-
-.recommendation-container {
-    width:100%;
-    overflow-x:auto;
-    border-left:1px solid #b7cce1;
-    border-right:1px solid #b7cce1;
-    border-bottom:1px solid #b7cce1;
-}
-
-.recommendation-table {
-    width:100%;
-    border-collapse:collapse;
-    table-layout:auto;
-}
-
-/* RECOMMENDATION COLUMN — DECREASE WIDTH */
-.recommendation-table th:nth-child(2),
-.recommendation-table td:nth-child(2) {
-    width:400px !important;
-    max-width:400px !important;
-}
-
-.recommendation-table th {
-    background:linear-gradient(180deg,#0b4f91 0%,#063c73 100%);
-    color:#ffffff;
-    border:1px solid #8caecc;
-    font-size:12px;
-    font-weight:900;
-    text-align:center;
-    padding:7px 5px;
-}
-
-.recommendation-table td {
-    background:#ffffff;
-    color:#092d5c;
-    border:1px solid #c8d6e4;
-    font-size:10.5px;
-    text-align:left;
-    vertical-align:middle;
-    padding:7px 6px;
-    word-break:break-word;
-}
-
-/* RECOMENDATION REGISTER — SR NO CENTERED */
-.recommendation-table th:first-child,
-.recommendation-table td:first-child {
-    text-align:center !important;
-    vertical-align:middle !important;
-}
-
-.recommendation-table tr:nth-child(even) td { background:#f3f7fb; }
-.recommendation-table tr:hover td { background:#e7f0f8; }
-
-.recommendation-empty {
-    padding:18px;
-    text-align:center;
-    color:#657990;
-    font-size:11px;
-    background:#ffffff;
-    border:1px solid #b7cce1;
-}
-
-.recommendation-count {
-    height:34px;
-    display:flex;
-    align-items:center;
-    padding:0 12px;
-    color:#173f6d;
-    background:linear-gradient(180deg,#ffffff 0%,#edf3f8 100%);
-    font-size:10.5px;
-    font-weight:800;
-    border-left:1px solid #b7cce1;
-    border-right:1px solid #b7cce1;
-    border-bottom:1px solid #b7cce1;
-}
-
-@media (max-width:1100px) {
-    .pha-recommendation-grid,
-    .pha-rec-summary {
-        grid-template-columns:repeat(2,minmax(0,1fr));
+    div[data-testid="stMetricValue"] {
+        color:#123f77 !important;
+        font-size:24px !important;
+        font-weight:900 !important;
     }
-}
 
-@media (max-width:700px) {
-    .pha-recommendation-grid,
-    .pha-rec-summary {
-        grid-template-columns:1fr;
+    .module-card {
+        background:#ffffff;
+        border:1px solid #d3e0ea;
+        border-radius:7px;
+        padding:7px;
+        margin-bottom:8px;
+        box-shadow:0 1px 4px rgba(20,65,95,.06);
     }
-}
 
-/* =====================================================
-   PT.PY REFERENCE FONT — FINAL OVERRIDE
-   ===================================================== */
+    .module-title {
+        color:#073f78;
+        font-size:12px;
+        font-weight:900;
+        margin-bottom:6px;
+    }
 
-.stApp,
-.stApp *,
-.register-title,
-.recommendation-title,
-.table-head,
-.table-cell,
-.recommendation-table,
-.recommendation-table th,
-.recommendation-table td,
-.record-bar,
-div.stButton > button,
-div[data-testid="stTextInput"] input {
-    font-family: Arial, Helvetica, sans-serif !important;
-}
+    .section-bar {
+        background:#07518b;
+        color:#ffffff;
+        border-radius:4px;
+        padding:6px 8px;
+        font-size:10px;
+        font-weight:900;
+        margin:4px 0 6px 0;
+    }
 
-.register-title,
-.recommendation-title {
-    font-size: 18px !important;
-    font-weight: 900 !important;
-}
+    .live-bar {
+        background:#ffffff;
+        border:1px solid #cbddea;
+        border-radius:4px;
+        padding:5px 8px;
+        color:#4f6678;
+        font-size:10px;
+        margin-bottom:6px;
+    }
 
-.table-head,
-.recommendation-table th {
-    font-size: 12px !important;
-    font-weight: 900 !important;
-    line-height: 1.15 !important;
-}
+    .footer {
+        text-align:center;
+        color:#627689;
+        background:#edf4f8;
+        border-top:1px solid #cbdce7;
+        padding:7px;
+        font-size:10px;
+        font-weight:800;
+        margin-top:8px;
+    }
 
-.table-cell {
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    line-height: 1.18 !important;
-}
+    .small-note {
+        font-size:9px;
+        color:#6c7f8f;
+    }
 
-.table-cell.left {
-    font-weight: 650 !important;
-}
+    .stDataFrame {
+        border:1px solid #d5e0e8;
+    }
 
-.status-pill {
-    font-family: Arial, Helvetica, sans-serif !important;
-    font-size: 11px !important;
-    font-weight: 900 !important;
-}
 
-.recommendation-table td {
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    line-height: 1.18 !important;
-}
+/* ========================================================
+   REFRESH BUTTON — KEEP BELOW HEADER
+   ======================================================== */
 
-div[data-testid="stTextInput"] input {
-    font-size: 12px !important;
-    font-weight: 600 !important;
-}
-
-div.stButton > button {
-    font-size: 12px !important;
-    font-weight: 900 !important;
+div[data-testid="stButton"] {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
 }
 
 
-/* PHA REGISTER — left-align COMPLETED / ONGOING in Status column */
-.pha-table .pha-status-cell,
-.pha-table .pha-status-cell * {
-    text-align: left !important;
-}
 
+    /* ========================================================
+       MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
+       ======================================================== */
+    [data-testid="stPageLink"] {
+        margin-bottom:6px !important;
+    }
 
-/* PHA REGISTER — keep Status text at the left side */
-.pha-status-cell,
-.pha-status-cell > *,
-.pha-status-cell span,
-.pha-status-cell div {
-    text-align: left !important;
-    justify-content: flex-start !important;
-}
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
 
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover * {
+        color:#073f78 !important;
+        text-decoration:none !important;
+    }
 
-/* PHA REGISTER — Status left-side spacing */
-.pha-status-cell {
-    padding-left: 14px !important;
-    box-sizing: border-box !important;
-}
-
-</style>
-""",
-    unsafe_allow_html=True
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
+
+#=============================================================
+#HEADER CODE
+#=============================================================
+import streamlit as st
+import streamlit.components.v1 as components
+import base64
+from pathlib import Path
+from datetime import datetime
 
 
 # ============================================================
@@ -1844,6 +239,7 @@ st.markdown(
     }
 
 
+
     [data-testid="stDecoration"] {
         display: none !important;
         height: 0 !important;
@@ -1852,13 +248,13 @@ st.markdown(
     }
 
     .block-container {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-        padding-bottom: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        max-width: 100% !important;
-    }
+    padding-top: 0 !important;
+    margin-top: -30px !important;
+    padding-bottom: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
 
     .stApp {
         margin-top: 0 !important;
@@ -1867,7 +263,7 @@ st.markdown(
 
     iframe {
         display: block !important;
-        margin-top: -0px !important;
+        margin-top: -20px !important;
         padding-top: 0 !important;
         border: 0 !important;
     }
@@ -2040,7 +436,7 @@ header_html = """
 
     border-radius: 5px;
 
-    padding: 4px;
+    padding: 10px;
 
     display: flex;
 
@@ -2207,6 +603,7 @@ header_html = """
 
 }
 
+
 /* ============================================================
    SUB-SUBTITLE / TAGLINE
    ============================================================ */
@@ -2282,7 +679,7 @@ header_html = """
 
     position: absolute;
 
-    left: 15px;
+    left: 0;
 
     top: 6px;
 
@@ -2385,7 +782,7 @@ header_html = """
 
     width: 100%;
 
-    height: 7px;
+    height: 9px;
 
     background: #f28c00;
 
@@ -2449,7 +846,7 @@ header_html = """
 
             <div class="main-title">
 
-                PROCESS HAZARD ANALYSIS (PHA)
+                PROCESS HAZARD ANALYSIS(PHA)
 
                 <span class="main-title-orange"></span>
 
@@ -2570,1369 +967,1535 @@ components.html(
     scrolling=False
 )
 
-
-#==================================================================
-# =========================================================
-# RESET FILTER CALLBACK
-# =========================================================
-
-def reset_pha_filters():
-    # Reset status filter
-    st.session_state.status_filter = "All"
-
-    # Always return pagination to page 1
-    st.session_state.page_number = 1
-
-    # Reset Department selectbox to All Departments
-    st.session_state.department_selector = "All Departments"
-
-    # Clear document popup state
-    st.session_state.upload_pha_no = ""
-    st.session_state.view_pha_no = ""
-    st.session_state.open_upload_dialog = False
-    st.session_state.open_view_dialog = False
-
-
-# =========================================================
-# FILTER SECTION
-# =========================================================
-
-filter_month, filter_department, filter_reset = st.columns(
-    [1.0, 1.0, 0.34],
-    gap="small"
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
+        margin-bottom: -65px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-# ---------------------------------------------------------
-# MONTH
-# ---------------------------------------------------------
+# ============================================================
+# GOOGLE SHEET
+# ============================================================
 
-with filter_month:
-    # Same vertical spacing as all other controls
-    st.markdown(
-        "<div class='month-filter-anchor' style='height:22px;'></div>",
-        unsafe_allow_html=True
+SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
+PHA_SHEET = "PHA"
+RECOMMENDATION_SHEET = "PHA RECOMENDATION"
+
+# ============================================================
+# COLOURS
+# ============================================================
+
+BLUE = "#1769AA"
+NAVY = "#0B3A70"
+RED = "#D71920"
+GREEN = "#159447"
+YELLOW = "#D9A400"
+
+WHITE = "#FFFFFF"
+TEXT = "#17365D"
+MUTED = "#667085"
+BORDER = "#D5E2F0"
+ROW_ALT = "#F7FAFD"
+LIGHT_BLUE = "#F5F9FD"
+
+# ============================================================
+# PAGE / UI CSS
+# ============================================================
+
+st.markdown(
+    f""" 
+    <style> 
+
+    /* ---------- Remove Streamlit chrome ---------- */ 
+
+    #MainMenu {{ 
+        visibility: hidden; 
+    }} 
+
+    header {{ 
+        visibility: hidden; 
+        height: 0 !important; 
+    }} 
+
+    [data-testid="stHeader"] {{ 
+        display: none; 
+    }} 
+
+    [data-testid="stToolbar"] {{ 
+        display: none; 
+    }} 
+
+    footer {{ 
+        visibility: hidden; 
+    }} 
+
+    .stApp {{ 
+        background: {WHITE}; 
+    }} 
+
+    .main {{ 
+        background: {WHITE}; 
+    }} 
+
+    .block-container {{ 
+        max-width: 100% !important; 
+        padding-top: 0.8rem !important; 
+        padding-bottom: 1.5rem !important; 
+        padding-left: 1rem !important; 
+        padding-right: 1rem !important; 
+    }} 
+
+    /* ---------- General spacing ---------- */ 
+
+    div[data-testid="stVerticalBlock"] > div {{ 
+        gap: 0.55rem; 
+    }} 
+
+    /* ---------- Department filter ---------- */ 
+
+    .filter-label {{ 
+        color: {NAVY}; 
+        font-size: 16px; 
+        font-weight: 750; 
+        margin: 0 0 5px 0; 
+    }} 
+
+    div[data-baseweb="select"] > div {{ 
+        min-height: 46px; 
+        border-radius: 10px !important; 
+        border: 1px solid {BORDER} !important; 
+        background: #F5F7FA !important; 
+        box-shadow: none !important; 
+    }} 
+
+    div[data-baseweb="select"] span {{ 
+        color: {TEXT} !important; 
+        font-weight: 600 !important; 
+    }} 
+
+    /* ---------- Section containers ---------- */ 
+
+    div[data-testid="stVerticalBlockBorderWrapper"] {{ 
+        border: 1px solid {BORDER} !important; 
+        border-radius: 16px !important; 
+        background: {WHITE} !important; 
+        box-shadow: 0 3px 12px rgba(11, 58, 112, 0.055) !important; 
+        padding: 0.8rem 0.75rem 0.85rem 0.75rem !important; 
+        box-sizing: border-box !important; 
+    }} 
+
+    .section-title {{ 
+        color: {NAVY}; 
+        font-size: 21px; 
+        font-weight: 800; 
+        letter-spacing: 0.1px; 
+        margin: 0 0 12px 0; 
+    }} 
+
+    /* ---------- KPI cards ---------- */ 
+
+    .kpi-card {{ 
+        position: relative; 
+        width: 100%; 
+        height: 118px; 
+        min-height: 118px; 
+        max-height: 118px; 
+        box-sizing: border-box; 
+        background: {WHITE}; 
+        border: 1px solid {BORDER}; 
+        border-radius: 14px; 
+        padding: 14px 14px 12px 23px; 
+        overflow: hidden; 
+        box-shadow: 0 2px 9px rgba(11, 58, 112, 0.055); 
+    }} 
+
+    .kpi-card::before {{ 
+        content: ""; 
+        position: absolute; 
+        left: 0; 
+        top: 0; 
+        bottom: 0; 
+        width: 7px; 
+        background: var(--accent); 
+        border-radius: 14px 0 0 14px; 
+    }} 
+
+    .kpi-label {{ 
+        color: var(--accent) !important; 
+        font-size: 14px; 
+        font-weight: 800; 
+        line-height: 1.15; 
+        margin: 0 0 5px 0; 
+    }} 
+
+    .kpi-value {{ 
+        color: var(--accent) !important; 
+        font-size: 34px; 
+        font-weight: 850; 
+        line-height: 1; 
+        margin: 0 0 6px 0; 
+    }} 
+
+    .kpi-context {{ 
+        color: var(--accent) !important; 
+        font-size: 11.5px; 
+        font-weight: 650; 
+        line-height: 1.18; 
+        margin: 0; 
+    }} 
+
+    /* ---------- KPI section bottom breathing room ---------- */ 
+
+    .kpi-section-spacer {{ 
+        height: 12px; 
+        width: 100%; 
+        display: block; 
+    }} 
+
+    /* ---------- Equal KPI column/card height ---------- */ 
+
+    div[data-testid="stHorizontalBlock"] {{ 
+        align-items: stretch !important; 
+    }} 
+
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{ 
+        display: flex !important; 
+        align-items: stretch !important; 
+    }} 
+
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {{ 
+        width: 100%; 
+    }} 
+
+    /* ---------- Search ---------- */ 
+
+    div[data-testid="stTextInput"] input {{ 
+        min-height: 43px; 
+        border-radius: 10px !important; 
+        border: 1px solid {BORDER} !important; 
+        background: {WHITE} !important; 
+        color: {TEXT} !important; 
+        box-shadow: none !important; 
+    }} 
+
+    div[data-testid="stTextInput"] input::placeholder {{ 
+        color: #8A94A6 !important; 
+        opacity: 1; 
+    }} 
+
+    /* ---------- HTML table ---------- */ 
+
+    .table-scroll {{ 
+        width: 100%; 
+        max-height: 430px; 
+        overflow: auto; 
+        border: 1px solid {BORDER}; 
+        border-radius: 12px; 
+        background: {WHITE}; 
+    }} 
+
+    .custom-table {{ 
+        width: 100%; 
+        border-collapse: separate; 
+        border-spacing: 0; 
+        table-layout: fixed; 
+        font-family: "Segoe UI", Arial, sans-serif; 
+        color: {TEXT}; 
+        font-size: 12px; 
+    }} 
+
+    .custom-table th {{ 
+        position: sticky; 
+        top: 0; 
+        z-index: 5; 
+        background: {NAVY}; 
+        color: {WHITE}; 
+        font-weight: 800; 
+        font-size: 11.5px; 
+        text-align: left; 
+        white-space: nowrap; 
+        padding: 8px 10px; 
+        height: 44px; 
+        min-height: 44px; 
+        box-sizing: border-box; 
+        border-right: 1px solid #FFFFFF; 
+        border-bottom: 1px solid #FFFFFF; 
+    }} 
+
+    .custom-table thead th:first-child {{ 
+        border-top-left-radius: 8px; 
+    }} 
+
+    .custom-table thead th:last-child {{ 
+        border-top-right-radius: 8px; 
+    }} 
+
+    .custom-table td {{ 
+        color: {TEXT}; 
+        font-weight: 550; 
+        font-size: 12px; 
+        padding: 9px 12px; 
+        border-right: 1px solid {BORDER}; 
+        border-bottom: 1px solid {BORDER}; 
+        vertical-align: middle; 
+        white-space: normal; 
+        overflow-wrap: anywhere; 
+        word-break: break-word; 
+        line-height: 1.35; 
+        background: {WHITE}; 
+        min-width: 80px; 
+    }} 
+
+    .custom-table tbody tr:nth-child(even) td {{ 
+        background: {ROW_ALT}; 
+    }} 
+
+    .custom-table th:last-child, 
+    .custom-table td:last-child {{ 
+        border-right: none; 
+    }} 
+
+    /* ---------- Unavailable document text ---------- */ 
+
+    .document-none {{ 
+        color: #98A2B3 !important; 
+        font-size: 10.5px; 
+        font-weight: 400; 
+        opacity: 0.75; 
+        white-space: nowrap; 
+    }} 
+
+    /* ---------- Simple status text ---------- */ 
+
+    .status-simple {{ 
+        color: {TEXT} !important; 
+        font-size: inherit; 
+        font-weight: inherit; 
+        line-height: inherit; 
+        white-space: normal; 
+        background: transparent !important; 
+        padding: 0; 
+        margin: 0; 
+    }} 
+
+    /* ---------- Recommendation register column widths ---------- */ 
+
+    /* Keep supporting columns compact and give Recommendation more space. */ 
+    #pha-recommendation-table .custom-table th:nth-child(1), 
+    #pha-recommendation-table .custom-table td:nth-child(1) {{ 
+        width: 65px; 
+        min-width: 65px; 
+        max-width: 65px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(2), 
+    #pha-recommendation-table .custom-table td:nth-child(2) {{ 
+        width: 420px; 
+        min-width: 420px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(3), 
+    #pha-recommendation-table .custom-table td:nth-child(3) {{ 
+        width: 105px; 
+        min-width: 105px; 
+        max-width: 105px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(4), 
+    #pha-recommendation-table .custom-table td:nth-child(4) {{ 
+        width: 115px; 
+        min-width: 115px; 
+        max-width: 115px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(5), 
+    #pha-recommendation-table .custom-table td:nth-child(5) {{ 
+        width: 80px; 
+        min-width: 80px; 
+        max-width: 80px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(6), 
+    #pha-recommendation-table .custom-table td:nth-child(6) {{ 
+        width: 95px; 
+        min-width: 95px; 
+        max-width: 95px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(7), 
+    #pha-recommendation-table .custom-table td:nth-child(7) {{ 
+        width: 95px; 
+        min-width: 95px; 
+        max-width: 95px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(8), 
+    #pha-recommendation-table .custom-table td:nth-child(8) {{ 
+        width: 75px; 
+        min-width: 75px; 
+        max-width: 75px; 
+    }} 
+
+    #pha-recommendation-table .custom-table th:nth-child(9), 
+    #pha-recommendation-table .custom-table td:nth-child(9) {{ 
+        width: 120px; 
+        min-width: 120px; 
+        max-width: 120px; 
+    }} 
+
+    /* ---------- Scrollbar ---------- */ 
+
+    .table-scroll::-webkit-scrollbar {{ 
+        width: 9px; 
+        height: 9px; 
+    }} 
+
+    .table-scroll::-webkit-scrollbar-track {{ 
+        background: #F1F4F8; 
+        border-radius: 8px; 
+    }} 
+
+    .table-scroll::-webkit-scrollbar-thumb {{ 
+        background: #B7C7D9; 
+        border-radius: 8px; 
+    }} 
+
+    .table-scroll::-webkit-scrollbar-thumb:hover {{ 
+        background: #8FA7C0; 
+    }} 
+
+    /* ---------- Footer ---------- */ 
+
+    .footer {{ 
+        text-align: center; 
+        color: #98A2B3; 
+        font-size: 11px; 
+        padding-top: 12px; 
+    }} 
+
+    </style> 
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# DATA LOADING
+# ============================================================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_google_sheet(sheet_name):
+    url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/gviz/tq"
+        f"?tqx=out:csv&sheet={sheet_name}"
     )
 
-    selected_month = st.selectbox(
-        "Month",
-        [
-            "August 2026",
-            "July 2026",
-            "June 2026",
-            "May 2026",
-            "April 2026",
-            "March 2026"
-        ],
-        index=0
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+
+        df = pd.read_csv(StringIO(response.text))
+        df = df.dropna(how="all")
+        df = df.dropna(axis=1, how="all")
+        df.columns = [str(c).strip() for c in df.columns]
+
+        return df
+
+    except Exception as exc:
+        st.error(
+            f"Unable to load '{sheet_name}'. "
+            f"Please check Google Sheet sharing/access. Details: {exc}"
+        )
+        st.stop()
+
+    # ============================================================
+
+
+# HELPERS
+# ============================================================
+
+def _normalize_column_name(value):
+    """
+    Normalize column names so small differences such as:
+    - spaces
+    - underscores
+    - hyphens
+    - brackets
+    - slash spacing
+    - punctuation
+    do not prevent matching.
+    """
+    text = str(value).strip().lower()
+
+    # Common wording variations
+    text = text.replace("&", " and ")
+    text = text.replace("/", " ")
+    text = text.replace("\\", " ")
+    text = text.replace("_", " ")
+    text = text.replace("-", " ")
+
+    # Remove brackets and punctuation
+    text = re.sub(r"[\(\)\[\]\{\}:;,.]", " ", text)
+
+    # Collapse whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def find_column(df, names):
+    """
+    Find a column using:
+    1. Exact normalized match
+    2. Strong substring match
+    3. Token overlap
+    4. Sequence similarity
+
+    This is deliberately tolerant because Google Sheet headers may
+    contain slightly different wording than the expected names.
+    """
+
+    columns = list(df.columns)
+
+    if not columns:
+        return None
+
+    normalized_columns = {
+        col: _normalize_column_name(col)
+        for col in columns
+    }
+
+    normalized_targets = [
+        _normalize_column_name(name)
+        for name in names
+    ]
+
+    # --------------------------------------------------------
+    # 1. Exact normalized match
+    # --------------------------------------------------------
+    for target in normalized_targets:
+        for col, normalized_col in normalized_columns.items():
+            if normalized_col == target:
+                return col
+
+                # --------------------------------------------------------
+    # 2. Strong substring match
+    # --------------------------------------------------------
+    for target in normalized_targets:
+        if len(target) < 5:
+            continue
+
+        for col, normalized_col in normalized_columns.items():
+            if target in normalized_col or normalized_col in target:
+                return col
+
+                # --------------------------------------------------------
+    # 3. Token overlap
+    # --------------------------------------------------------
+    best_col = None
+    best_score = 0.0
+
+    for target in normalized_targets:
+        target_tokens = set(target.split())
+
+        if not target_tokens:
+            continue
+
+        for col, normalized_col in normalized_columns.items():
+            col_tokens = set(normalized_col.split())
+
+            if not col_tokens:
+                continue
+
+            intersection = len(target_tokens & col_tokens)
+            union = len(target_tokens | col_tokens)
+
+            jaccard = intersection / union if union else 0
+
+            # Give additional importance to the important words
+            # appearing in the same column.
+            containment = (
+                intersection / len(target_tokens)
+                if target_tokens else 0
+            )
+
+            score = (jaccard * 0.45) + (containment * 0.55)
+
+            if score > best_score:
+                best_score = score
+                best_col = col
+
+                # --------------------------------------------------------
+    # 4. Sequence similarity
+    # --------------------------------------------------------
+    sequence_col = None
+    sequence_score = 0.0
+
+    for target in normalized_targets:
+        for col, normalized_col in normalized_columns.items():
+            score = SequenceMatcher(
+                None,
+                target,
+                normalized_col
+            ).ratio()
+
+            if score > sequence_score:
+                sequence_score = score
+                sequence_col = col
+
+                # Prefer token match if reasonably strong; otherwise use
+    # sequence similarity when it is clearly a close match.
+    if best_score >= 0.58:
+        return best_col
+
+    if sequence_score >= 0.62:
+        return sequence_col
+
+    return None
+
+
+def get_department_column(df):
+    return find_column(
+        df,
+        ["Department", "Dept", "Department Name", "Dept Name"]
     )
 
-# ---------------------------------------------------------
-# DEPARTMENT
-# ---------------------------------------------------------
 
-with filter_department:
-    # Same vertical spacing
-    st.markdown(
-        "<div class='department-filter-anchor' style='height:22px;'></div>",
-        unsafe_allow_html=True
+def get_status_column(df):
+    return find_column(
+        df,
+        ["Status", "PHA Status", "Recommendation Status"]
     )
 
-    department_values = (
-        df["Department"]
+
+def get_status_series(df):
+    col = get_status_column(df)
+
+    if col is None:
+        return pd.Series("", index=df.index, dtype="object")
+
+    return (
+        df[col]
         .fillna("")
         .astype(str)
         .str.strip()
+        .str.lower()
     )
 
-    department_values = department_values[
-        (department_values != "") &
-        (department_values.str.lower() != "nan")
+
+def safe_text(value):
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def render_kpi(label, value, context, accent):
+    st.markdown(
+        f""" 
+        <div class="kpi-card" style="--accent:{accent};"> 
+            <div class="kpi-label">{escape(str(label))}</div> 
+            <div class="kpi-value">{escape(str(value))}</div> 
+            <div class="kpi-context">{escape(str(context))}</div> 
+        </div> 
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def status_text_class(value):
+    """Return the normal table-text class for every status."""
+    return "status-simple"
+
+
+class GoogleSheetLinkParser(HTMLParser):
+    """Extract hyperlink targets from Google Sheets HTML output."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self.current_row = None
+        self.current_cell = None
+        self.current_href = None
+        self.current_text = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+
+        if tag == "tr":
+            self.current_row = []
+
+        elif tag in ("td", "th") and self.current_row is not None:
+            self.current_cell = {"text": [], "href": None}
+            self.current_href = None
+            self.current_text = []
+
+        elif tag == "a" and self.current_cell is not None:
+            self.current_href = attrs.get("href")
+
+        elif tag == "br" and self.current_cell is not None:
+            self.current_text.append(" ")
+
+    def handle_data(self, data):
+        if self.current_cell is not None:
+            self.current_text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self.current_cell is not None:
+            text = " ".join("".join(self.current_text).split())
+            self.current_cell["text"] = text
+            self.current_cell["href"] = self.current_href
+
+            if self.current_row is not None:
+                self.current_row.append(self.current_cell)
+
+            self.current_cell = None
+            self.current_href = None
+            self.current_text = []
+
+        elif tag == "tr" and self.current_row is not None:
+            if self.current_row:
+                self.rows.append(self.current_row)
+            self.current_row = None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_document_links(sheet_name):
+    """Read hyperlink targets from a Google Sheet tab."""
+    url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/gviz/tq"
+        f"?tqx=out:html&sheet={sheet_name}"
+    )
+
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+
+        parser = GoogleSheetLinkParser()
+        parser.feed(response.text)
+
+        if not parser.rows:
+            return []
+
+        headers = [
+            cell["text"].strip()
+            for cell in parser.rows[0]
         ]
 
-    department_options = [
-                             "All Departments"
-                         ] + sorted(
-        department_values.unique().tolist(),
-        key=lambda x: x.lower()
+        header_df = pd.DataFrame(columns=headers)
+
+        document_col = find_column(
+            header_df,
+            ["Upload Document", "Document", "PHA Document"]
+        )
+
+        if document_col is None:
+            return []
+
+        document_index = headers.index(document_col)
+        links = []
+
+        for row in parser.rows[1:]:
+            if document_index < len(row):
+                links.append(row[document_index].get("href"))
+            else:
+                links.append(None)
+
+        return links
+
+    except Exception:
+        return []
+
+
+def extract_url(value):
+    """Extract a direct URL or HYPERLINK URL from a cell value."""
+    text = safe_text(value)
+
+    if not text:
+        return None
+
+    direct = re.search(r"https?://[^\s\"<>]+", text)
+    if direct:
+        return direct.group(0).rstrip(".,;)")
+
+    hyperlink = re.search(
+        r'HYPERLINK\s*\(\s*"([^"]+)"',
+        text,
+        flags=re.IGNORECASE
+    )
+    if hyperlink:
+        return hyperlink.group(1)
+
+    return None
+
+
+def render_html_table(
+        df,
+        table_id,
+        document_links=None,
+        document_column="Document"
+):
+    """
+    Responsive HTML table with:
+    - internal vertical scrolling
+    - internal horizontal scrolling
+    - sticky header
+    - wrapped text
+    - dark navy header with white bold text
+    - optional View button for document links
+    """
+
+    if df.empty:
+        st.markdown(
+            """ 
+            <div style=" 
+                padding: 25px; 
+                text-align: center; 
+                color: #667085; 
+                border: 1px solid #D5E2F0; 
+                border-radius: 12px; 
+                background: #FFFFFF; 
+                font-size: 13px; 
+            "> 
+                No records found. 
+            </div> 
+            """,
+            unsafe_allow_html=True
+        )
+        return
+
+    headers = "".join(
+        f"<th>{escape(str(col))}</th>"
+        for col in df.columns
+    )
+
+    rows = []
+
+    for row_position, (_, row) in enumerate(df.iterrows()):
+        cells = []
+
+        for col in df.columns:
+
+            # ------------------------------------------------
+            # Special Document column
+            # ------------------------------------------------
+            if str(col).strip().lower() == document_column.lower():
+
+                link = None
+
+                if document_links is not None:
+                    if row_position < len(document_links):
+                        link = document_links[row_position]
+
+                        # Fallback: if the displayed cell itself contains
+                # a URL / HYPERLINK formula.
+                if not link:
+                    link = extract_url(row[col])
+
+                if link:
+                    cell_html = (
+                        f'<a class="document-view-btn" '
+                        f'href="{escape(link, quote=True)}" '
+                        f'target="_blank" rel="noopener noreferrer">'
+                        f'View</a>'
+                    )
+                else:
+                    cell_html = (
+                        '<span class="document-none">Report unavailable</span>'
+                    )
+
+                cells.append(f"<td>{cell_html}</td>")
+                continue
+
+            value = safe_text(row[col])
+            css_class = ""
+
+            normalized_col = _normalize_column_name(col)
+
+            if normalized_col in {
+                "status",
+                "pha status",
+                "recommendation status",
+                "status ongoing completed",
+                "progress status"
+            }:
+                # Render status as a fixed-size rounded badge with
+                # white text. All status badges use identical
+                # dimensions.
+                text_class = status_text_class(value)
+
+                if value:
+                    cell_html = (
+                        f'<span class="{text_class}">'
+                        f'{escape(value)}'
+                        f'</span>'
+                    )
+                else:
+                    cell_html = ""
+
+                cells.append(
+                    f'<td>{cell_html}</td>'
+                )
+            else:
+                cells.append(
+                    f'<td>{escape(value)}</td>'
+                )
+
+        rows.append(
+            "<tr>" + "".join(cells) + "</tr>"
+        )
+
+    html = f""" 
+    <div class="table-scroll" id="{escape(table_id)}"> 
+        <table class="custom-table"> 
+            <thead> 
+                <tr>{headers}</tr> 
+            </thead> 
+            <tbody> 
+                {''.join(rows)} 
+            </tbody> 
+        </table> 
+    </div> 
+    """
+
+    st.markdown(
+        html,
+        unsafe_allow_html=True
+    )
+
+
+def filter_dataframe(df, search_text):
+    if not search_text:
+        return df
+
+    search_text = search_text.strip()
+
+    if not search_text:
+        return df
+
+    mask = df.astype(str).apply(
+        lambda col: col.str.contains(
+            search_text,
+            case=False,
+            na=False,
+            regex=False
+        )
+    ).any(axis=1)
+
+    return df[mask]
+
+
+# ============================================================
+# LOAD ONLY PHA + PHA RECOMENDATION
+# ============================================================
+
+pha_df = load_google_sheet(PHA_SHEET)
+rec_df = load_google_sheet(RECOMMENDATION_SHEET)
+
+# ============================================================
+# DEPARTMENT FILTER
+# ============================================================
+
+pha_dept_col = get_department_column(pha_df)
+rec_dept_col = get_department_column(rec_df)
+
+all_departments = []
+
+if pha_dept_col:
+    all_departments.extend(
+        pha_df[pha_dept_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .tolist()
+    )
+
+if rec_dept_col:
+    all_departments.extend(
+        rec_df[rec_dept_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .tolist()
+    )
+
+departments = sorted(
+    {
+        d for d in all_departments
+        if d and d.lower() != "nan"
+    }
+)
+
+# ============================================================
+# DEPARTMENT FILTER - NO EXTRA BOX AROUND IT
+# ============================================================
+
+filter_col, _ = st.columns([1.15, 4.85])
+
+with filter_col:
+    st.markdown(
+        '<div class="filter-label">Department</div>',
+        unsafe_allow_html=True
     )
 
     selected_department = st.selectbox(
         "Department",
-        department_options,
-        key="department_selector"
-    )
-
-# ---------------------------------------------------------
-# RESET FILTER
-# ---------------------------------------------------------
-
-with filter_reset:
-    # Same vertical spacing
-    st.markdown(
-        "<div style='height:40px;'></div>",
-        unsafe_allow_html=True
-    )
-
-    st.button(
-        "↻ Reset Filters",
-        use_container_width=True,
-        key="reset_pha_filters_button",
-        on_click=reset_pha_filters
-    )
-# =========================================================
-# FILTER DATA
-# =========================================================
-
-filtered_df = df.copy()
-
-if selected_department != "All Departments":
-    filtered_df = filtered_df[
-        filtered_df["Department"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        ==
-        selected_department
-        ]
-
-filtered_df[STATUS_COLUMN] = (
-    filtered_df[STATUS_COLUMN]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-    .str.lower()
-)
-
-# =========================================================
-# KPI CALCULATION
-# =========================================================
-
-total_pha = len(filtered_df)
-
-completed = int(
-    (
-            filtered_df[STATUS_COLUMN]
-            ==
-            "completed"
-    ).sum()
-)
-
-ongoing = int(
-    (
-            filtered_df[STATUS_COLUMN]
-            ==
-            "ongoing"
-    ).sum()
-)
-
-completion_percentage = (
-    completed / total_pha * 100
-    if total_pha
-    else 0
-)
-
-# =========================================================
-# KPI CARDS
-# =========================================================
-
-k1, k2, k3 = st.columns(
-    3,
-    gap="small"
-)
-
-cards = [
-
-    (
-        "▣",
-        "TOTAL PHA",
-        total_pha,
-        "Total identified HA",
-        "blue",
-        ""
-    ),
-
-    (
-        "✓",
-        "COMPLETED",
-        completed,
-        f"{completion_percentage:.1f}% completed",
-        "green",
-        "completed"
-    ),
-
-    (
-        "◌",
-        "ONGOING",
-        ongoing,
-        "Currently under progress",
-        "orange",
-        "ongoing"
-    )
-]
-
-for column, card in zip(
-        [k1, k2, k3],
-        cards
-):
-    icon, label, value, description, color, extra = card
-
-    with column:
-        st.html(
-            f"""
-<div class="kpi-card {extra}">
-
-    <div class="kpi-icon">
-        {icon}
-    </div>
-
-    <div class="kpi-content">
-
-        <div class="kpi-label">
-            {label}
-        </div>
-
-        <div class="kpi-value {color}">
-            {value}
-        </div>
-</div>
-
-    <div class="kpi-pattern"></div>
-
-    <div class="kpi-arrow">›</div>
-
-</div>
-"""
-        )
-
-# =========================================================
-# PHA RECOMENDATION - KPI SUMMARY
-# =========================================================
-
-st.html(
-    """
-<div class="recommendation-wrap">
-
-    <div class="recommendation-title">
-        <span class="recommendation-icon">⚠</span>
-        PHA RECOMENDATION
-    </div>
-
-</div>
-"""
-)
-
-# ---------------------------------------------------------
-# CALCULATE COUNTS DIRECTLY FROM GOOGLE SHEET DATA
-# ---------------------------------------------------------
-
-total_recommendations = len(
-    pha_recommendation_df
-)
-
-# Approved / Rejected
-approval_column = (
-    "Recommendation   (Approved/Rejected)"
-)
-
-if approval_column in pha_recommendation_df.columns:
-
-    approval_values = (
-        pha_recommendation_df[approval_column]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    approved_recommendations = int(
-        approval_values
-        .str.contains(
-            "approved",
-            na=False
-        )
-        .sum()
-    )
-
-    rejected_recommendations = int(
-        approval_values
-        .str.contains(
-            "rejected",
-            na=False
-        )
-        .sum()
-    )
-
-else:
-
-    approved_recommendations = 0
-    rejected_recommendations = 0
-
-# Overdue / Pending / Completion
-status_column = (
-    "Overdue/Pending/Completion"
-)
-
-if status_column in pha_recommendation_df.columns:
-
-    recommendation_status_values = (
-        pha_recommendation_df[status_column]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    overdue_recommendations = int(
-        recommendation_status_values
-        .str.contains(
-            "overdue",
-            na=False
-        )
-        .sum()
-    )
-
-    completed_recommendations = int(
-        recommendation_status_values
-        .str.contains(
-            "completion|completed",
-            regex=True,
-            na=False
-        )
-        .sum()
-    )
-
-    pending_recommendations = int(
-        recommendation_status_values
-        .str.contains(
-            "pending",
-            na=False
-        )
-        .sum()
-    )
-
-else:
-
-    overdue_recommendations = 0
-    completed_recommendations = 0
-    pending_recommendations = 0
-
-# ---------------------------------------------------------
-# SIX KPI BOXES
-# Same KPI component as TOP 3.
-# Color follows the TOP ROW COLUMN reference:
-# Column 1 = BLUE
-# Column 2 = GREEN
-# Column 3 = ORANGE
-# ---------------------------------------------------------
-
-recommendation_kpis = [
-
-    (
-        "▣",
-        "TOTAL RECOMMENDATION",
-        total_recommendations,
-        "",
-        "total"
-    ),
-
-    (
-        "✓",
-        "APPROVED",
-        approved_recommendations,
-        "Approved recommendations",
-        "completed"
-    ),
-
-    (
-        "✕",
-        "REJECTED",
-        rejected_recommendations,
-        "Rejected recommendations",
-        "ongoing"
-    ),
-
-    (
-        "!",
-        "OVERDUE",
-        overdue_recommendations,
-        "",
-        "total"
-    ),
-
-    (
-        "✓",
-        "COMPLETED",
-        completed_recommendations,
-        "Completed recommendations",
-        "completed"
-    ),
-
-    (
-        "◌",
-        "PENDING",
-        pending_recommendations,
-        "Pending recommendations",
-        "ongoing"
-    )
-]
-
-for row_start in range(
-        0,
-        len(recommendation_kpis),
-        3
-):
-    if row_start == 3:
-        st.markdown(
-            "<div style='height:22px;'></div>",
-            unsafe_allow_html=True
-        )
-
-    recommendation_row = st.columns(
-        3,
-        gap="small"
-    )
-
-    for column, card in zip(
-            recommendation_row,
-            recommendation_kpis[
-                row_start:row_start + 3
-            ]
-    ):
-        icon, label, value, description, card_class = card
-
-        with column:
-            # SAME HTML COMPONENT AS THE TOP 3.
-            # Only the color class changes according to the
-            # TOP ROW COLUMN reference.
-            st.html(
-                f"""
-<div class="kpi-card {card_class}">
-
-    <div class="kpi-icon">
-        {icon}
-    </div>
-
-    <div class="kpi-content">
-
-        <div class="kpi-label">
-            {label}
-        </div>
-
-        <div class="kpi-value">
-            {value}
-        </div>
-</div>
-
-    <div class="kpi-pattern"></div>
-
-    <div class="kpi-arrow">›</div>
-
-</div>
-"""
-            )
-
-# =========================================================
-# PT REGISTER TITLE
-# =========================================================
-
-st.html(
-    """
-<div class="register-wrap">
-
-    <div class="register-title">
-        <span class="register-icon">▣</span>
-        PHA REGISTER
-    </div>
-
-</div>
-"""
-)
-
-# =========================================================
-# REGISTER TOOLBAR
-# =========================================================
-
-search_col, all_col, completed_col, ongoing_col, refresh_col = st.columns(
-    [4.2, .8, 1.15, 1.0, 1.15],
-    gap="small"
-)
-
-with search_col:
-    search_text = st.text_input(
-        "Search",
-        placeholder=(
-            "Search PHA No, Name of PHA, "
-            "Department, Product..."
-        ),
+        ["All Departments"] + departments,
         label_visibility="collapsed"
     )
 
-with all_col:
-    all_button = st.button(
-        "All",
-        use_container_width=True
-    )
+# ============================================================
+# APPLY FILTER
+# ============================================================
 
-with completed_col:
-    completed_button = st.button(
-        "Completed",
-        use_container_width=True
-    )
+filtered_pha = pha_df.copy()
+filtered_rec = rec_df.copy()
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
+if selected_department != "All Departments":
 
-with ongoing_col:
-    ongoing_button = st.button(
-        "Ongoing",
-        use_container_width=True
-    )
+    if pha_dept_col:
+        filtered_pha = filtered_pha[
+            filtered_pha[pha_dept_col]
+            .astype(str)
+            .str.strip()
+            == selected_department
+            ]
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
+    if rec_dept_col:
+        filtered_rec = filtered_rec[
+            filtered_rec[rec_dept_col]
+            .astype(str)
+            .str.strip()
+            == selected_department
+            ]
 
-with refresh_col:
-    if st.button(
-            "↻ Refresh Data",
-            use_container_width=True
-    ):
-        st.session_state.view_pha_no = ""
-        st.session_state.upload_pha_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.cache_data.clear()
-        st.rerun()
+    # ============================================================
+# PHA KPI CALCULATIONS
+# ============================================================
 
-# =========================================================
-# STATUS FILTER
-# =========================================================
+pha_status = get_status_series(filtered_pha)
 
-if all_button:
+total_pha = len(filtered_pha)
 
-    st.session_state.status_filter = "All"
-    st.session_state.page_number = 1
-    st.session_state.view_pha_no = ""
-    st.session_state.upload_pha_no = ""
-    st.session_state.open_view_dialog = False
-    st.session_state.open_upload_dialog = False
+completed_pha = int(
+    pha_status.str.contains(
+        "completed|complete|closed",
+        regex=True,
+        na=False
+    ).sum()
+)
 
-elif completed_button:
+ongoing_pha = int(
+    pha_status.str.contains(
+        "ongoing|open|progress|pending",
+        regex=True,
+        na=False
+    ).sum()
+)
 
-    st.session_state.status_filter = "Completed"
-    st.session_state.page_number = 1
-    st.session_state.view_pha_no = ""
-    st.session_state.upload_pha_no = ""
-    st.session_state.open_view_dialog = False
-    st.session_state.open_upload_dialog = False
+# Make sure KPI totals remain consistent.
+if completed_pha + ongoing_pha < total_pha:
+    ongoing_pha += total_pha - completed_pha - ongoing_pha
 
-elif ongoing_button:
+# ============================================================
+# RECOMMENDATION KPI CALCULATIONS
+# ============================================================
 
-    st.session_state.status_filter = "Ongoing"
-    st.session_state.page_number = 1
-    st.session_state.view_pha_no = ""
-    st.session_state.upload_pha_no = ""
-    st.session_state.open_view_dialog = False
-    st.session_state.open_upload_dialog = False
+total_rec = len(filtered_rec)
 
-# =========================================================
-# DISPLAY DATA
-# =========================================================
+# ------------------------------------------------------------
+# APPROVED / REJECTED
+# ------------------------------------------------------------
+# These two KPIs MUST use the dedicated column:
+# Recommendation (Approved/Rejected)
+# ------------------------------------------------------------
 
-display_df = filtered_df.copy()
-
-if st.session_state.status_filter != "All":
-    display_df = display_df[
-        display_df[STATUS_COLUMN]
-        ==
-        st.session_state.status_filter.lower()
-        ]
-
-# =========================================================
-# SEARCH
-# =========================================================
-
-if search_text:
-
-    query = search_text.lower().strip()
-
-    search_columns = [
-        "PHA No",
-        "Department",
-        "Name of PHA",
+approval_col = find_column(
+    filtered_rec,
+    [
+        "Recommendation (Approved/Rejected)",
+        "Recommendation (Approved / Rejected)",
+        "Recommendation Approved/Rejected",
+        "Recommendation Approval Rejection",
+        "Recommendation Approved Rejected",
+        "Recommendation Status Approved Rejected",
+        "Approval Rejection",
+        "Approved Rejected",
+        "Approval Status"
     ]
+)
 
-    mask = pd.Series(
-        False,
-        index=display_df.index
+approved_rec = 0
+rejected_rec = 0
+
+if approval_col:
+    approval_values = (
+        filtered_rec[approval_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
     )
 
-    for column in search_columns:
-        mask = (
-                mask
-                |
-                display_df[column]
-                .fillna("")
-                .astype(str)
-                .str.lower()
-                .str.contains(
-                    query,
+    approved_rec = int(
+        approval_values.str.fullmatch(
+            r"approved|approve",
+            case=False,
+            na=False
+        ).sum()
+    )
+
+    rejected_rec = int(
+        approval_values.str.fullmatch(
+            r"rejected|reject",
+            case=False,
+            na=False
+        ).sum()
+    )
+else:
+    st.warning(
+        'The column "Recommendation (Approved/Rejected)" '
+        'was not found in the PHA RECOMENDATION sheet.'
+    )
+
+# ------------------------------------------------------------
+# COMPLETED / PENDING / OVERDUE
+# ------------------------------------------------------------
+# These three KPIs MUST use the dedicated column:
+# Overdue/Pending/Completed.
+# Rejected recommendations are excluded from all three.
+# ------------------------------------------------------------
+
+progress_col = find_column(
+    filtered_rec,
+    [
+        "Overdue/Pending/Completed",
+        "Overdue / Pending / Completed",
+        "Overdue Pending Completed"
+    ]
+)
+
+completed_rec = 0
+pending_rec = 0
+overdue_rec = 0
+
+if progress_col:
+    progress_values = (
+        filtered_rec[progress_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    # --------------------------------------------------------
+    # REJECTED recommendations are NOT part of the completion
+    # workflow. Therefore they must not be counted as:
+    # Completed, Pending, or Overdue.
+    #
+    # Example:
+    # Total = 18
+    # Rejected = 2
+    # The remaining 16 recommendations are considered for
+    # Completed / Pending / Overdue KPIs.
+    # --------------------------------------------------------
+
+    if approval_col:
+        # Use the same dedicated Approved/Rejected column.
+        approval_for_progress = (
+            filtered_rec[approval_col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+        valid_progress_mask = ~approval_for_progress.str.fullmatch(
+            r"rejected|reject",
+            case=False,
+            na=False
+        )
+
+    else:
+        # If the approval column cannot be identified, do not
+        # silently exclude records based on another unrelated
+        # column.
+        valid_progress_mask = pd.Series(
+            True,
+            index=filtered_rec.index
+        )
+
+    completed_rec = int(
+        (
+                progress_values.str.fullmatch(
+                    r"completed|complete",
+                    case=False,
                     na=False
                 )
-        )
-
-    display_df = display_df[mask]
-
-# =========================================================
-# PAGINATION
-# =========================================================
-
-PAGE_SIZE = 5
-
-total_records = len(display_df)
-
-total_pages = max(
-    1,
-    (total_records + PAGE_SIZE - 1)
-    //
-    PAGE_SIZE
-)
-
-if st.session_state.page_number > total_pages:
-    st.session_state.page_number = total_pages
-
-page_number = st.session_state.page_number
-
-start_index = (
-                      page_number - 1
-              ) * PAGE_SIZE
-
-end_index = (
-        start_index + PAGE_SIZE
-)
-
-page_df = display_df.iloc[
-    start_index:end_index
-].copy()
-
-# =========================================================
-# TABLE
-# Google Sheet data shown as one normal HTML table.
-# Upload Document remains a hidden SOURCE column only.
-# View Document is a normal column directly beside Status.
-# =========================================================
-
-pha_table_html = """
-<style>
-.pha-register-container {
-    width: 100%;
-    overflow-x: hidden;
-    margin: 0;
-    padding: 0;
-}
-
-.pha-register-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    margin: 0;
-    padding: 0;
-}
-
-.pha-register-table th {
-    background: #0b4f8a;
-    color: #ffffff;
-    border-right: 1px solid #d5e0ea;
-    border-bottom: 1px solid #d5e0ea;
-    height: 46px;
-    padding: 8px 10px;
-    text-align: center;
-    vertical-align: middle;
-    font-size: 12px;
-    font-weight: 900;
-    line-height: 1.15;
-    box-sizing: border-box;
-}
-
-.pha-register-table td {
-    height: 35px;
-    padding: 5px 10px;
-    border-right: 1px solid #d5e0ea;
-    border-bottom: 1px solid #d5e0ea;
-    color: #243b57;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.2;
-    text-align: center;
-    vertical-align: middle;
-    box-sizing: border-box;
-    background: #ffffff;
-}
-
-.pha-register-table tbody tr:nth-child(even) td {
-    background: #f5f8fb;
-}
-
-.pha-register-table td.left {
-    text-align: left !important;
-    padding-left: 45px !important;
-}
-
-.pha-register-table td.left .status-completed,
-.pha-register-table td.left .status-ongoing {
-    display: inline-block;
-    text-align: left !important;
-}
-
-.pha-register-table .pha-view-link {
-    color: #174b87;
-    text-decoration: none !important;
-    font-size: 12px;
-    font-weight: 800;
-    cursor: pointer;
-}
-
-.pha-register-table .pha-view-link:hover {
-    color: #0b4f8a;
-    text-decoration: none !important;
-}
-
-.pha-register-table .pha-no-link {
-    color: #9aaabd;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.pha-register-table .status-completed,
-.pha-register-table .status-ongoing {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    font-size: 12px;
-    font-weight: 800;
-    white-space: nowrap;
-}
-
-.pha-register-table .status-completed {
-    color: #16A34A !important;
-}
-
-.pha-register-table .status-ongoing {
-    color: #EA8A00 !important;
-}
-</style>
-
-<div class="pha-register-container">
-<table class="pha-register-table">
-<colgroup>
-    <col style="width:8%;">
-    <col style="width:15%;">
-    <col style="width:19%;">
-    <col style="width:27%;">
-    <col style="width:16%;">
-    <col style="width:15%;">
-</colgroup>
-<thead>
-<tr>
-    <th>Sr No</th>
-    <th>PHA No</th>
-    <th>Department</th>
-    <th>Name of PHA</th>
-    <th>Status</th>
-    <th>View Document</th>
-</tr>
-</thead>
-<tbody>
-"""
-
-for row_number, (_, row) in enumerate(page_df.iterrows()):
-    sr_no = str(row["Sr No"]).strip()
-    pha_no = str(row["PHA No"]).strip()
-    department = str(row["Department"]).strip()
-    name_pha = str(row["Name of PHA"]).strip()
-    status = str(row[STATUS_COLUMN]).strip()
-
-    if sr_no.lower() == "nan":
-        sr_no = ""
-    if pha_no.lower() == "nan":
-        pha_no = ""
-    if department.lower() == "nan":
-        department = ""
-    if name_pha.lower() == "nan":
-        name_pha = ""
-    if status.lower() == "nan":
-        status = ""
-
-    def esc(value):
-        return (
-            str(value)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
-
-    sr_no_html = esc(sr_no)
-    pha_no_html = esc(pha_no)
-    department_html = esc(department)
-    name_html = esc(name_pha)
-
-    if status.lower() == "completed":
-        status_html = '<span class="status-completed">● COMPLETED</span>'
-    elif status.lower() == "ongoing":
-        status_html = '<span class="status-ongoing">● ONGOING</span>'
-    else:
-        status_html = esc(status)
-
-    # Fetch the link from the SAME Google Sheet row's hidden Upload Document cell.
-    document_link = pha_upload_document_links.get(pha_no, "")
-
-    if not document_link:
-        raw_upload_value = row.get(PHA_UPLOAD_COLUMN, "")
-        if not pd.isna(raw_upload_value):
-            candidate_link = str(raw_upload_value).strip()
-            if re.match(r"^https?://", candidate_link, re.IGNORECASE):
-                document_link = candidate_link
-
-    if document_link:
-        safe_link = (
-            document_link
-            .replace("&", "&amp;")
-            .replace('"', "&quot;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
-        view_html = (
-            f'<a class="pha-view-link" href="{safe_link}" '
-            f'target="_blank" rel="noopener noreferrer">◉ View</a>'
-        )
-    else:
-        view_html = '<span class="pha-no-link">No Link</span>'
-
-    pha_table_html += f"""
-<tr>
-    <td>{sr_no_html}</td>
-    <td>{pha_no_html}</td>
-    <td class="left">{department_html}</td>
-    <td class="left">{name_html}</td>
-    <td class="left">{status_html}</td>
-    <td>{view_html}</td>
-</tr>
-"""
-
-pha_table_html += """
-</tbody>
-</table>
-</div>
-"""
-
-st.html(pha_table_html)
-
-# =========================================================
-# RECORD COUNT + PAGINATION
-# =========================================================
-
-count_left, page_left, page_center, page_right = st.columns(
-    [2.2, 1.0, 1.8, 1.0],
-    gap="small"
-)
-
-with count_left:
-    first_record = (
-        start_index + 1
-        if total_records
-        else 0
+                & valid_progress_mask
+        ).sum()
     )
 
-    last_record = min(
-        end_index,
-        total_records
+    pending_rec = int(
+        (
+                progress_values.str.fullmatch(
+                    r"pending",
+                    case=False,
+                    na=False
+                )
+                & valid_progress_mask
+        ).sum()
     )
 
-    st.html(
-        f"""
-<div class="record-bar">
-    Showing {first_record} to {last_record}
-    of {total_records} entries
-</div>
-"""
-    )
-
-with page_left:
-    if st.button(
-            "‹",
-            disabled=(
-                    page_number <= 1
-            ),
-            use_container_width=True
-    ):
-        st.session_state.page_number -= 1
-        st.session_state.view_pha_no = ""
-        st.session_state.upload_pha_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
-
-with page_center:
-    st.html(
-        f"""
-<div class="record-bar"
-     style="justify-content:center;">
-    {page_number} &nbsp; / &nbsp; {total_pages}
-</div>
-"""
-    )
-
-with page_right:
-    if st.button(
-            "›",
-            disabled=(
-                    page_number >= total_pages
-            ),
-            use_container_width=True
-    ):
-        st.session_state.page_number += 1
-        st.session_state.view_pha_no = ""
-        st.session_state.upload_pha_no = ""
-        st.session_state.open_view_dialog = False
-        st.session_state.open_upload_dialog = False
-        st.rerun()
-
-# =========================================================
-# RECOMENDATION REGISTER
-# 5 ROWS PER PAGE
-# =========================================================
-
-st.html(
-    """
-<div class="recommendation-wrap">
-
-    <div class="recommendation-title">
-        <span class="recommendation-icon">⚠</span>
-        RECOMENDATION REGISTER
-    </div>
-
-</div>
-"""
-)
-
-recommendation_register_columns = [
-    "Sr No",
-    "Recommendation",
-    "PHA No.",
-    "Department",
-    "Target Date",
-    "Completion Date",
-    "Status (Open/Close)"
-]
-
-missing_register_columns = [
-    column
-    for column in recommendation_register_columns
-    if column not in pha_recommendation_df.columns
-]
-
-if pha_recommendation_df.empty:
-
-    st.html(
-        """
-<div class="recommendation-empty">
-    No RECOMENDATION REGISTER data found.
-</div>
-"""
-    )
-
-elif missing_register_columns:
-
-    st.error(
-        "RECOMENDATION REGISTER headers not found."
-    )
-
-    st.write(
-        missing_register_columns
+    overdue_rec = int(
+        (
+                progress_values.str.fullmatch(
+                    r"overdue",
+                    case=False,
+                    na=False
+                )
+                & valid_progress_mask
+        ).sum()
     )
 
 else:
-
-    recommendation_register_df = (
-        pha_recommendation_df[
-            recommendation_register_columns
-        ]
-        .copy()
+    st.warning(
+        'The column "Overdue/Pending/Completed" '
+        'was not found in the PHA RECOMENDATION sheet.'
     )
 
-    # =====================================================
-    # PAGINATION - 5 ROWS
-    # =====================================================
+# ============================================================
+# TOP AREA: ALL KPI CARDS FIRST
+# ============================================================
 
-    recommendation_rows_per_page = 5
+# -------------------- PHA KPI SECTION -------------------------
 
-    if "recommendation_page_number" not in st.session_state:
-        st.session_state.recommendation_page_number = 1
-
-    total_recommendation_records = len(
-        recommendation_register_df
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-title">PHA OVERVIEW</div>',
+        unsafe_allow_html=True
     )
 
-    recommendation_total_pages = max(
-        1,
-        (
-                total_recommendation_records
-                + recommendation_rows_per_page
-                - 1
-        )
-        // recommendation_rows_per_page
-    )
+    p1, p2, p3 = st.columns(3, gap="medium")
 
-    recommendation_page_number = (
-        st.session_state.recommendation_page_number
-    )
-
-    if recommendation_page_number > recommendation_total_pages:
-        recommendation_page_number = (
-            recommendation_total_pages
+    with p1:
+        render_kpi(
+            "TOTAL PHA",
+            total_pha,
+            "Total PHA assessments",
+            BLUE
         )
 
-        st.session_state.recommendation_page_number = (
-            recommendation_page_number
+    with p2:
+        render_kpi(
+            "COMPLETED",
+            completed_pha,
+            "PHA assessments completed",
+            GREEN
         )
 
-    recommendation_start_index = (
-                                         recommendation_page_number - 1
-                                 ) * recommendation_rows_per_page
-
-    recommendation_end_index = (
-            recommendation_start_index
-            + recommendation_rows_per_page
-    )
-
-    recommendation_display_df = (
-        recommendation_register_df.iloc[
-            recommendation_start_index:
-            recommendation_end_index
-        ]
-        .copy()
-    )
-
-    # =====================================================
-    # TABLE
-    # =====================================================
-
-    recommendation_register_html = """
-<div class="recommendation-container">
-
-<table class="recommendation-table">
-
-<thead>
-<tr>
-"""
-
-    for column in recommendation_register_columns:
-        display_column = (
-            "Status"
-            if column == "Status (Open/Close)"
-            else column
+    with p3:
+        render_kpi(
+            "ONGOING",
+            ongoing_pha,
+            "PHA assessments in progress",
+            YELLOW
         )
 
-        recommendation_register_html += (
-            f"<th>{display_column}</th>"
-        )
-
-    recommendation_register_html += """
-</tr>
-</thead>
-
-<tbody>
-"""
-
-    for _, row in recommendation_display_df.iterrows():
-
-        recommendation_register_html += "<tr>"
-
-        for column in recommendation_register_columns:
-
-            value = row[column]
-
-            if pd.isna(value):
-                value = ""
-            else:
-                value = str(value).strip()
-
-            value = (
-                value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\n", "<br>")
-            )
-
-            recommendation_register_html += (
-                f"<td>{value}</td>"
-            )
-
-        recommendation_register_html += "</tr>"
-
-    recommendation_register_html += """
-</tbody>
-
-</table>
-
-</div>
-"""
-
-    st.html(
-        recommendation_register_html
+        # Extra breathing room keeps the KPI cards completely inside
+    # the rounded section border.
+    st.markdown(
+        '<div class="kpi-section-spacer"></div>',
+        unsafe_allow_html=True
     )
 
-    # =====================================================
-    # RECORD COUNT
-    # =====================================================
+# ---------------- Recommendation KPI section -----------------
 
-    recommendation_first_record = (
-        recommendation_start_index + 1
-        if total_recommendation_records
-        else 0
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-title">PHA RECOMMENDATION OVERVIEW</div>',
+        unsafe_allow_html=True
     )
 
-    recommendation_last_record = min(
-        recommendation_end_index,
-        total_recommendation_records
-    )
-
-    st.html(
-        f"""
-<div class="record-bar">
-    Showing {recommendation_first_record}
-    to {recommendation_last_record}
-    of {total_recommendation_records}
-    entries
-</div>
-"""
-    )
-
-    # =====================================================
-    # PAGINATION BUTTONS
-    # =====================================================
-
-    (
-        recommendation_previous_col,
-        recommendation_page_col,
-        recommendation_next_col
-    ) = st.columns(
-        [1, 1, 1],
+    r1, r2, r3, r4, r5, r6 = st.columns(
+        6,
         gap="small"
     )
 
-    with recommendation_previous_col:
-
-        if st.button(
-                "‹",
-                key="recommendation_previous_button",
-                disabled=(
-                        recommendation_page_number <= 1
-                ),
-                use_container_width=True
-        ):
-            st.session_state.recommendation_page_number -= 1
-
-            st.rerun()
-
-    with recommendation_page_col:
-
-        st.html(
-            f"""
-<div class="record-bar"
-     style="justify-content:center;">
-    {recommendation_page_number}
-    &nbsp; / &nbsp;
-    {recommendation_total_pages}
-</div>
-"""
+    with r1:
+        render_kpi(
+            "TOTAL",
+            total_rec,
+            "Total recommendations",
+            BLUE
         )
 
-    with recommendation_next_col:
-
-        if st.button(
-                "›",
-                key="recommendation_next_button",
-                disabled=(
-                        recommendation_page_number
-                        >= recommendation_total_pages
-                ),
-                use_container_width=True
-        ):
-            st.session_state.recommendation_page_number += 1
-
-            st.rerun()
-
-# =========================================================
-# UPLOAD DOCUMENT — VERY SMALL MODAL POPUP
-# SAME AS PT.PY, ADAPTED ONLY TO PHA
-# =========================================================
-
-if st.session_state.open_upload_dialog and st.session_state.upload_pha_no:
-
-    upload_pha = st.session_state.upload_pha_no
-    st.session_state.open_upload_dialog = False
-
-
-    @st.dialog("Upload Document", width="small")
-    def upload_document_dialog():
-
-        st.caption(f"PHA No.  {upload_pha}")
-
-        uploaded_file = st.file_uploader(
-            "Choose file",
-            type=[
-                "pdf", "doc", "docx",
-                "xls", "xlsx", "csv",
-                "ppt", "pptx", "txt",
-                "png", "jpg", "jpeg"
-            ],
-            key=f"uploader_dialog_{safe_pha_folder_name(upload_pha)}"
+    with r2:
+        render_kpi(
+            "APPROVED",
+            approved_rec,
+            "Recommendations approved",
+            GREEN
         )
 
-        c1, c2 = st.columns(2, gap="small")
-
-        with c1:
-            if st.button(
-                    "Save",
-                    key=f"save_dialog_{safe_pha_folder_name(upload_pha)}",
-                    use_container_width=True,
-                    disabled=uploaded_file is None
-            ):
-                save_pha_document(upload_pha, uploaded_file)
-                st.session_state.upload_pha_no = ""
-                st.session_state.open_upload_dialog = False
-                st.rerun()
-
-        with c2:
-            if st.button(
-                    "Cancel",
-                    key=f"cancel_dialog_{safe_pha_folder_name(upload_pha)}",
-                    use_container_width=True
-            ):
-                st.session_state.upload_pha_no = ""
-                st.session_state.open_upload_dialog = False
-                st.rerun()
-
-
-    upload_document_dialog()
-
-# =========================================================
-# VIEW DOCUMENT — SEPARATE MODAL POPUP
-# SHOW ONLY THE CURRENT / LATEST DOCUMENT
-# =========================================================
-
-if st.session_state.open_view_dialog and st.session_state.view_pha_no:
-
-    view_pha = st.session_state.view_pha_no
-    st.session_state.open_view_dialog = False
-
-
-    @st.dialog("View Document", width="large")
-    def view_document_dialog():
-
-        st.caption(f"PHA No.  {view_pha}")
-
-        documents = get_pha_documents(view_pha)
-
-        if not documents:
-            st.info(
-                "No document has been uploaded for this PHA yet."
-            )
-            return
-
-        # A new upload replaces the old file, so there
-        # should be only one current document.
-        selected_document = documents[-1]
-
-        file_bytes = selected_document.read_bytes()
-        mime_type = get_document_mime_type(
-            selected_document
+    with r3:
+        render_kpi(
+            "REJECTED",
+            rejected_rec,
+            "Recommendations rejected",
+            RED
         )
 
-        st.download_button(
-            "↓ Download",
-            data=file_bytes,
-            file_name=selected_document.name,
-            mime=mime_type,
-            key=(
-                f"download_{safe_pha_folder_name(view_pha)}_"
-                f"{safe_pha_folder_name(selected_document.name)}"
-            )
+    with r4:
+        render_kpi(
+            "OVERDUE",
+            overdue_rec,
+            "Past target date",
+            RED
         )
 
-        if mime_type == "application/pdf":
+    with r5:
+        render_kpi(
+            "COMPLETED",
+            completed_rec,
+            "Recommendations completed",
+            GREEN
+        )
 
-            pdf_base64 = (
-                base64.b64encode(
-                    file_bytes
-                ).decode("utf-8")
-            )
+    with r6:
+        render_kpi(
+            "PENDING",
+            pending_rec,
+            "Awaiting completion",
+            YELLOW
+        )
 
-            components.html(
-                f"""
-<iframe
-    src="data:application/pdf;base64,{pdf_base64}"
-    width="100%"
-    height="600"
-    style="border:1px solid #d5e0ea;">
-</iframe>
-""",
-                height=620,
-                scrolling=False
-            )
+        # Extra breathing room keeps all six KPI cards completely
+    # inside the rounded section border.
+    st.markdown(
+        '<div class="kpi-section-spacer"></div>',
+        unsafe_allow_html=True
+    )
 
-        elif mime_type.startswith("image/"):
+# ============================================================
+# BELOW KPI CARDS: REGISTERS
+# ============================================================
 
-            st.image(
-                file_bytes,
-                use_container_width=True
-            )
+# ============================================================
+# PHA DETAILS REGISTER
+# ============================================================
 
-        elif mime_type.startswith("text/"):
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-title">PHA DETAILS</div>',
+        unsafe_allow_html=True
+    )
 
-            text_preview = file_bytes.decode(
-                "utf-8",
-                errors="replace"
-            )
+    search_pha = st.text_input(
+        "Search PHA",
+        placeholder="Search PHA No, Name of PHA, Department, Product...",
+        label_visibility="collapsed",
+        key="pha_search"
+    )
 
-            st.text_area(
-                "Document preview",
-                text_preview,
-                height=450,
-                disabled=True,
-                key=(
-                    f"text_preview_"
-                    f"{safe_pha_folder_name(view_pha)}_"
-                    f"{safe_pha_folder_name(selected_document.name)}"
-                )
-            )
+    display_pha = filter_dataframe(
+        filtered_pha.copy(),
+        search_pha
+    )
 
+    # Preferred order. Any additional source columns are
+    # retained after these.
+    # Exact display order requested:
+    # S. No. -> PHA No. -> Department -> PHA Name ->
+    # Status -> Document
+    sr_col = find_column(
+        display_pha,
+        ["S. No.", "Sr No", "Sr. No", "Serial No", "S No"]
+    )
+
+    pha_no_col = find_column(
+        display_pha,
+        ["PHA No", "PHA Number", "PHA No."]
+    )
+
+    department_col = get_department_column(display_pha)
+
+    pha_name_col = find_column(
+        display_pha,
+        ["PHA Name", "Name of PHA", "PHA"]
+    )
+
+    pha_status_col = find_column(
+        display_pha,
+        [
+            "Status (Ongoing/Completed)",
+            "Status",
+            "PHA Status"
+        ]
+    )
+
+    upload_doc_col = find_column(
+        display_pha,
+        [
+            "Upload Document",
+            "Document",
+            "PHA Document"
+        ]
+    )
+
+    pha_column_map = [
+        (sr_col, "S. No."),
+        (pha_no_col, "PHA No."),
+        (department_col, "Department"),
+        (pha_name_col, "PHA Name"),
+        (pha_status_col, "Status"),
+        (upload_doc_col, "Document")
+    ]
+
+    pha_display = pd.DataFrame(index=display_pha.index)
+
+    for source_col, display_name in pha_column_map:
+        if source_col is not None:
+            pha_display[display_name] = display_pha[source_col]
         else:
+            pha_display[display_name] = ""
 
-            st.info(
-                "Preview is not available for this file type. "
-                "Use Download to open the file."
-            )
+            # Keep the original filtered row index so the recovered
+    # Google Sheet document links stay aligned with each record.
+    pha_link_map = load_document_links(PHA_SHEET)
+
+    pha_links = []
+    for original_index in pha_display.index:
+        try:
+            link_position = int(original_index)
+            if 0 <= link_position < len(pha_link_map):
+                pha_links.append(pha_link_map[link_position])
+            else:
+                pha_links.append(None)
+        except Exception:
+            pha_links.append(None)
+
+    render_html_table(
+        pha_display,
+        "pha-details-table",
+        document_links=pha_links,
+        document_column="Document"
+    )
+
+# ============================================================
+# PHA RECOMMENDATION REGISTER
+# ============================================================
+
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-title">PHA RECOMMENDATION</div>',
+        unsafe_allow_html=True
+    )
+
+    search_rec = st.text_input(
+        "Search Recommendation",
+        placeholder="Search recommendation, PHA No, Department...",
+        label_visibility="collapsed",
+        key="recommendation_search"
+    )
+
+    display_rec = filter_dataframe(
+        filtered_rec.copy(),
+        search_rec
+    )
 
 
-    view_document_dialog()
+    # Target Date and Completion Date are intentionally NOT displayed.
+    # Build the recommendation register in the exact requested order:
+    # S. No. | Recommendation | Department | PHA No. | Date |
+    # Approval | Progress | Status | Remarks
 
-# =========================================================
+    def pick_rec_column(candidates):
+        return find_column(display_rec, candidates)
+
+
+    rec_sr = pick_rec_column(
+        ["Sr No", "S. No.", "Sr. No", "Serial No", "S No"]
+    )
+    rec_recommendation = pick_rec_column(
+        ["Recommendation", "Recommendation Details", "Recommendation Description"]
+    )
+    rec_department = get_department_column(display_rec)
+    rec_pha_no = pick_rec_column(
+        ["PHA No", "PHA Number", "PHA No."]
+    )
+    rec_date = pick_rec_column(
+        ["Recommendation Date", "Date", "Recommendation Dt"]
+    )
+    rec_approval = pick_rec_column(
+        [
+            "Recommendation (Approved/Rejected)",
+            "Recommendation (Approved / Rejected)",
+            "Recommendation Approved/Rejected",
+            "Recommendation Approval Rejection",
+            "Recommendation Approved Rejected",
+            "Approval Rejection",
+            "Approved Rejected"
+        ]
+    )
+    rec_progress = pick_rec_column(
+        [
+            "Overdue/Pending/Completed",
+            "Overdue Pending Completed",
+            "Progress Status"
+        ]
+    )
+    rec_status = pick_rec_column(
+        [
+            "Status (Open/Close)",
+            "Status (Open / Close)",
+            "Open/Close Status",
+            "Status"
+        ]
+    )
+    rec_remarks = pick_rec_column(
+        ["Remarks", "Remark", "Comments", "Comment"]
+    )
+
+    requested_rec_columns = [
+        (rec_sr, "S. No."),
+        (rec_recommendation, "Recommendation"),
+        (rec_department, "Department"),
+        (rec_pha_no, "PHA No."),
+        (rec_date, "Date"),
+        (rec_approval, "Approval"),
+        (rec_progress, "Progress"),
+        (rec_status, "Status"),
+        (rec_remarks, "Remarks"),
+    ]
+
+    recommendation_display = pd.DataFrame(
+        index=display_rec.index
+    )
+
+    for source_col, display_name in requested_rec_columns:
+        if source_col is not None:
+            recommendation_display[display_name] = display_rec[source_col]
+        else:
+            recommendation_display[display_name] = ""
+
+    render_html_table(
+        recommendation_display,
+        "pha-recommendation-table"
+    )
+
+# ============================================================
 # FOOTER
-# =========================================================
+# ============================================================
 
-st.html(
-    """
-<div class="footer">
-    🛡 &nbsp; © 2026 Process Safety Management Dashboard
-    | Pillar: PHA
-</div>
-"""
+st.markdown(
+    '<div class="footer">PHA Management Dashboard</div>',
+    unsafe_allow_html=True
 )
 

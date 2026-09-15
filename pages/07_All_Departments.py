@@ -966,7 +966,32 @@ st.markdown(
     "<div style='height:12px;'></div>",
     unsafe_allow_html=True
 )
+# ============================================================
+# MOVE DEPARTMENT SECTION UP
+# ============================================================
 
+st.markdown("""
+<style>
+
+/* Move ONLY the department selector upward.
+   Do NOT move or resize the header. */
+div[data-testid="stSelectbox"] {
+    margin-top: -55px !important;
+}
+
+/* Keep department label close to selector */
+div[data-testid="stSelectbox"] label {
+    margin-top: 0px !important;
+    padding-top: 0px !important;
+}
+
+/* Remove extra spacing inside selector */
+div[data-testid="stSelectbox"] > div {
+    margin-top: 0px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # HELPERS
 # ============================================================
 def norm(value):

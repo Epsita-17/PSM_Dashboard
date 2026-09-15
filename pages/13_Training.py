@@ -1,1159 +1,198 @@
-import streamlit as st
-import streamlit.components.v1 as components
+import io
+import re
+import html
+import time
+from urllib.parse import quote
+
 import pandas as pd
 import plotly.graph_objects as go
-import re
-import os
-import base64
-from pathlib import Path
-from datetime import datetime
-# =========================================================
-# PAGE CONFIG
-# =========================================================
-
-st.set_page_config(
-    page_title="Training Dashboard",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-
-# =========================================================
-# GOOGLE SHEET
-# =========================================================
-
-SPREADSHEET_ID = (
-    "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
-)
-
-TRAINING_SHEET_NAME = "TRAINING"
-
-TRAINING_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/"
-    f"{SPREADSHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet="
-    f"{TRAINING_SHEET_NAME}"
-)
-
-
-# =========================================================
-# LOAD GOOGLE SHEET
-# =========================================================
-
-@st.cache_data(ttl=60)
-def get_training_data():
-
-    try:
-
-        data = pd.read_csv(
-            TRAINING_CSV_URL
-        )
-
-        data.columns = (
-            data.columns
-            .astype(str)
-            .str.replace(
-                "\xa0",
-                " ",
-                regex=False
-            )
-            .str.replace(
-                "\n",
-                " ",
-                regex=False
-            )
-            .str.strip()
-        )
-
-        for col in data.columns:
-
-            if data[col].dtype == "object":
-
-                data[col] = (
-                    data[col]
-                    .astype(str)
-                    .str.replace(
-                        "\xa0",
-                        " ",
-                        regex=False
-                    )
-                    .str.strip()
-                )
-
-        return data.replace(
-            {
-                "nan": "",
-                "NaN": "",
-                "NAN": ""
-            }
-        )
-
-    except Exception as exc:
-
-        st.error(
-            f"Unable to load Google Sheet "
-            f"'{TRAINING_SHEET_NAME}': {exc}"
-        )
-
-        return pd.DataFrame()
-
-
-df = get_training_data()
-
-
-if df.empty:
-
-    st.error(
-        f"No data found in Google Sheet tab "
-        f"'{TRAINING_SHEET_NAME}'."
-    )
-
-    st.stop()
-
-
-# =========================================================
-# COLUMN NORMALIZATION
-# =========================================================
-
-def clean_column_name(value):
-
-    value = str(value)
-
-    value = (
-        value
-        .replace("\xa0", " ")
-        .replace("\n", " ")
-        .strip()
-        .lower()
-    )
-
-    value = re.sub(
-        r"[^a-z0-9]+",
-        "_",
-        value
-    )
-
-    return value.strip("_")
-
-
-column_map = {
-    clean_column_name(col): col
-    for col in df.columns
-}
-
-
-def find_exact_column(column_name):
-
-    cleaned = clean_column_name(
-        column_name
-    )
-
-    return column_map.get(
-        cleaned
-    )
-
-
-# =========================================================
-# ACTUAL TRAINING SHEET COLUMNS
-# =========================================================
-
-COL_SL_NO = find_exact_column(
-    "Sl No."
-)
-
-COL_DEPARTMENT = find_exact_column(
-    "Departments"
-)
-
-COL_PROCESS = find_exact_column(
-    "Process"
-)
-
-COL_TOTAL_L08 = find_exact_column(
-    "Total Employees (L08 & Above)"
-)
-
-COL_TOTAL_BELOW_L08 = find_exact_column(
-    "Total Employees (Below L08)"
-)
-
-COL_TOTAL_ASSOCIATES = find_exact_column(
-    "Total Associates"
-)
-
-COL_TOTAL_CONTRACTUAL = find_exact_column(
-    "Total Contractual Workers"
-)
-
-COL_COMPLETED_L08 = find_exact_column(
-    "Completed Training (L08 & Above)"
-)
-
-COL_COMPLETED_BELOW_L08 = find_exact_column(
-    "Completed Training (Below L08)"
-)
-
-COL_COMPLETED_ASSOCIATES = find_exact_column(
-    "Completed Training (Associates)"
-)
-
-COL_COMPLETED_CONTRACTS = find_exact_column(
-    "Completed Training (Contracts)"
-)
-
-COL_PCT_L08 = find_exact_column(
-    "Completion % (L08 & Above)"
-)
-
-COL_PCT_BELOW_L08 = find_exact_column(
-    "Completion % (Below L08)"
-)
-
-COL_PCT_ASSOCIATES = find_exact_column(
-    "Completion % (Associates)"
-)
-
-COL_PCT_CONTRACTUAL = find_exact_column(
-    "Completion % (Contractual)"
-)
-
-
-# =========================================================
-# OPTIONAL MONTH COLUMN
-# =========================================================
-
-COL_MONTH = None
-
-for possible_month_column in [
-    "Month",
-    "Training Month",
-    "Date",
-    "Training Date"
-]:
-
-    found_month_column = find_exact_column(
-        possible_month_column
-    )
-
-    if found_month_column:
-
-        COL_MONTH = found_month_column
-
-        break
-
-
-# =========================================================
-# REQUIRED COLUMN CHECK
-# =========================================================
-
-required_columns = {
-
-    "Sl No.": COL_SL_NO,
-
-    "Departments": COL_DEPARTMENT,
-
-    "Process": COL_PROCESS,
-
-    "Total Employees (L08 & Above)": COL_TOTAL_L08,
-
-    "Total Employees (Below L08)": COL_TOTAL_BELOW_L08,
-
-    "Total Associates": COL_TOTAL_ASSOCIATES,
-
-    "Total Contractual Workers": COL_TOTAL_CONTRACTUAL,
-
-    "Completed Training (L08 & Above)": COL_COMPLETED_L08,
-
-    "Completed Training (Below L08)": COL_COMPLETED_BELOW_L08,
-
-    "Completed Training (Associates)": COL_COMPLETED_ASSOCIATES,
-
-    "Completed Training (Contracts)": COL_COMPLETED_CONTRACTS,
-
-    "Completion % (L08 & Above)": COL_PCT_L08,
-
-    "Completion % (Below L08)": COL_PCT_BELOW_L08,
-
-    "Completion % (Associates)": COL_PCT_ASSOCIATES,
-
-    "Completion % (Contractual)": COL_PCT_CONTRACTUAL
-
-}
-
-
-missing_columns = [
-    name
-    for name, actual in required_columns.items()
-    if actual is None
-]
-
-
-if missing_columns:
-
-    st.error(
-        "The following required columns are missing "
-        "from the TRAINING Google Sheet:"
-    )
-
-    for column in missing_columns:
-
-        st.write(
-            f"- {column}"
-        )
-
-    st.stop()
-
-
-# =========================================================
-# DATA PREPARATION
-# =========================================================
-
-work = df.copy()
-
-
-# =========================================================
-# TEXT COLUMNS
-# =========================================================
-
-work["_sl_no"] = (
-    work[COL_SL_NO]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-)
-
-work["_department"] = (
-    work[COL_DEPARTMENT]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-)
-
-work["_process"] = (
-    work[COL_PROCESS]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-)
-
-
-# =========================================================
-# MONTH DATA
-# =========================================================
-
-if COL_MONTH:
-
-    work["_date"] = pd.to_datetime(
-        work[COL_MONTH],
-        errors="coerce",
-        dayfirst=True
-    )
-
-else:
-
-    work["_date"] = pd.NaT
-
-
-# =========================================================
-# NUMERIC FUNCTION
-# =========================================================
-
-def to_numeric(series):
-
-    return pd.to_numeric(
-
-        series
-        .astype(str)
-        .str.replace(
-            ",",
-            "",
-            regex=False
-        )
-        .str.replace(
-            "%",
-            "",
-            regex=False
-        )
-        .str.strip(),
-
-        errors="coerce"
-
-    ).fillna(0)
-
-
-# =========================================================
-# TOTAL EMPLOYEE COLUMNS
-# =========================================================
-
-work["_total_l08"] = to_numeric(
-    work[COL_TOTAL_L08]
-)
-
-work["_total_below_l08"] = to_numeric(
-    work[COL_TOTAL_BELOW_L08]
-)
-
-work["_total_associates"] = to_numeric(
-    work[COL_TOTAL_ASSOCIATES]
-)
-
-work["_total_contractual"] = to_numeric(
-    work[COL_TOTAL_CONTRACTUAL]
-)
-
-
-# =========================================================
-# COMPLETED TRAINING COLUMNS
-# =========================================================
-
-work["_completed_l08"] = to_numeric(
-    work[COL_COMPLETED_L08]
-)
-
-work["_completed_below_l08"] = to_numeric(
-    work[COL_COMPLETED_BELOW_L08]
-)
-
-work["_completed_associates"] = to_numeric(
-    work[COL_COMPLETED_ASSOCIATES]
-)
-
-work["_completed_contractual"] = to_numeric(
-    work[COL_COMPLETED_CONTRACTS]
-)
-
-
-# =========================================================
-# COMPLETION PERCENTAGE COLUMNS
-# =========================================================
-
-work["_pct_l08"] = to_numeric(
-    work[COL_PCT_L08]
-)
-
-work["_pct_below_l08"] = to_numeric(
-    work[COL_PCT_BELOW_L08]
-)
-
-work["_pct_associates"] = to_numeric(
-    work[COL_PCT_ASSOCIATES]
-)
-
-work["_pct_contractual"] = to_numeric(
-    work[COL_PCT_CONTRACTUAL]
-)
-
-
-# =========================================================
-# VISUAL CSS
-# =========================================================
-
-st.markdown(
-    """
-<style>
-
-/* =========================================================
-   REMOVE DEFAULT STREAMLIT SPACE
-   ========================================================= */
-
-#MainMenu,
-header,
-footer,
-[data-testid="stHeader"],
-[data-testid="stToolbar"] {
-
-    display:none !important;
-
-}
-
-
-html,
-body,
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > .main {
-
-    margin:0 !important;
-    padding:0 !important;
-
-    overflow-x:hidden !important;
-
-}
-
-
-[data-testid="stMainBlockContainer"],
-[data-testid="stAppViewBlockContainer"],
-.block-container {
-
-    width:100% !important;
-
-    max-width:none !important;
-
-    margin:0 !important;
-
-    padding:0 8px !important;
-
-}
-
-
-[data-testid="stAppViewContainer"] > .main > div {
-
-    padding:0 !important;
-
-}
-
-
-/* =========================================================
-   FILTER
-   ========================================================= */
-
-.filter-title {
-
-    color:#193d77;
-
-    font-family:Arial,sans-serif;
-
-    font-size:12px;
-
-    font-weight:900;
-
-    margin-bottom:4px;
-
-    letter-spacing:.3px;
-
-}
-
-/* =========================================================
-   MONTH & DEPARTMENT - WHITE SHINY 3D FILTER BOX
-   ========================================================= */
-
-[data-testid="stSelectbox"] {
-    margin-bottom:8px !important;
-    padding:0 !important;
-}
-
-/* Main outer box */
-[data-testid="stSelectbox"] > div > div {
-    min-height:44px !important;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 35%,
-            #f8fbfd 65%,
-            #eaf3f8 100%
-        ) !important;
-
-    border:1px solid #c7d8e2 !important;
-    border-radius:12px !important;
-
-    box-shadow:
-        0 8px 18px rgba(55,90,110,0.16),
-        0 3px 6px rgba(55,90,110,0.10),
-        inset 0 2px 0 rgba(255,255,255,0.98),
-        inset 0 -5px 10px rgba(180,205,218,0.16) !important;
-
-    transition:all 0.2s ease-in-out !important;
-}
-
-/* Select area */
-[data-testid="stSelectbox"] div[data-baseweb="select"] {
-    min-height:44px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #fbfdfe 45%,
-            #eef6fa 100%
-        ) !important;
-
-    border:0 !important;
-    border-radius:11px !important;
-}
-
-/* Text */
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    font-family:Arial,sans-serif !important;
-    font-size:13px !important;
-    font-weight:800 !important;
-    color:#193d77 !important;
-}
-
-/* Input text */
-[data-testid="stSelectbox"] input {
-    font-size:13px !important;
-    font-weight:800 !important;
-    color:#193d77 !important;
-}
-
-/* Dropdown arrow */
-[data-testid="stSelectbox"] svg {
-    color:#193d77 !important;
-}
-
-/* Hover - raised 3D effect */
-[data-testid="stSelectbox"] > div > div:hover {
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 45%,
-            #eef7fb 100%
-        ) !important;
-
-    border-color:#a9c4d4 !important;
-
-    box-shadow:
-        0 11px 24px rgba(55,90,110,0.20),
-        0 4px 8px rgba(55,90,110,0.12),
-        inset 0 2px 0 #ffffff,
-        inset 0 -6px 12px rgba(175,202,215,0.18) !important;
-
-    transform:translateY(-1px) !important;
-}
-
-/* Focus */
-[data-testid="stSelectbox"] div[data-baseweb="select"]:focus-within {
-    border:1px solid #9dbdce !important;
-
-    box-shadow:
-        0 8px 18px rgba(55,90,110,0.16),
-        inset 0 2px 0 #ffffff,
-        inset 0 -5px 10px rgba(175,202,215,0.15) !important;
-}
-
-
-[data-testid="stSelectbox"] input {
-
-    font-size:13px !important;
-
-}
-
-
-[data-testid="stSelectbox"] span {
-
-    font-size:13px !important;
-
-}
-
-
-/* =========================================================
-   KPI CARDS
-   ========================================================= */
-
-.kpi-card {
-
-    min-height:118px;
-
-    padding:14px 10px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 24%,
-            #fffefe 48%,
-            #f9fcfd 70%,
-            #edf6fa 100%
-        );
-
-    border:1px solid #cbdde6;
-
-    border-radius:13px;
-
-    overflow:hidden;
-
-    box-shadow:
-        0 10px 23px
-        rgba(55,90,110,.13),
-
-        0 4px 8px
-        rgba(55,90,110,.08),
-
-        inset 0 2px 0 #ffffff,
-
-        inset 0 -7px 13px
-        rgba(175,202,215,.15);
-
-}
-
-
-.kpi-label {
-
-    color:#193d77;
-
-    font-family:Arial,sans-serif;
-
-    font-size:11px;
-
-    font-weight:950;
-
-    line-height:1.15;
-
-    text-align:center;
-
-}
-
-
-.kpi-value {
-
-    font-family:Arial,sans-serif;
-
-    font-size:33px;
-
-    font-weight:950;
-
-    line-height:1;
-
-    text-align:center;
-
-}
-
-
-.kpi-value.blue {
-
-    color:#174b87;
-
-}
-
-
-.kpi-value.red {
-
-    color:#e1262d;
-
-}
-
-
-.kpi-sub {
-
-    display:none !important;
-
-}
-
-
-/* =========================================================
-   DONUT
-   ========================================================= */
-
-.donut-card {
-
-    min-height:118px;
-
-    padding:8px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff,
-            #edf6fa
-        );
-
-    border:1px solid #cbdde6;
-
-    border-radius:13px;
-
-    box-shadow:
-        0 10px 23px
-        rgba(55,90,110,.13),
-
-        inset 0 2px 0 #ffffff;
-
-}
-
-
-.donut-title {
-
-    color:#193d77;
-
-    font-family:Arial,sans-serif;
-
-    font-size:10px;
-
-    font-weight:950;
-
-    text-align:center;
-
-}
-
-
-.donut-wrap {
-
-    position:relative;
-
-    width:70px;
-
-    height:70px;
-
-    margin:3px auto;
-
-}
-
-
-.donut-svg {
-
-    width:70px;
-
-    height:70px;
-
-    transform:rotate(-90deg);
-
-}
-
-
-.donut-bg {
-
-    fill:none;
-
-    stroke:#dce9ef;
-
-    stroke-width:10;
-
-}
-
-
-.donut-progress {
-
-    fill:none;
-
-    stroke:#2b66a8;
-
-    stroke-width:10;
-
-    stroke-linecap:round;
-
-}
-
-
-.donut-text {
-
-    position:absolute;
-
-    top:50%;
-
-    left:50%;
-
-    transform:translate(-50%,-50%);
-
-    color:#193d77;
-
-    font-size:39px;
-
-    font-weight:950;
-
-}
-
-
-.donut-bottom {
-
-    color:#587084;
-
-    font-size:9px;
-
-    font-weight:800;
-
-    text-align:center;
-
-}
-
-
-/* =========================================================
-   PANELS
-   ========================================================= */
-
-.panel,
-.chart-panel {
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 24%,
-            #fffefe 48%,
-            #f9fcfd 70%,
-            #edf6fa 100%
-        );
-
-    border:1px solid #cbdde6;
-
-    border-radius:13px;
-
-    overflow:hidden;
-
-    box-shadow:
-        0 10px 23px
-        rgba(55,90,110,.13),
-
-        0 4px 8px
-        rgba(55,90,110,.08),
-
-        inset 0 2px 0 #ffffff,
-
-        inset 0 -7px 13px
-        rgba(175,202,215,.15);
-
-}
-
-
-.panel-title,
-.chart-panel-title {
-
-    min-height:32px;
-
-    display:flex;
-
-    align-items:center;
-
-    padding:0 12px;
-
-    color:#193d77;
-
-    font-size:12px;
-
-    font-weight:950;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #eef7fb 100%
-        );
-
-    border-bottom:1px solid #dce7ec;
-
-}
-
-
-/* =========================================================
-   TABLE
-   ========================================================= */
-
-.training-table {
-
-    width:100%;
-
-    border-collapse:collapse;
-
-    border:1px solid #cbdde6;
-
-    font-family:Arial,sans-serif;
-
-    font-size:10px;
-
-}
-
-
-.training-table th {
-
-    background:#193d77;
-
-    color:#ffffff;
-
-    font-weight:900;
-
-    padding:7px 8px;
-
-    border:1px solid #9fb8c8;
-
-    text-align:center;
-
-}
-
-
-.training-table th:first-child {
-
-    text-align:left;
-
-}
-
-
-.training-table td {
-
-    padding:6px 8px;
-
-    text-align:center;
-
-    border:1px solid #cbdde6;
-
-    color:#111111;
-
-    font-weight:700;
-
-    background:#ffffff;
-
-}
-
-
-.training-table td:first-child {
-
-    text-align:left;
-
-    font-weight:800;
-
-}
-
-
-.training-table tr:nth-child(even) td {
-
-    background:#fbfdfe;
-
-}
-
-
-.training-table tr:nth-child(odd) td {
-
-    background:#ffffff;
-
-}
-
-
-.training-table td.overall {
-
-    font-weight:950;
-
-    color:#193d77;
-
-}
-
-
-/* =========================================================
-   FOOTER
-   ========================================================= */
-
-.footer {
-
-    height:20px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    color:#587084;
-
-    background:
-        linear-gradient(
-            180deg,
-            #f8fbfd,
-            #eaf2f6
-        );
-
-    font-size:9px;
-
-    font-weight:800;
-
-    border-top:1px solid #d7e3ea;
-
-}
-
-
-/* =========================================================
-   PLOTLY
-   ========================================================= */
-
-[data-testid="stPlotlyChart"] {
-
-    margin-top:-5px !important;
-
-    margin-bottom:-10px !important;
-
-}
-
-</style>
-""",
-    unsafe_allow_html=True
-)
-
+import requests
+import streamlit as st
+import streamlit.components.v1 as components
 
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
-
 st.set_page_config(
-    page_title="PSM Digital Dashboard",
-    page_icon="🛡️",
+    page_title="Training Dashboard",
+    page_icon="📚",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
-
-
 # ============================================================
-# REMOVE STREAMLIT TOP SPACE
+# STYLE
 # ============================================================
-
 st.markdown(
     """
     <style>
 
-    html,
-    body {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    [data-testid="stAppViewContainer"] {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-    }
-
-    [data-testid="stAppViewContainer"] > .main {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-    }
-
-    [data-testid="stHeader"] {
-        display: none !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-
-    [data-testid="stDecoration"] {
-        display: none !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-
-    .block-container {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-        padding-bottom: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        max-width: 100% !important;
-    }
-
     .stApp {
-        margin-top: 0 !important;
-        padding-top: 0 !important;
+        background:#f3f8fc;
     }
 
-    iframe {
-        display: block !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
+    #MainMenu, footer {
+        visibility:hidden;
     }
 
-    /* Control the Streamlit element that contains the header iframe */
-    div[data-testid="stElementContainer"]:has(iframe) {
-        margin-top: -25px !important;
-        margin-bottom: -8px !important;
-        padding: 0 !important;
+
+
+.block-container {
+    padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-35px !important;
+    margin-bottom:0px !important;
+    max-width:100%;
+}
+
+/* REMOVE BOTTOM SPACE */
+[data-testid="stAppViewContainer"] {
+    padding-bottom:0px !important;
+}
+
+[data-testid="stMainBlockContainer"] {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
+}
+
+section.main {
+    padding-bottom:0px !important;
+    margin-bottom:0px !important;
+}
+
+   div[data-testid="stMetric"] {
+    background:#ffffff;
+    border:1px solid #cbddea;
+    border-radius:7px;
+    padding:6px 6px !important;
+    min-height:72px;
+    overflow:visible !important;
+}
+
+    div[data-testid="stMetricLabel"] {
+    font-size:9px !important;
+    font-weight:800 !important;
+    color:#20384f !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    line-height:1.1 !important;
+}
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] > div,
+div[data-testid="stMetricLabel"] p {
+    overflow:visible !important;
+    text-overflow:clip !important;
+    white-space:nowrap !important;
+    max-width:none !important;
+}
+
+div[data-testid="stMetricLabel"] p {
+    margin:0 !important;
+    padding:0 !important;
+    font-size:8px !important;
+    line-height:1.1 !important;
+}
+    div[data-testid="stMetricValue"] {
+        color:#123f77 !important;
+        font-size:24px !important;
+        font-weight:900 !important;
+    }
+
+    .module-card {
+        background:#ffffff;
+        border:1px solid #d3e0ea;
+        border-radius:7px;
+        padding:7px;
+        margin-bottom:8px;
+        box-shadow:0 1px 4px rgba(20,65,95,.06);
+    }
+
+    .module-title {
+        color:#073f78;
+        font-size:12px;
+        font-weight:900;
+        margin-bottom:6px;
+    }
+
+    .section-bar {
+        background:#07518b;
+        color:#ffffff;
+        border-radius:4px;
+        padding:6px 8px;
+        font-size:10px;
+        font-weight:900;
+        margin:4px 0 6px 0;
+    }
+
+    .live-bar {
+        background:#ffffff;
+        border:1px solid #cbddea;
+        border-radius:4px;
+        padding:5px 8px;
+        color:#4f6678;
+        font-size:10px;
+        margin-bottom:6px;
+    }
+
+    .footer {
+        text-align:center;
+        color:#627689;
+        background:#edf4f8;
+        border-top:1px solid #cbdce7;
+        padding:7px;
+        font-size:10px;
+        font-weight:800;
+        margin-top:8px;
+    }
+
+    .small-note {
+        font-size:9px;
+        color:#6c7f8f;
+    }
+
+    .stDataFrame {
+        border:1px solid #d5e0e8;
+    }
+
+
+/* ========================================================
+   REFRESH BUTTON — KEEP BELOW HEADER
+   ======================================================== */
+
+div[data-testid="stButton"] {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+}
+
+
+
+    /* ========================================================
+       MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
+       ======================================================== */
+    [data-testid="stPageLink"] {
+        margin-bottom:0px !important;
+    }
+
+    [data-testid="stPageLink"],
+    [data-testid="stPageLink"] a,
+    [data-testid="stPageLink"] a *,
+    [data-testid="stPageLink"] p,
+    [data-testid="stPageLink"] span,
+    [data-testid="stPageLink"] div {
+        color:#073f78 !important;
+        font-size:12px !important;
+        font-weight:900 !important;
+        text-decoration:none !important;
+    }
+
+    [data-testid="stPageLink"] a:hover,
+    [data-testid="stPageLink"] a:hover * {
+        color:#073f78 !important;
+        text-decoration:none !important;
     }
 
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 #=============================================================
@@ -1202,17 +241,7 @@ st.markdown(
         margin-top: 0 !important;
     }
 
-    [data-testid="stHeader"] {
-        display: none !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
 
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
 
     [data-testid="stDecoration"] {
         display: none !important;
@@ -1223,7 +252,7 @@ st.markdown(
 
     .block-container {
     padding-top: 0 !important;
-    margin-top: -15px !important;
+    margin-top: -30px !important;
     padding-bottom: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -1820,7 +849,7 @@ header_html = """
 
             <div class="main-title">
 
-                TRAINING & COMPETENCY
+                TRAINING 
 
                 <span class="main-title-orange"></span>
 
@@ -1937,1734 +966,2511 @@ header_html = header_html.replace(
 
 components.html(
     header_html,
-    height=114,
+    height=100,
     scrolling=False
 )
-
 st.markdown(
     """
     <style>
+    /* REMOVE SPACE BELOW HEADER IFRAME */
     div[data-testid="stVerticalBlock"] > div:has(> iframe) {
-        margin-bottom: -65px !important;
+        margin-bottom: -35px !important;
+        padding-bottom: 0px !important;
+    }
+
+    /* REMOVE TOP SPACE BEFORE FILTER ROW */
+    .top-filter-row {
+        margin-top: -20px !important;
+        padding-top: 0px !important;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
+    margin-bottom: 0px !important;
+}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
+# ============================================================
+# GOOGLE SHEET CONFIGURATION
+# ============================================================
+SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
+TRAINING_SHEET_NAME = "TRAINING"
 
-# =========================================================
-# FILTERS
-# =========================================================
+# The TRAINING tab is a wide-format sheet:
+# one row = Department + Process/Module,
+# with separate Total and Completed Training columns for
+# L08 & Above, Below L08, Associates and Contractual Workers.
 
-filter_month, filter_department = st.columns(
-    [1, 1],
-    gap="small"
+TRAINING_CSV_URL = (
+    f"https://docs.google.com/spreadsheets/d/"
+    f"{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet="
+    f"{quote(TRAINING_SHEET_NAME)}"
+)
+
+# ============================================================
+# AUTO REFRESH
+# ============================================================
+# The page reloads every 30 seconds. The CSV request also receives
+# a timestamp so the dashboard does not keep an old Google response.
+components.html(
+    """ 
+    <script> 
+        setTimeout(function () { 
+            window.parent.location.reload(); 
+        }, 30000); 
+    </script> 
+    """,
+    height=0,
 )
 
 
-# =========================================================
-# MONTH FILTER
-# =========================================================
+# ============================================================
+# LOAD GOOGLE SHEET - NO STREAMLIT DATA CACHE
+# ============================================================
+def load_training_data():
+    cache_buster = int(time.time())
+    url = f"{TRAINING_CSV_URL}&_refresh={cache_buster}"
 
-with filter_month:
+    response = requests.get(
+        url,
+        timeout=20,
+        headers={
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+    response.raise_for_status()
 
-    st.markdown(
-        "<div class='filter-title'>MONTH</div>",
-        unsafe_allow_html=True
+    data = pd.read_csv(
+        io.BytesIO(response.content)
     )
 
+    # Clean column names.
+    data.columns = (
+        data.columns
+        .astype(str)
+        .str.replace("\xa0", " ", regex=False)
+        .str.replace("\n", " ", regex=False)
+        .str.strip()
+    )
 
-    if COL_MONTH:
-
-        valid_dates = (
-            work["_date"]
-            .dropna()
-        )
-
-
-        if not valid_dates.empty:
-
-            month_periods = (
-                valid_dates
-                .dt
-                .to_period("M")
-                .drop_duplicates()
-                .sort_values(
-                    ascending=False
-                )
+    # Clean text cells.
+    for col in data.columns:
+        if data[col].dtype == "object":
+            data[col] = (
+                data[col]
+                .astype(str)
+                .str.replace("\xa0", " ", regex=False)
+                .str.replace("\n", " ", regex=False)
+                .str.strip()
             )
 
-
-            month_labels = [
-
-                period.strftime(
-                    "%B %Y"
-                )
-
-                for period
-                in month_periods
-
-            ]
-
-        else:
-
-            month_labels = []
-
-    else:
-
-        month_labels = []
-
-
-    month_options = [
-        "All Months"
-    ] + month_labels
-
-
-    selected_month = st.selectbox(
-
-        "Month",
-
-        month_options,
-
-        index=0,
-
-        key="month_selector",
-
-        label_visibility="collapsed"
-
+    return data.replace(
+        {
+            "nan": "",
+            "NaN": "",
+            "NAN": "",
+            "None": "",
+            "none": "",
+        }
     )
 
 
-# =========================================================
-# DEPARTMENT FILTER
-# =========================================================
+try:
+    df = load_training_data()
+except Exception as exc:
+    st.error(
+        f"Unable to load Google Sheet tab "
+        f"'{TRAINING_SHEET_NAME}': {exc}"
+    )
+    st.stop()
+
+if df.empty:
+    st.error(
+        f"No data found in Google Sheet tab "
+        f"'{TRAINING_SHEET_NAME}'."
+    )
+    st.stop()
+
+
+# ============================================================
+# COLUMN NORMALIZATION
+# ============================================================
+def clean_column_name(value):
+    value = (
+        str(value)
+        .replace("\xa0", " ")
+        .replace("\n", " ")
+        .strip()
+        .lower()
+    )
+    value = re.sub(
+        r"[^a-z0-9]+",
+        "_",
+        value,
+    )
+    return value.strip("_")
+
+
+column_map = {
+    clean_column_name(col): col
+    for col in df.columns
+}
+
+
+def find_column(names):
+    # Exact matches first.
+    for name in names:
+        key = clean_column_name(name)
+        if key in column_map:
+            return column_map[key]
+
+            # Conservative partial matches second.
+    for key, original in column_map.items():
+        for name in names:
+            search_key = clean_column_name(name)
+            if search_key and (
+                    search_key in key
+                    or key in search_key
+            ):
+                return original
+
+    return None
+
+
+# ============================================================
+# DETECT GOOGLE SHEET COLUMNS
+# ============================================================
+COL_MODULE = find_column(
+    [
+        "Module",
+        "Pillar",
+        "Training Module",
+        "Training Pillar",
+        "Topic",
+        "Process",
+    ]
+)
+
+COL_DEPARTMENT = find_column(
+    [
+        "Department",
+        "Departments",
+        "Dept",
+    ]
+)
+
+COL_BAND = find_column(
+    [
+        "Band",
+        "Employee Band",
+        "Employee Category / Band",
+        "Grade Band",
+        "Manpower Category",
+        "Band / Category",
+        "Employee Category",
+    ]
+)
+
+COL_LEVEL = find_column(
+    [
+        "Level",
+        "L08",
+        "L08 Level",
+        "Employee Level",
+        "Grade",
+        "Employee Grade",
+    ]
+)
+
+COL_PERSON_TYPE = find_column(
+    [
+        "Person Type",
+        "Employee Type",
+        "Worker Type",
+        "Associate / Contractual",
+        "Associate Type",
+        "Employment Type",
+        "Worker Category",
+        "Employee Category",
+    ]
+)
+
+COL_TOTAL = find_column(
+    [
+        "Total",
+        "Total Employees",
+        "Total Workers",
+        "Total Headcount",
+        "Total Associates",
+        "Target",
+        "No. of Employees",
+        "Employee Count",
+        "Headcount",
+    ]
+)
+
+COL_TRAINED = find_column(
+    [
+        "Trained",
+        "Training Completed",
+        "Completed",
+        "No. Trained",
+        "Number Trained",
+        "Trained Employees",
+        "No of Trained",
+    ]
+)
+
+COL_COMPLETION = find_column(
+    [
+        "Completion %",
+        "Completion Percentage",
+        "Completion",
+        "Training Completion %",
+        "%",
+    ]
+)
+
+# ============================================================
+# BAND-SPECIFIC COLUMNS IN THE TRAINING SHEET
+# ============================================================
+# The TRAINING tab is a wide-format sheet. Each row contains
+# separate employee totals and completed-training values for:
+#   1. L08 & Above
+#   2. Below L08
+#   3. Associates
+#   4. Contractual / Off-roll
+#
+# IMPORTANT:
+# Do NOT use the generic "Total Employees" column here.
+# The generic partial-match logic previously picked the
+# "Total Employees (L08 & Above)" column and therefore
+# treated 1,127 as the entire employee population.
+#
+# The actual sheet totals visible in the supplied data are:
+#   L08 & Above       = 1,127
+#   Below L08         = 1,212
+#   Associates        = 1,504
+#   Contractual       = 4,019
+#   All bands total   = 7,862
+#
+# These dedicated columns are now the source of truth.
+
+COL_TOTAL_L08_ABOVE = find_column(
+    [
+        "Total Employees (L08 & Above)",
+        "Total Employee (L08 & Above)",
+        "Total Employees L08 & Above",
+        "L08 & Above Total Employees",
+    ]
+)
+
+COL_TOTAL_L08_BELOW = find_column(
+    [
+        "Total Employees (Below L08)",
+        "Total Employees (L08 below)",
+        "Total Employees Below L08",
+        "Below L08 Total Employees",
+    ]
+)
+
+COL_TOTAL_ASSOCIATES = find_column(
+    [
+        "Total Associates",
+        "Total Associate Employees",
+        "Associates Total",
+    ]
+)
+
+COL_TOTAL_OFFROLL = find_column(
+    [
+        "Total Contractual Worker",
+        "Total Contractual Workers",
+        "Total Contractual Worker(s)",
+        "Total Contracts",
+        "Total Contract",
+        "Total Off-roll Employees",
+        "Total Off Roll Employees",
+        "Contractual Worker Total",
+    ]
+)
+
+COL_TRAINED_L08_ABOVE = find_column(
+    [
+        "Completed Training (L08 & Above)",
+        "Completed Training L08 & Above",
+        "Completed Training (L08 Above)",
+        "L08 & Above Completed Training",
+    ]
+)
+
+COL_TRAINED_L08_BELOW = find_column(
+    [
+        "Completed Training (Below L08)",
+        "Completed Training (L08 below)",
+        "Completed Training Below L08",
+        "Below L08 Completed Training",
+    ]
+)
+
+COL_TRAINED_ASSOCIATES = find_column(
+    [
+        "Completed Training (Associates)",
+        "Completed Training Associates",
+        "Associates Completed Training",
+    ]
+)
+
+COL_TRAINED_OFFROLL = find_column(
+    [
+        # The TRAINING sheet uses "Contracts" for the Off-roll/
+        # Contractual completed-training column.
+        "Completed Training (Contracts)",
+        "Completed Training Contracts",
+        "Completed Training (Contract)",
+        "Completed Training (Contractual Worker)",
+        "Completed Training (Contractual Workers)",
+        "Completed Training (Off-roll Employees)",
+        "Completed Training (Off Roll Employees)",
+        "Contractual Worker Completed Training",
+    ]
+)
+
+WIDE_BAND_COLUMNS = {
+    "L08 & Above": {
+        "total": COL_TOTAL_L08_ABOVE,
+        "trained": COL_TRAINED_L08_ABOVE,
+    },
+    "L08 below": {
+        "total": COL_TOTAL_L08_BELOW,
+        "trained": COL_TRAINED_L08_BELOW,
+    },
+    "Associates": {
+        "total": COL_TOTAL_ASSOCIATES,
+        "trained": COL_TRAINED_ASSOCIATES,
+    },
+    "Off-roll Employees": {
+        "total": COL_TOTAL_OFFROLL,
+        "trained": COL_TRAINED_OFFROLL,
+    },
+}
+
+WIDE_BAND_DATA_AVAILABLE = any(
+    item["total"] is not None
+    for item in WIDE_BAND_COLUMNS.values()
+)
+
+# ============================================================
+# DATA PREPARATION
+# ============================================================
+work = df.copy()
+
+
+def text_series(column, default=""):
+    if column is None:
+        return pd.Series(
+            default,
+            index=work.index,
+            dtype="object",
+        )
+
+    return (
+        work[column]
+        .fillna("")
+        .astype(str)
+        .str.replace("\xa0", " ", regex=False)
+        .str.strip()
+    )
+
+
+def numeric_series(column):
+    if column is None:
+        return pd.Series(
+            0.0,
+            index=work.index,
+            dtype=float,
+        )
+
+    cleaned = (
+        work[column]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .str.strip()
+    )
+
+    return pd.to_numeric(
+        cleaned,
+        errors="coerce",
+    ).fillna(0.0)
+
+
+work["_module"] = text_series(
+    COL_MODULE,
+    "Other",
+)
+
+work["_department"] = text_series(
+    COL_DEPARTMENT,
+    "Others",
+)
+
+work["_band_source"] = text_series(
+    COL_BAND,
+)
+
+work["_level"] = text_series(
+    COL_LEVEL,
+)
+
+work["_person_type"] = text_series(
+    COL_PERSON_TYPE,
+)
+
+work["_total"] = numeric_series(
+    COL_TOTAL,
+)
+
+work["_trained"] = numeric_series(
+    COL_TRAINED,
+)
+
+work["_completion_raw"] = numeric_series(
+    COL_COMPLETION,
+)
+
+# Numeric band-specific totals/completions.
+for _band_name, _band_cols in WIDE_BAND_COLUMNS.items():
+    _suffix = {
+        "L08 & Above": "l08_above",
+        "L08 below": "l08_below",
+        "Associates": "associates",
+        "Off-roll Employees": "offroll",
+    }[_band_name]
+
+    work[f"_total_{_suffix}"] = numeric_series(
+        _band_cols["total"]
+    )
+
+    work[f"_trained_{_suffix}"] = numeric_series(
+        _band_cols["trained"]
+    )
+
+# ============================================================
+# NORMALIZE COMPLETION %
+# ============================================================
+if COL_COMPLETION:
+    max_completion = (
+        float(work["_completion_raw"].max())
+        if not work.empty
+        else 0
+    )
+
+    # Supports both 0.85 and 85 formats.
+    if 0 < max_completion <= 1.5:
+        work["_completion"] = (
+                work["_completion_raw"] * 100
+        )
+    else:
+        work["_completion"] = (
+            work["_completion_raw"]
+        )
+else:
+    work["_completion"] = 0.0
+
+work["_completion"] = (
+    work["_completion"]
+    .clip(0, 100)
+)
+
+# If the sheet does not contain a completion column,
+# calculate it from Trained / Total.
+if COL_COMPLETION is None:
+    valid_total = work["_total"] > 0
+
+    work.loc[
+        valid_total,
+        "_completion",
+    ] = (
+            work.loc[
+                valid_total,
+                "_trained",
+            ]
+            /
+            work.loc[
+                valid_total,
+                "_total",
+            ]
+            * 100
+    )
+
+# ============================================================
+# BAND DEFINITIONS
+# ============================================================
+BAND_ORDER = [
+    "L08 & Above",
+    "L08 below",
+    "Associates",
+    "Off-roll Employees",
+]
+
+
+def normalize_band(value):
+    text = str(value).strip().lower()
+
+    if text in {
+        "",
+        "nan",
+        "none",
+        "null",
+        "-",
+    }:
+        return ""
+
+    text = re.sub(
+        r"[‐‑‒–—−]",
+        "-",
+        text,
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    )
+
+    # Off-roll / contractual must be checked first.
+    if re.search(
+            r"off\s*[- ]?roll"
+            r"|contract(?:ual|or)?"
+            r"|third\s*party"
+            r"|contract\s*labou?r",
+            text,
+    ):
+        return "Off-roll Employees"
+
+        # Associates next.
+    if re.search(
+            r"\bassociate(?:s)?\b",
+            text,
+    ):
+        return "Associates"
+
+        # Explicit L08 above / below.
+    if re.search(
+            r"\bl\s*0?8\s*(?:and|&)?\s*above\b",
+            text,
+    ):
+        return "L08 & Above"
+
+    if re.search(
+            r"\bl\s*0?8\s*(?:and|&)?\s*below\b",
+            text,
+    ):
+        return "L08 below"
+
+        # L08+ / L8+ / >=8.
+    if re.search(
+            r"l\s*0?8\s*\+"
+            r"|l\s*0?8\s*(?:or|and)\s*above"
+            r"|>=\s*8"
+            r"|8\s*\+"
+            r"|above\s*8",
+            text,
+    ):
+        return "L08 & Above"
+
+        # Below L08 / L01-L07.
+    if re.search(
+            r"below\s*8"
+            r"|<\s*8"
+            r"|l\s*0?[1-7]\b",
+            text,
+    ):
+        return "L08 below"
+
+        # L08, L09, L10, etc.
+    level_match = re.search(
+        r"\bl\s*0?(\d+)\b",
+        text,
+    )
+
+    if level_match:
+        level = int(
+            level_match.group(1)
+        )
+
+        return (
+            "L08 & Above"
+            if level >= 8
+            else "L08 below"
+        )
+
+        # Pure numeric level.
+    if re.fullmatch(
+            r"\d+(?:\.0+)?",
+            text,
+    ):
+        return (
+            "L08 & Above"
+            if float(text) >= 8
+            else "L08 below"
+        )
+
+    return ""
+
+
+def resolve_band(row):
+    """
+    Band priority:
+    1. Off-roll / contractual
+    2. Associates
+    3. Explicit Band column
+    4. Level column
+    5. Person Type
+    """
+
+    person = str(
+        row["_person_type"]
+    )
+
+    band_source = str(
+        row["_band_source"]
+    )
+
+    level = str(
+        row["_level"]
+    )
+
+    special_text = (
+        f"{person} | {band_source}"
+    ).lower()
+
+    if re.search(
+            r"off\s*[- ]?roll"
+            r"|contract(?:ual|or)?"
+            r"|third\s*party"
+            r"|contract\s*labou?r",
+            special_text,
+    ):
+        return "Off-roll Employees"
+
+    if re.search(
+            r"\bassociate(?:s)?\b",
+            special_text,
+    ):
+        return "Associates"
+
+    explicit_band = normalize_band(
+        band_source
+    )
+
+    if explicit_band:
+        return explicit_band
+
+    level_band = normalize_band(
+        level
+    )
+
+    if level_band:
+        return level_band
+
+    person_band = normalize_band(
+        person
+    )
+
+    if person_band:
+        return person_band
+
+    return ""
+
+
+work["_band"] = work.apply(
+    resolve_band,
+    axis=1,
+)
+
+# ============================================================
+# FIXED MODULE ORDER
+# ============================================================
+PREFERRED_MODULE_ORDER = [
+    "PSM GA",
+    "PT",
+    "PHA",
+    "MOC",
+    "OP",
+    "BOWTIE",
+    "PSSR",
+    "LOPA",
+    "MIQA",
+]
+
+# Display-only KPI card titles. Internal module names remain unchanged.
+MODULE_TITLES = {
+    "PSM GA": "PSM General Awareness (PSM GA)",
+    "PT": "Process Technology (PT)",
+    "PHA": "Process Hazard Analysis (PHA)",
+    "MOC": "Management of Change (MOC)",
+    "OP": "Operating Procedure (OP)",
+    "BOWTIE": "Bow-Tie",
+    "PSSR": "Pre-Start Up Safety Review (PSSR)",
+    "LOPA": "Layer of Protection Analysis (LOPA)",
+    "MIQA": "Mechanical Integrity & Quality Assurance (MIQA)",
+}
+
+
+def order_modules(values):
+    values = [
+        str(x).strip()
+        for x in values
+        if str(x).strip()
+    ]
+
+    lookup = {
+        value.lower(): value
+        for value in values
+    }
+
+    result = []
+
+    for preferred in PREFERRED_MODULE_ORDER:
+        if preferred.lower() in lookup:
+            result.append(
+                lookup[
+                    preferred.lower()
+                ]
+            )
+
+    remaining = [
+        value
+        for value in values
+        if value.lower()
+           not in {
+               item.lower()
+               for item in result
+           }
+    ]
+
+    result.extend(
+        sorted(
+            remaining,
+            key=str.lower,
+        )
+    )
+
+    return result
+
+
+module_names = order_modules(
+    work["_module"].unique().tolist()
+)
+
+# ============================================================
+# COMPLETE VISUAL THEME
+# ============================================================
+st.markdown(
+    """ 
+    <style> 
+    @import url( 
+      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' 
+    ); 
+
+    * { 
+        box-sizing: border-box; 
+    } 
+
+    html, 
+    body, 
+    .stApp, 
+    [class*="css"] { 
+        font-family: 
+            "Inter", 
+            Arial, 
+            sans-serif !important; 
+    } 
+
+    /* Hide Streamlit chrome. */ 
+    #MainMenu, 
+    header, 
+    footer, 
+    [data-testid="stHeader"], 
+    [data-testid="stToolbar"] { 
+        display: none !important; 
+    } 
+
+    /* Clean white dashboard background. */ 
+    .stApp, 
+    [data-testid="stAppViewContainer"] > .main { 
+        background: #f7f9fc !important; 
+        color: #172554 !important; 
+    } 
+
+    /* Remove unnecessary top padding. */ 
+    [data-testid="stMainBlockContainer"], 
+    [data-testid="stAppViewBlockContainer"], 
+    .block-container { 
+        width: 100% !important; 
+        max-width: 100% !important; 
+        margin: 0 !important; 
+        padding: 
+            0 10px 18px 10px !important; 
+    } 
+
+    [data-testid="stVerticalBlock"] { 
+        gap: 0 !important; 
+    } 
+
+    [data-testid="stHorizontalBlock"] { 
+        gap: 14px !important; 
+        align-items: center !important; 
+    } 
+
+    /* ======================================================== 
+       FILTERS 
+       ======================================================== */ 
+    .filter-caption { 
+        display: block !important; 
+        width: 100% !important; 
+
+        margin: 0 0 6px 0 !important; 
+        padding: 0 !important; 
+
+        color: #12357d !important; 
+
+        font-family: "Inter", Arial, sans-serif !important; 
+        font-size: 11px !important; 
+        font-weight: 700 !important; 
+        line-height: 16px !important; 
+
+        text-align: left !important; 
+        white-space: nowrap !important; 
+    } 
+
+    .filter-control 
+    div[data-baseweb="select"] > div { 
+        min-height: 36px !important; 
+        height: 36px !important; 
+        border-radius: 8px !important; 
+        background: #eef1f5 !important; 
+        border: 1px solid #d9e0e8 !important; 
+        box-shadow: none !important; 
+    } 
+
+    .filter-control 
+    div[data-baseweb="select"] * { 
+        font-family: 
+            "Inter", 
+            Arial, 
+            sans-serif !important; 
+        color: #374151 !important; 
+        font-size: 11px !important; 
+    } 
+
+    .filter-control 
+    div[data-baseweb="select"] svg { 
+        fill: #374151 !important; 
+    } 
+
+    /* ======================================================== 
+       MODULE STATUS TITLE 
+       ======================================================== */ 
+    .status-title { 
+        display: flex; 
+        align-items: center; 
+
+        position: relative; 
+
+        width: 100%; 
+        min-height: 38px; 
+
+        margin: 0 0 10px 0; 
+        padding: 0 0 7px 0; 
+
+        color: #12357d; 
+
+        font-size: 25px; 
+        font-weight: 800; 
+        line-height: 1.2; 
+
+        letter-spacing: -.55px; 
+
+        overflow: visible; 
+    } 
+
+    .status-title-accent { 
+        position: static; 
+
+        display: inline-block; 
+
+        width: 35px; 
+        min-width: 35px; 
+        height: 4px; 
+
+        margin: 0 10px 0 2px; 
+
+        border-radius: 4px; 
+
+        background: #1268e8; 
+    } 
+
+    /* ======================================================== 
+       MODULE-WISE TRAINING STATUS 
+       One real HTML grid is used for all 9 cards. 
+       This avoids Streamlit column-height/Markdown overlap. 
+       ======================================================== */ 
+    .kpi-section { 
+        width: 100%; 
+        box-sizing: border-box; 
+
+        margin: 0 0 14px 0; 
+        padding: 12px 12px 14px 12px; 
+
+        background: #ffffff; 
+        border: 1px solid #e3e8ef; 
+        border-radius: 12px; 
+
+        box-shadow: 
+            0 2px 8px rgba(31, 52, 76, .035); 
+    } 
+
+    .kpi-section-title { 
+        display: flex; 
+        align-items: center; 
+
+        min-height: 34px; 
+        margin: 0 0 10px 0; 
+        padding: 0 2px; 
+
+        color: #12357d; 
+        font-size: 23px; 
+        font-weight: 800; 
+        line-height: 1.2; 
+        letter-spacing: -.45px; 
+    } 
+
+    .kpi-section-title-accent { 
+        width: 7px; 
+        min-width: 7px; 
+        height: 27px; 
+        min-height: 27px; 
+
+        margin-right: 11px; 
+
+        border-radius: 5px; 
+        background: #1268e8; 
+    } 
+
+    .kpi-grid { 
+        display: grid; 
+
+        grid-template-columns: 
+            repeat(3, minmax(0, 1fr)); 
+
+        column-gap: 14px; 
+        row-gap: 14px; 
+
+        width: 100%; 
+        box-sizing: border-box; 
+    } 
+
+    .module-card { 
+        position: relative; 
+
+        width: 100%; 
+        height: 106px; 
+        min-height: 106px; 
+        box-sizing: border-box; 
+
+        overflow: hidden; 
+
+        background: var(--card-bg); 
+
+        border: 1px solid var(--card-border); 
+        border-radius: 10px; 
+
+        padding: 9px 14px 7px 32px; 
+
+        box-shadow: 
+            0 2px 8px 
+            rgba(31, 52, 76, .07); 
+    } 
+
+    .module-card::before { 
+        content: ""; 
+
+        position: absolute; 
+
+        left: 0; 
+        top: 0; 
+        bottom: 0; 
+
+        width: 8px; 
+
+        background: var(--accent); 
+
+        border-radius: 10px 0 0 10px; 
+    } 
+
+    .module-name { 
+        margin: 0 0 5px 0; 
+
+        color: var(--accent); 
+
+        font-size: 16px; 
+        font-weight: 800; 
+        line-height: 1.15; 
+
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+    } 
+
+    .band-row { 
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+
+        min-height: 18px; 
+        gap: 10px; 
+
+        color: var(--accent); 
+
+        font-size: 10px; 
+        font-weight: 500; 
+        line-height: 1.35; 
+    } 
+
+    .band-value { 
+        min-width: 74px; 
+
+        text-align: right; 
+
+        color: var(--accent); 
+
+        font-size: 10px; 
+        font-weight: 800; 
+
+        white-space: nowrap; 
+    } 
+
+    /* Keep cards stable at smaller screen widths. */ 
+    @media (max-width: 1100px) { 
+        .kpi-grid { 
+            grid-template-columns: 
+                repeat(3, minmax(0, 1fr)); 
+            column-gap: 10px; 
+            row-gap: 12px; 
+        } 
+
+        .module-card { 
+            height: 106px; 
+            min-height: 106px; 
+        } 
+    } 
+
+    @media (max-width: 760px) { 
+        .kpi-grid { 
+            grid-template-columns: 
+                repeat(1, minmax(0, 1fr)); 
+            row-gap: 12px; 
+        } 
+
+        .kpi-section { 
+            padding: 10px; 
+        } 
+    } 
+
+    /* ======================================================== 
+       CHART SECTION CARDS 
+       ======================================================== */ 
+
+
+
+    /* Breathing room from the browser's top edge */ 
+    .block-container { 
+        padding-top: 22px !important; 
+    } 
+
+    /* Keep the dashboard's first filter row cleanly aligned */ 
+    .top-filter-row { 
+        margin-top: 0 !important; 
+        margin-bottom: 5px !important; 
+    } 
+    /* PERFECTLY ALIGN FILTER LABELS AND DROPDOWNS */
+.filter-caption {
+    display: flex !important;
+    align-items: center !important;
+    height: 38px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.filter-control {
+    width: 100% !important;
+    height: 38px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+    /* Top filter controls — identical typography and alignment */ 
+    .filter-control, 
+    .filter-control * { 
+        font-family: "Inter", Arial, sans-serif !important; 
+    } 
+
+    .filter-control div[data-baseweb="select"] { 
+        width: 100% !important; 
+    } 
+
+    .filter-control div[data-baseweb="select"] > div { 
+        min-height: 38px !important; 
+        height: 38px !important; 
+
+        display: flex !important; 
+        align-items: center !important; 
+
+        border-radius: 9px !important; 
+    } 
+
+    .filter-control div[data-baseweb="select"] span { 
+        font-family: "Inter", Arial, sans-serif !important; 
+        font-size: 13px !important; 
+        font-weight: 500 !important; 
+        line-height: 18px !important; 
+    } 
+
+    .filter-control input { 
+        font-family: "Inter", Arial, sans-serif !important; 
+        font-size: 13px !important; 
+        font-weight: 500 !important; 
+    } 
+
+    /* Keep all four filter elements on one visual center line */ 
+    .top-filter-row [data-testid="stHorizontalBlock"] { 
+        align-items: center !important; 
+    } 
+
+    .top-filter-row [data-testid="stHorizontalBlock"] > div { 
+        align-self: center !important; 
+    } 
+
+    .section-heading { 
+        display: flex; 
+        align-items: center; 
+
+        width: 100%; 
+        min-height: 56px; 
+        height: 56px; 
+
+        margin-top: 14px; 
+        margin-bottom: 0; 
+        padding: 8px 16px; 
+
+        background: #ffffff; 
+
+        border: 1px solid #d9e6f1; 
+        border-radius: 9px 9px 0 0; 
+
+        color: #12357d; 
+
+        font-size: 18px; 
+        font-weight: 800; 
+        line-height: 1.35; 
+
+        letter-spacing: -.35px; 
+
+        box-shadow: 
+            0 2px 7px 
+            rgba(25,55,90,.025); 
+
+        overflow: visible; 
+    } 
+
+    .section-heading-accent { 
+        width: 7px; 
+        min-width: 7px; 
+        height: 28px; 
+        min-height: 28px; 
+
+        flex: 0 0 auto; 
+
+        margin-right: 12px; 
+
+        border-radius: 5px; 
+    } 
+
+    .section-card { 
+        width: 100%; 
+
+        margin-top: 14px; 
+
+        overflow: hidden; 
+
+        border: 1px solid #dbe4ed; 
+        border-radius: 12px; 
+
+        box-shadow: 
+            0 2px 9px 
+            rgba(15, 23, 42, .045); 
+    } 
+
+    .section-red { 
+        background: #fff8f8; 
+    } 
+
+    .section-blue { 
+        background: #f7fbff; 
+    } 
+
+    .section-green { 
+        background: #f7fcf9; 
+    } 
+
+    .section-title { 
+        display: flex; 
+        align-items: center; 
+
+        min-height: 50px; 
+
+        padding: 
+            8px 18px; 
+
+        color: #12357d; 
+
+        font-size: 19px; 
+        font-weight: 800; 
+        line-height: 1.2; 
+
+        letter-spacing: -.35px; 
+    } 
+
+    .section-accent { 
+        width: 7px; 
+        height: 25px; 
+
+        flex: 0 0 auto; 
+
+        margin-right: 12px; 
+
+        border-radius: 5px; 
+
+        background: var(--accent); 
+    } 
+
+    .plot-shell { 
+        margin: 
+            0 8px 8px 8px; 
+
+        padding: 
+            4px 5px; 
+
+        background: #ffffff; 
+
+        border: 
+            1px solid 
+            rgba(215, 225, 236, .75); 
+
+        border-radius: 9px; 
+    } 
+
+    [data-testid="stPlotlyChart"] { 
+        background: #ffffff !important; 
+        border-radius: 8px !important; 
+        overflow: hidden !important; 
+    } 
+
+    .empty-message { 
+        margin: 
+            0 8px 8px 8px; 
+
+        padding: 24px; 
+
+        background: #ffffff; 
+
+        border-radius: 9px; 
+
+        color: #64748b; 
+
+        text-align: center; 
+
+        font-size: 12px; 
+    } 
+
+    .refresh-note { 
+        height: 24px; 
+
+        display: flex; 
+        align-items: center; 
+        justify-content: flex-end; 
+
+        color: #94a3b8; 
+
+        font-size: 8px; 
+
+        padding-right: 4px; 
+    } 
+
+    @media (max-width: 900px) { 
+        [data-testid="stMainBlockContainer"], 
+        [data-testid="stAppViewBlockContainer"], 
+        .block-container { 
+            padding: 
+                0 7px 12px 7px !important; 
+        } 
+
+        .module-card { 
+            height: 106px; 
+            min-height: 106px; 
+        } 
+
+        .section-title { 
+            font-size: 17px; 
+        } 
+    } 
+    </style> 
+    """,
+    unsafe_allow_html=True,
+)
+
+# ============================================================
+# FILTERS
+# ============================================================
+department_values = sorted(
+    [
+        value
+        for value in
+        work["_department"]
+        .dropna()
+        .unique()
+        .tolist()
+        if str(value).strip()
+    ],
+    key=lambda x: str(x).lower(),
+)
+
+department_options = [
+                         "All Departments"
+                     ] + department_values
+
+band_options = [
+                   "All Bands"
+               ] + BAND_ORDER
+
+# Keep filter state through the 30-second automatic refresh.
+query_department = st.query_params.get(
+    "department",
+    "All Departments",
+)
+
+query_band = st.query_params.get(
+    "band",
+    "All Bands",
+)
+
+if query_department not in department_options:
+    query_department = "All Departments"
+
+if query_band not in band_options:
+    query_band = "All Bands"
+
+filter_department, filter_band = st.columns(
+    [1, 1],
+    gap="small",
+)
 
 with filter_department:
-
-    st.markdown(
-        "<div class='filter-title'>DEPARTMENT</div>",
-        unsafe_allow_html=True
+    label_col, control_col = st.columns(
+        [0.24, 0.76],
+        gap="small",
     )
 
+    with label_col:
+        st.markdown(
+            '<div class="filter-caption">'
+            'Department'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    department_values = sorted(
+    with control_col:
+        st.markdown(
+            '<div class="filter-control">',
+            unsafe_allow_html=True,
+        )
 
-        [
+        selected_department = st.selectbox(
+            "Department",
+            department_options,
+            index=department_options.index(
+                query_department
+            ),
+            label_visibility="collapsed",
+            key="department_filter",
+        )
 
-            value
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-            for value
-            in work["_department"]
-            .unique()
-            .tolist()
-
-            if str(value).strip()
-
-        ],
-
-        key=lambda x:
-        str(x).lower()
-
+with filter_band:
+    label_col, control_col = st.columns(
+        [0.24, 0.76],
+        gap="small",
     )
 
+    with label_col:
+        st.markdown(
+            '<div class="filter-caption">'
+            'Training Band'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    department_options = [
-        "All Departments"
-    ] + department_values
+    with control_col:
+        st.markdown(
+            '<div class="filter-control">',
+            unsafe_allow_html=True,
+        )
 
+        selected_band = st.selectbox(
+            "Band",
+            band_options,
+            index=band_options.index(
+                query_band
+            ),
+            label_visibility="collapsed",
+            key="band_filter",
+        )
 
-    selected_department = st.selectbox(
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-        "Department",
+st.query_params["department"] = (
+    selected_department
+)
 
-        department_options,
+st.query_params["band"] = (
+    selected_band
+)
 
-        index=0,
-
-        key="department_selector",
-
-        label_visibility="collapsed"
-
-    )
-
-
-# =========================================================
+# ============================================================
 # APPLY FILTERS
-# =========================================================
-
+# ============================================================
 filtered_df = work.copy()
 
-
-# =========================================================
-# DEPARTMENT FILTER
-# =========================================================
-
-if (
-    selected_department
-    !=
-    "All Departments"
-):
-
+if selected_department != "All Departments":
     filtered_df = filtered_df[
         filtered_df["_department"]
-        ==
-        selected_department
-    ]
+        == selected_department
+        ]
 
-
-# =========================================================
-# MONTH FILTER
-# =========================================================
-
+# The TRAINING sheet stores all four bands as separate columns,
+# not as one Band field per row. Therefore, when the wide-format
+# columns are available, the Band filter is applied inside the
+# calculation functions instead of deleting rows here.
+#
+# Only use row-level filtering as a fallback for a different
+# long-format data source.
 if (
-    selected_month
-    !=
-    "All Months"
-    and
-    COL_MONTH
+        selected_band != "All Bands"
+        and not WIDE_BAND_DATA_AVAILABLE
 ):
-
-    selected_period = pd.Period(
-
-        pd.to_datetime(
-            selected_month,
-            format="%B %Y"
-        ),
-
-        freq="M"
-
-    )
-
-
     filtered_df = filtered_df[
-
-        filtered_df["_date"]
-        .dt
-        .to_period("M")
-        ==
-        selected_period
-
-    ]
-
-
-# =========================================================
-# KPI CALCULATIONS
-# =========================================================
-
-total_l08 = (
-    filtered_df["_total_l08"].sum()
-)
-
-total_below_l08 = (
-    filtered_df["_total_below_l08"].sum()
-)
-
-total_associates = (
-    filtered_df["_total_associates"].sum()
-)
-
-total_contractual = (
-    filtered_df["_total_contractual"].sum()
-)
-
-
-completed_l08 = (
-    filtered_df["_completed_l08"].sum()
-)
-
-completed_below_l08 = (
-    filtered_df["_completed_below_l08"].sum()
-)
-
-completed_associates = (
-    filtered_df["_completed_associates"].sum()
-)
-
-completed_contractual = (
-    filtered_df["_completed_contractual"].sum()
-)
-
-
-# =========================================================
-# OVERALL EMPLOYEE COMPLETION
-# =========================================================
-
-total_employees = (
-
-    total_l08
-    +
-    total_below_l08
-
-)
-
-
-completed_employees = (
-
-    completed_l08
-    +
-    completed_below_l08
-
-)
-
-
-if total_employees > 0:
-
-    overall_pct = (
-
-        completed_employees
-        /
-        total_employees
-        *
-        100
-
-    )
-
-else:
-
-    overall_pct = 0
-
-
-# =========================================================
-# ASSOCIATES COMPLETION
-# =========================================================
-
-if total_associates > 0:
-
-    associate_pct = (
-
-        completed_associates
-        /
-        total_associates
-        *
-        100
-
-    )
-
-else:
-
-    associate_pct = 0
-
-
-# =========================================================
-# CONTRACTUAL COMPLETION
-# =========================================================
-
-if total_contractual > 0:
-
-    contractual_pct = (
-
-        completed_contractual
-        /
-        total_contractual
-        *
-        100
-
-    )
-
-else:
-
-    contractual_pct = 0
-
-
-# =========================================================
-# L08 COMPLETION
-# =========================================================
-
-if total_l08 > 0:
-
-    l08_pct = (
-
-        completed_l08
-        /
-        total_l08
-        *
-        100
-
-    )
-
-else:
-
-    l08_pct = 0
-
-
-# =========================================================
-# BELOW L08 COMPLETION
-# =========================================================
-
-if total_below_l08 > 0:
-
-    below_l08_pct = (
-
-        completed_below_l08
-        /
-        total_below_l08
-        *
-        100
-
-    )
-
-else:
-
-    below_l08_pct = 0
-
-
-# =========================================================
-# KPI ROW
-# =========================================================
-
-k1, k2, k3, k4, k5, k6 = st.columns(
-
-    [1.05, 1, 1.05, 1, 1, 1],
-
-    gap="small"
-
-)
-
-
-# =========================================================
-# KPI 1
-# =========================================================
-
-with k1:
-
-    radius = 42
-
-    circumference = (
-        2
-        *
-        3.14159
-        *
-        radius
-    )
-
-    dash = (
-
-        circumference
-        *
-        min(
-            max(
-                overall_pct,
-                0
-            ),
-            100
-        )
-        /
-        100
-
+        filtered_df["_band"]
+        == selected_band
+        ]
+
+# ============================================================
+# CALCULATION FUNCTIONS
+# ============================================================
+# WIDE-FORMAT TRAINING CALCULATION
+#
+# The dashboard must calculate:
+#
+#   L08 & Above  = 1,127
+#   Below L08    = 1,212
+#   Associates   = 1,504
+#   Off-roll     = 4,019
+#   ALL BANDS    = 7,862
+#
+# for the supplied TRAINING data.
+#
+# Completion is always:
+#       completed training / employee total * 100
+#
+# The selected Band filter controls which band is used in the
+# charts. "All Bands" combines all four populations.
+# ============================================================
+
+BAND_SUFFIX = {
+    "L08 & Above": "l08_above",
+    "L08 below": "l08_below",
+    "Associates": "associates",
+    "Off-roll Employees": "offroll",
+}
+
+
+def _band_sum(group, band, value_type):
+    """Sum one band-specific column for a group."""
+    if group.empty:
+        return 0.0
+
+    suffix = BAND_SUFFIX.get(band)
+    if suffix is None:
+        return 0.0
+
+    column = f"_{value_type}_{suffix}"
+
+    if column not in group.columns:
+        return 0.0
+
+    return float(
+        pd.to_numeric(
+            group[column],
+            errors="coerce",
+        ).fillna(0).sum()
     )
 
 
-    st.html(
-
-        f"""
-        <div class="donut-card">
-
-            <div class="donut-title">
-                OVERALL TRAINING COMPLETION
-            </div>
-
-            <div class="donut-wrap">
-
-                <svg
-                    class="donut-svg"
-                    viewBox="0 0 100 100"
-                >
-
-                    <circle
-                        class="donut-bg"
-                        cx="50"
-                        cy="50"
-                        r="{radius}"
-                    />
-
-                    <circle
-                        class="donut-progress"
-                        cx="50"
-                        cy="50"
-                        r="{radius}"
-                        stroke-dasharray="
-                            {dash:.1f}
-                            {circumference:.1f}
-                        "
-                    />
-
-                </svg>
-
-                <div class="donut-text">
-
-                    {overall_pct:.1f}%
-
-                </div>
-
-            </div>
-
-         </div>
-        """
-
-    )
-
-
-# =========================================================
-# KPI 2
-# =========================================================
-
-with k2:
-
-    st.html(
-
-        f"""
-        <div class="kpi-card">
-
-            <div class="kpi-label">
-
-                TOTAL ASSOCIATES TRAINED
-
-            </div>
-
-            <div
-                class="kpi-value blue"
-                style="margin-top:18px;"
-            >
-
-                {total_associates:,.0f}
-
-            </div>
-
-            <div class="kpi-sub">
-
-                Trained:
-                {completed_associates:,.0f}
-
-                ({associate_pct:.1f}%)
-
-            </div>
-
-        </div>
-        """
-
-    )
-
-
-# =========================================================
-# KPI 3
-# =========================================================
-
-with k3:
-
-    st.html(
-
-        f"""
-        <div class="kpi-card">
-
-            <div class="kpi-label">
-
-                TOTAL CONTRACTUAL
-                WORKERS TRAINED
-
-            </div>
-
-            <div
-                class="kpi-value red"
-                style="margin-top:18px;"
-            >
-
-                {total_contractual:,.0f}
-
-            </div>
-
-            <div class="kpi-sub">
-
-                Trained:
-                {completed_contractual:,.0f}
-
-                ({contractual_pct:.1f}%)
-
-            </div>
-
-        </div>
-        """
-
-    )
-
-
-# =========================================================
-# KPI 4
-# =========================================================
-
-with k4:
-
-    st.html(
-
-        f"""
-        <div class="kpi-card">
-
-            <div class="kpi-label">
-
-                TOTAL ASSOCIATES TRAINED
-
-                <br>
-
-                (L08 & ABOVE)
-
-            </div>
-
-            <div
-                class="kpi-value blue"
-                style="margin-top:15px;"
-            >
-
-                {completed_l08:,.0f}
-
-            </div>
-
-            <div class="kpi-sub">
-
-                Actual trained employees
-
-            </div>
-
-        </div>
-        """
-
-    )
-
-
-# =========================================================
-# KPI 5
-# =========================================================
-
-with k5:
-
-    st.html(
-
-        f"""
-        <div class="kpi-card">
-
-            <div class="kpi-label">
-
-                TOTAL ASSOCIATES TRAINED
-
-                <br>
-
-                (BELOW L08)
-
-            </div>
-
-            <div
-                class="kpi-value red"
-                style="margin-top:15px;"
-            >
-
-                {completed_below_l08:,.0f}
-
-            </div>
-
-            <div class="kpi-sub">
-
-                Actual trained employees
-
-            </div>
-
-        </div>
-        """
-
-    )
-
-
-# =========================================================
-# KPI 6
-# =========================================================
-
-with k6:
-
-    st.html(
-
-        f"""
-        <div class="kpi-card">
-
-            <div class="kpi-label">
-
-                OVERALL TRAINING
-
-                <br>
-
-                COMPLETION
-
-            </div>
-
-            <div
-                class="kpi-value blue"
-                style="margin-top:15px;"
-            >
-
-                {completed_employees:,.0f}
-
-            </div>
-
-            <div class="kpi-sub">
-
-                Actual trained employees
-
-            </div>
-
-        </div>
-        """
-
-    )
-
-
-# =========================================================
-# PROCESS DATA
-# =========================================================
-
-process_data = (
-
-    filtered_df
-
-    .groupby(
-        "_process",
-        sort=False
-    )
-
-    .agg(
-
-        total_l08=(
-            "_total_l08",
-            "sum"
-        ),
-
-        total_below_l08=(
-            "_total_below_l08",
-            "sum"
-        ),
-
-        completed_l08=(
-            "_completed_l08",
-            "sum"
-        ),
-
-        completed_below_l08=(
-            "_completed_below_l08",
-            "sum"
+def _selected_bands():
+    """Return the band(s) included by the current filter."""
+    if selected_band == "All Bands":
+        return BAND_ORDER
+
+    return [selected_band]
+
+
+def total_value(group, band=None):
+    if group.empty:
+        return 0
+
+        # Explicit band is used by KPI rows.
+    if WIDE_BAND_DATA_AVAILABLE:
+        bands = (
+            [band]
+            if band in BAND_ORDER
+            else _selected_bands()
         )
 
-    )
-
-)
-
-
-if not process_data.empty:
-
-    process_data["total"] = (
-
-        process_data["total_l08"]
-        +
-        process_data["total_below_l08"]
-
-    )
-
-
-    process_data["completed"] = (
-
-        process_data["completed_l08"]
-        +
-        process_data["completed_below_l08"]
-
-    )
-
-
-    process_data["percentage"] = (
-
-        process_data.apply(
-
-            lambda row:
-
-                (
-                    row["completed"]
-                    /
-                    row["total"]
-                    *
-                    100
-                )
-
-                if row["total"] > 0
-
-                else 0,
-
-            axis=1
-
-        )
-
-    )
-
-
-    process_data = (
-
-        process_data
-
-        .sort_values(
-            "percentage",
-            ascending=False
-        )
-
-    )
-
-
-# =========================================================
-# DEPARTMENT DATA
-# =========================================================
-
-department_data = (
-
-    filtered_df
-
-    .groupby(
-        "_department",
-        sort=False
-    )
-
-    .agg(
-
-        total_l08=(
-            "_total_l08",
-            "sum"
-        ),
-
-        total_below_l08=(
-            "_total_below_l08",
-            "sum"
-        ),
-
-        completed_l08=(
-            "_completed_l08",
-            "sum"
-        ),
-
-        completed_below_l08=(
-            "_completed_below_l08",
-            "sum"
-        )
-
-    )
-
-)
-
-
-if not department_data.empty:
-
-    department_data["total"] = (
-
-        department_data["total_l08"]
-        +
-        department_data["total_below_l08"]
-
-    )
-
-
-    department_data["completed"] = (
-
-        department_data["completed_l08"]
-        +
-        department_data["completed_below_l08"]
-
-    )
-
-
-    department_data["percentage"] = (
-
-        department_data.apply(
-
-            lambda row:
-
-                (
-                    row["completed"]
-                    /
-                    row["total"]
-                    *
-                    100
-                )
-
-                if row["total"] > 0
-
-                else 0,
-
-            axis=1
-
-        )
-
-    )
-
-
-    department_data = (
-
-        department_data
-
-        .sort_values(
-            "percentage",
-            ascending=True
-        )
-
-    )
-
-
-# =========================================================
-# CHART ROW
-# =========================================================
-
-chart_left, chart_right = st.columns(
-
-    [1, 1.08],
-
-    gap="small"
-
-)
-
-
-# =========================================================
-# PROCESS CHART
-# =========================================================
-
-with chart_left:
-
-    st.html(
-
-        """
-        <div class="chart-panel">
-
-            <div class="chart-panel-title">
-
-                TRAINING COMPLETION BY PROCESS
-                (PLANT WIDE)
-
-            </div>
-
-            <div>
-
-        """
-
-    )
-
-
-    fig_process = go.Figure()
-
-
-    if not process_data.empty:
-
-        fig_process.add_trace(
-
-            go.Bar(
-
-                x=process_data.index.tolist(),
-
-                y=process_data[
-                    "percentage"
-                ].tolist(),
-
-                text=[
-
-                    f"{value:.1f}%"
-
-                    for value
-                    in process_data[
-                        "percentage"
-                    ]
-
-                ],
-
-                textposition="outside",
-
-                cliponaxis=False,
-
-                marker=dict(
-
-                    color=[
-                        "#1677C8",
-                        "#28B889",
-                        "#F7931E",
-                        "#E84A4A",
-                        "#6D4CCB",
-                        "#D14BB3",
-                        "#22A6BE",
-                        "#F2B400",
-                        "#6E7FD1"
-                    ][:len(process_data)],
-
-                    line=dict(
-
-                        color="#164f8b",
-
-                        width=1.2
-
+        return int(
+            round(
+                sum(
+                    _band_sum(
+                        group,
+                        item,
+                        "total",
                     )
+                    for item in bands
+                )
+            )
+        )
 
-                ),
+        # Fallback for long-format data.
+    if COL_TOTAL:
+        return int(
+            round(
+                float(
+                    group["_total"].sum()
+                )
+            )
+        )
 
-                hovertemplate=
+    return int(len(group))
 
-                    "%{x}<br>"
-                    "Completion: "
-                    "%{y:.1f}%"
-                    "<extra></extra>"
 
+def trained_value(group, band=None):
+    if group.empty:
+        return 0
+
+    if WIDE_BAND_DATA_AVAILABLE:
+        bands = (
+            [band]
+            if band in BAND_ORDER
+            else _selected_bands()
+        )
+
+        return int(
+            round(
+                sum(
+                    _band_sum(
+                        group,
+                        item,
+                        "trained",
+                    )
+                    for item in bands
+                )
+            )
+        )
+
+        # Fallback for long-format data.
+    if COL_TRAINED:
+        return int(
+            round(
+                float(
+                    group["_trained"].sum()
+                )
+            )
+        )
+
+    total = total_value(
+        group,
+        band=band,
+    )
+
+    if total <= 0:
+        return 0
+
+    return int(
+        round(
+            total
+            * completion_value(
+                group,
+                band=band,
+            )
+            / 100
+        )
+    )
+
+
+def completion_value(group, band=None):
+    if group.empty:
+        return 0.0
+
+    if WIDE_BAND_DATA_AVAILABLE:
+        total = float(
+            total_value(
+                group,
+                band=band,
+            )
+        )
+
+        trained = float(
+            trained_value(
+                group,
+                band=band,
+            )
+        )
+
+        if total <= 0:
+            return 0.0
+
+        return (
+                trained
+                / total
+                * 100
+        )
+
+        # Fallback for long-format data.
+    total = float(
+        group["_total"].sum()
+    )
+
+    trained = float(
+        group["_trained"].sum()
+    )
+
+    if (
+            COL_TOTAL
+            and COL_TRAINED
+            and total > 0
+    ):
+        return float(
+            trained
+            / total
+            * 100
+        )
+
+    if COL_COMPLETION:
+        return float(
+            group["_completion"].mean()
+        )
+
+    return 0.0
+
+
+def status_text(group, band):
+    return (
+        f"{trained_value(group, band=band):,}"
+        f"/"
+        f"{total_value(group, band=band):,}"
+    )
+
+
+# ============================================================
+# SANITY CHECK FOR THE CURRENT ALL-BANDS DATA
+# ============================================================
+# This is intentionally not displayed on the dashboard.
+# It makes the expected population logic explicit and protects
+# against the previous error where only the L08 & Above column
+# (1,127) was used as the entire employee population.
+if WIDE_BAND_DATA_AVAILABLE:
+    _all_band_total = sum(
+        total_value(
+            filtered_df,
+            band=_band,
+        )
+        for _band in BAND_ORDER
+    )
+
+    _expected_total = (
+            total_value(
+                filtered_df,
+                band="L08 & Above",
+            )
+            + total_value(
+        filtered_df,
+        band="L08 below",
+    )
+            + total_value(
+        filtered_df,
+        band="Associates",
+    )
+            + total_value(
+        filtered_df,
+        band="Off-roll Employees",
+    )
+    )
+
+    # Both expressions must be identical.
+    if _all_band_total != _expected_total:
+        raise RuntimeError(
+            "Training-band population calculation mismatch."
+        )
+
+    # ============================================================
+# MODULE-WISE TRAINING STATUS
+# ============================================================
+# All nine KPI cards are rendered inside ONE HTML grid.
+# This is important: using separate Streamlit columns for each
+# row can cause the browser to calculate inconsistent element
+# heights and visually overlap the next row.
+# ============================================================
+
+card_accents = [
+    "#1976D2",  # PSM GA
+    "#E72A3B",  # PT
+    "#18A765",  # PHA
+    "#7C2CFF",  # MOC
+    "#F2A20C",  # OP
+    "#18B8C2",  # BOWTIE
+    "#ED2D8D",  # PSSR
+    "#F15B2A",  # LOPA
+    "#6840E8",  # MIQA
+]
+
+card_backgrounds = [
+    "#EEF6FF",  # PSM GA
+    "#FFF0F2",  # PT
+    "#EFFAF5",  # PHA
+    "#F4EFFF",  # MOC
+    "#FFF8E9",  # OP
+    "#ECFAFC",  # BOWTIE
+    "#FFF0F7",  # PSSR
+    "#FFF2EC",  # LOPA
+    "#F1EEFF",  # MIQA
+]
+
+card_borders = [
+    "#CFE2F7",  # PSM GA
+    "#F4CDD3",  # PT
+    "#CDEDDD",  # PHA
+    "#DDD0FA",  # MOC
+    "#F1D9A4",  # OP
+    "#C7EAF0",  # BOWTIE
+    "#F2CADD",  # PSSR
+    "#F2D1C3",  # LOPA
+    "#D7CEFA",  # MIQA
+]
+
+kpi_html = (
+    '<div class="kpi-section">'
+    '<div class="kpi-section-title">'
+    '<span class="kpi-section-title-accent"></span>'
+    '<span>Module-wise training status</span>'
+    '</div>'
+    '<div class="kpi-grid">'
+)
+
+for index, module_name in enumerate(module_names):
+    group = filtered_df[
+        filtered_df["_module"] == module_name
+        ]
+
+    accent = card_accents[
+        index % len(card_accents)
+        ]
+
+    card_bg = card_backgrounds[
+        index % len(card_backgrounds)
+        ]
+
+    card_border = card_borders[
+        index % len(card_borders)
+        ]
+
+    # Change only the visible KPI card title; calculations/filtering
+    # continue to use the original Google Sheet module name.
+    display_module = MODULE_TITLES.get(
+        str(module_name).strip(),
+        str(module_name),
+    )
+    safe_module = html.escape(
+        display_module
+    )
+
+    status = {}
+
+    for band in BAND_ORDER:
+        # When a specific band is selected, preserve the existing
+        # visual behavior: show that band's value and keep the
+        # other rows at 0/0. With "All Bands", show all four.
+        if (
+                selected_band != "All Bands"
+                and band != selected_band
+        ):
+            status[band] = "0/0"
+        else:
+            status[band] = status_text(
+                group,
+                band,
             )
 
+    kpi_html += (
+        '<div class="module-card" '
+        f'style="--accent:{accent};'
+        f'--card-bg:{card_bg};'
+        f'--card-border:{card_border};">'
+        f'<div class="module-name">{safe_module}</div>'
+
+        '<div class="band-row">'
+        '<span>L08 &amp; above</span>'
+        f'<span class="band-value">'
+        f'{status["L08 & Above"]}'
+        '</span>'
+        '</div>'
+
+        '<div class="band-row">'
+        '<span>L08 below</span>'
+        f'<span class="band-value">'
+        f'{status["L08 below"]}'
+        '</span>'
+        '</div>'
+
+        '<div class="band-row">'
+        '<span>Associates</span>'
+        f'<span class="band-value">'
+        f'{status["Associates"]}'
+        '</span>'
+        '</div>'
+
+        '<div class="band-row">'
+        '<span>Off Roll</span>'
+        f'<span class="band-value">'
+        f'{status["Off-roll Employees"]}'
+        '</span>'
+        '</div>'
+
+        '</div>'
+    )
+
+kpi_html += (
+    '</div>'
+    '</div>'
+)
+
+st.markdown(
+    kpi_html,
+    unsafe_allow_html=True,
+)
+
+# ============================================================
+# MODULE CHART DATA
+# ============================================================
+module_rows = []
+
+for module_name in module_names:
+    group = filtered_df[
+        filtered_df["_module"]
+        == module_name
+        ]
+
+    module_rows.append(
+        {
+            "module": module_name,
+            "total": total_value(group),
+            "trained": trained_value(group),
+            "percentage": completion_value(group),
+        }
+    )
+
+module_data = pd.DataFrame(
+    module_rows
+)
+
+# ============================================================
+# CHART 1:
+# MODULE-WISE TRAINING COMPLIANCE
+# ============================================================
+st.markdown(
+    '<div class="section-heading">'
+    '<span class="section-heading-accent" style="background:#E72A3B;"></span>'
+    '<span>Module-wise Training Compliance</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+if not module_data.empty:
+
+    fig_module = go.Figure()
+
+    fig_module.add_trace(
+        go.Bar(
+            x=module_data["module"],
+            y=module_data["total"],
+            name="Total Employees",
+            marker_color="#5AAAF0",
+            marker_line_color="#4B9FE8",
+            marker_line_width=0.5,
+            text=[
+                f"{value:,.0f}"
+                for value in
+                module_data["total"]
+            ],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Total Employees: %{y:,.0f}"
+                "<extra></extra>"
+            ),
         )
+    )
 
+    fig_module.add_trace(
+        go.Bar(
+            x=module_data["module"],
+            y=module_data["trained"],
+            name="Trained Employees",
+            marker_color="#EF2733",
+            marker_line_color="#D91F2A",
+            marker_line_width=0.5,
+            text=[
+                f"{value:,.0f}"
+                for value in
+                module_data["trained"]
+            ],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Trained Employees: %{y:,.0f}"
+                "<extra></extra>"
+            ),
+        )
+    )
 
-    fig_process.update_layout(
+    fig_module.add_trace(
+        go.Scatter(
+            x=module_data["module"],
+            y=module_data["percentage"],
+            name="Compliance %",
+            mode="lines+markers+text",
+            yaxis="y2",
+            line=dict(
+                color="#1260C9",
+                width=2.2,
+            ),
+            marker=dict(
+                color="#1260C9",
+                size=8,
+                line=dict(
+                    color="#FFFFFF",
+                    width=1.5,
+                ),
+            ),
+            text=[
+                f"{value:.1f}%"
+                for value in
+                module_data["percentage"]
+            ],
+            textposition="top center",
+            textfont=dict(
+                size=10,
+                color="#1249A3",
+            ),
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Compliance: %{y:.1f}%"
+                "<extra></extra>"
+            ),
+        )
+    )
 
-        height=300,
+    employee_max = max(
+        float(
+            module_data[
+                ["total", "trained"]
+            ].max().max()
+        ),
+        100,
+    )
 
+    chart_y_max = (
+            employee_max * 1.18
+    )
+
+    fig_module.update_layout(
+        height=280,
+        barmode="group",
+        bargap=0.25,
+        bargroupgap=0.07,
         margin=dict(
-
-            l=50,
-
-            r=30,
-
-            t=25,
-
-            b=55
-
+            l=55,
+            r=60,
+            t=45,
+            b=50,
         ),
-
-        paper_bgcolor="rgba(0,0,0,0)",
-
-        plot_bgcolor="rgba(238,247,251,0.72)",
-
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
         font=dict(
-
-            family="Arial",
-
-            color="#111111"
-
+            family="Inter, Arial, sans-serif",
+            color="#12357D",
         ),
-
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(255,255,255,.95)",
+            bordercolor="#EDF1F5",
+            borderwidth=1,
+            font=dict(size=9),
+        ),
         yaxis=dict(
-
+            title="No. of Employees",
             range=[
                 0,
-                100
+                chart_y_max,
             ],
-
-            dtick=25,
-
-            title="Completion %",
-
             title_font=dict(
-                size=12
+                size=10,
+                color="#12357D",
             ),
-
             tickfont=dict(
-                size=10
+                size=9,
+                color="#12357D",
             ),
-
-            gridcolor="#b9d8e8",
-
-            gridwidth=1,
-
-            griddash="dot",
-
-            zeroline=False,
-
-            showline=True,
-
-            linecolor="#9dbdce",
-
-            linewidth=1
-
-        ),
-
-        xaxis=dict(
-
-            tickfont=dict(
-                size=10
-            ),
-
             showgrid=False,
-
-            showline=False,
-
-            zeroline=False
-
+            zeroline=False,
+            showline=True,
+            linecolor="#B9CCE0",
         ),
-
-        showlegend=False,
-
-        bargap=.30
-
+        yaxis2=dict(
+            title="Compliance %",
+            overlaying="y",
+            side="right",
+            range=[0, 100],
+            dtick=20,
+            title_font=dict(
+                size=10,
+                color="#12357D",
+            ),
+            tickfont=dict(
+                size=9,
+                color="#12357D",
+            ),
+            showgrid=False,
+            zeroline=False,
+            showline=True,
+            linecolor="#B9CCE0",
+        ),
+        xaxis=dict(
+            tickfont=dict(
+                size=9,
+                color="#12357D",
+            ),
+            showgrid=False,
+            showline=False,
+            zeroline=False,
+        ),
     )
-
 
     st.plotly_chart(
-
-        fig_process,
-
+        fig_module,
         use_container_width=True,
-
         config={
-            "displayModeBar":False,
-            "responsive":True
+            "displayModeBar": False,
+            "responsive": True,
+        },
+    )
+
+else:
+    st.markdown(
+        '<div class="empty-message">'
+        'No module data is available.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+# ============================================================
+# CHART 2:
+# TRAINING COMPLETION BY DEPARTMENT
+# ============================================================
+department_rows = []
+
+for department, group in (
+        filtered_df
+                .groupby(
+            "_department",
+            dropna=False,
+        )
+):
+    department_rows.append(
+        {
+            "department": department,
+            "percentage": completion_value(
+                group
+            ),
         }
-
     )
 
+department_data = pd.DataFrame(
+    department_rows
+)
 
-    st.html(
-        "</div></div>"
+if not department_data.empty:
+    department_data = (
+        department_data
+        .sort_values(
+            "percentage",
+            ascending=True,
+        )
     )
 
+# Prepare heatmap data before rendering the side-by-side chart columns.
+# This block was accidentally omitted in the previous side-by-side version.
+heat_rows = []
 
-# =========================================================
-# DEPARTMENT CHART
-# =========================================================
-
-with chart_right:
-
-    st.html(
-
-        """
-        <div class="chart-panel">
-
-            <div class="chart-panel-title">
-
-                TRAINING COMPLETION BY DEPARTMENT
-                (OVERALL %)
-
-            </div>
-
-            <div>
-
-        """
-
+for (
+        module_name,
+        department_name,
+), group in (
+        filtered_df
+                .groupby(
+            [
+                "_module",
+                "_department",
+            ],
+            dropna=False,
+        )
+):
+    heat_rows.append(
+        {
+            "module": module_name,
+            "department": department_name,
+            "percentage": completion_value(
+                group
+            ),
+        }
     )
 
+heat_data = pd.DataFrame(
+    heat_rows
+)
 
-    fig_department = go.Figure()
+# ============================================================
+# CHARTS 2 & 3 — SIDE BY SIDE
+# LEFT: DEPARTMENT COMPLETION BAR CHART
+# RIGHT: MODULE/DEPARTMENT HEATMAP
+# ============================================================
 
+chart_left, chart_right = st.columns(
+    [1, 1],
+    gap="medium",
+)
+
+with chart_left:
+    st.markdown(
+        '<div class="section-heading">'
+        '<span class="section-heading-accent" style="background:#1677E8;"></span>'
+        '<span>Training Completion by Department (Overall %)</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     if not department_data.empty:
 
-        fig_department.add_trace(
-
+        fig_department = go.Figure(
             go.Bar(
-
-                x=department_data[
-                    "percentage"
-                ].tolist(),
-
-                y=department_data.index.tolist(),
-
+                x=department_data["percentage"],
+                y=department_data["department"],
                 orientation="h",
-
+                marker=dict(
+                    color=[
+                        '#4C9FE8', '#E95D6A', '#43B883',
+                        '#8B5CF6', '#F2A93B', '#22B8CF',
+                        '#E6499A', '#F27645', '#6366D9',
+                        '#36A269', '#D977B5', '#E0A12C',
+                        '#4B83C4', '#7A63B8', '#4FAF9B',
+                    ][:len(department_data)],
+                    line=dict(
+                        color="#FFFFFF",
+                        width=0.5,
+                    ),
+                ),
                 text=[
-
                     f"{value:.1f}%"
+                    for value in department_data["percentage"]
+                ],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "Overall Completion: %{x:.1f}%"
+                    "<extra></extra>"
+                ),
+            )
+        )
 
-                    for value
-                    in department_data[
-                        "percentage"
-                    ]
+        fig_department.update_layout(
+            height=540,
 
+            margin=dict(
+                l=120,
+                r=45,
+                t=18,
+                b=45,
+            ),
+            paper_bgcolor="#FFFFFF",
+            plot_bgcolor="#FFFFFF",
+            font=dict(
+                family="Inter, Arial, sans-serif",
+                color="#12357D",
+            ),
+            xaxis=dict(
+                range=[0, 105],
+                dtick=20,
+                title="Overall Completion %",
+                title_font=dict(
+                    size=10,
+                    color="#12357D",
+                ),
+                tickfont=dict(
+                    size=9,
+                    color="#12357D",
+                ),
+                showgrid=False,
+                zeroline=False,
+                showline=True,
+                linecolor="#B9CCE0",
+            ),
+            yaxis=dict(
+                tickfont=dict(
+                    size=9,
+                    color="#12357D",
+                ),
+                showgrid=False,
+                showline=False,
+                zeroline=False,
+            ),
+            showlegend=False,
+            bargap=0.25,
+        )
+
+        st.plotly_chart(
+            fig_department,
+            use_container_width=True,
+            config={
+                "displayModeBar": False,
+                "responsive": True,
+            },
+        )
+
+    else:
+        st.markdown(
+            '<div class="empty-message">'
+            'No department data is available.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+with chart_right:
+    st.markdown(
+        '<div class="section-heading">'
+        '<span class="section-heading-accent" style="background:#16A765;"></span>'
+        '<span>Module-wise Training Completion by Department (%)</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not heat_data.empty:
+
+        heat_table = heat_data.pivot(
+            index="module",
+            columns="department",
+            values="percentage",
+        ).fillna(0)
+
+        # Fixed module order.
+        heat_modules = [
+            module
+            for module in module_names
+            if module in heat_table.index
+        ]
+
+        heat_table = heat_table.reindex(
+            heat_modules
+        )
+
+        # Department order: highest average compliance first.
+        ordered_departments = (
+            heat_table
+            .mean(axis=0)
+            .sort_values(
+                ascending=False
+            )
+            .index
+            .tolist()
+        )
+
+        heat_table = heat_table[
+            ordered_departments
+        ]
+
+        fig_heatmap = go.Figure(
+            go.Heatmap(
+                z=heat_table.values,
+                x=heat_table.columns.tolist(),
+                y=heat_table.index.tolist(),
+                zmin=0,
+                zmax=100,
+
+                colorscale=[
+                    [0.00, "#EF233C"],
+                    [0.25, "#F46B2D"],
+                    [0.50, "#F5D313"],
+                    [0.75, "#8FD13F"],
+                    [1.00, "#10A85A"],
                 ],
 
-                textposition="outside",
+                text=[
+                    [
+                        f"{value:.1f}%"
+                        for value in row
+                    ]
+                    for row in heat_table.values
+                ],
 
-                cliponaxis=False,
+                texttemplate="%{text}",
 
-                marker=dict(
-
-                    color=[
-                        "#0B3D91" if str(dept).strip().lower() == "tube mill"
-                        else [
-                            "#1677C8",
-                            "#28B889",
-                            "#F7931E",
-                            "#E84A4A",
-                            "#6D4CCB",
-                            "#D14BB3",
-                            "#22A6BE",
-                            "#F2B400",
-                            "#1677C8",
-                            "#28B889",
-                            "#F7931E",
-                            "#6D4CCB",
-                            "#8A63D2"
-                        ][i % 13]
-                        for i, dept in enumerate(department_data.index)
-                    ],
-
-                    line=dict(
-
-                        color="#164f8b",
-
-                        width=1.2
-
-                    )
-
+                textfont=dict(
+                    size=8,
+                    color="#172033",
                 ),
 
-                hovertemplate=
-
-                    "%{y}<br>"
-                    "Completion: "
-                    "%{x:.1f}%"
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "Department: %{x}<br>"
+                    "Completion: %{z:.1f}%"
                     "<extra></extra>"
+                ),
 
+                colorbar=dict(
+                    title="%",
+                    thickness=12,
+                    len=0.86,
+                    tickvals=[
+                        0,
+                        25,
+                        50,
+                        75,
+                        100,
+                    ],
+                    ticktext=[
+                        "0",
+                        "25",
+                        "50",
+                        "75",
+                        "100",
+                    ],
+                    tickfont=dict(
+                        size=8,
+                        color="#12357D",
+                    ),
+                    title_font=dict(
+                        size=9,
+                        color="#12357D",
+                    ),
+                ),
+
+                xgap=1.5,
+                ygap=1.5,
             )
-
         )
 
+        fig_heatmap.update_layout(
+            height=540,
 
-    fig_department.update_layout(
-
-        height=300,
-
-        margin=dict(
-
-            l=95,
-
-            r=55,
-
-            t=25,
-
-            b=50
-
-        ),
-
-        paper_bgcolor="rgba(0,0,0,0)",
-
-        plot_bgcolor="rgba(238,247,251,0.72)",
-
-        font=dict(
-
-            family="Arial",
-
-            color="#111111"
-
-        ),
-
-        xaxis=dict(
-
-            range=[
-                0,
-                100
-            ],
-
-            dtick=20,
-
-            title="Overall Completion %",
-
-            title_font=dict(
-                size=12
+            margin=dict(
+                l=75,
+                r=45,
+                t=8,
+                b=105,
             ),
-
-            tickfont=dict(
-                size=10
+            paper_bgcolor="#FFFFFF",
+            plot_bgcolor="#FFFFFF",
+            font=dict(
+                family="Inter, Arial, sans-serif",
+                color="#12357D",
             ),
-
-            gridcolor="#b9d8e8",
-
-            gridwidth=1,
-
-            griddash="dot",
-
-            zeroline=False,
-
-            showline=True,
-
-            linecolor="#9dbdce",
-
-            linewidth=1
-
-        ),
-
-        yaxis=dict(
-
-            tickfont=dict(
-                size=10
+            xaxis=dict(
+                tickfont=dict(
+                    size=8,
+                    color="#12357D",
+                ),
+                tickangle=-40,
+                showgrid=False,
+                showline=False,
+                zeroline=False,
             ),
-
-            showgrid=False,
-
-            showline=False,
-
-            zeroline=False
-
-        ),
-
-        showlegend=False,
-
-        bargap=.25
-
-    )
-
-
-    st.plotly_chart(
-
-        fig_department,
-
-        use_container_width=True,
-
-        config={
-            "displayModeBar":False,
-            "responsive":True
-        }
-
-    )
-
-
-    st.html(
-        "</div></div>"
-    )
-
-
-# =========================================================
-# PROCESS-WISE TABLE
-# =========================================================
-
-st.html(
-
-    """
-    <div
-        class="panel"
-        style="margin-top:6px;"
-    >
-
-        <div class="panel-title">
-
-            PROCESS WISE TRAINING COMPLETION
-            BY DEPARTMENT (%)
-
-        </div>
-
-        <div style="
-            padding:6px;
-            overflow-x:auto;
-        ">
-
-    """
-
-)
-
-
-if not filtered_df.empty:
-
-    pivot_source = (
-
-        filtered_df
-
-        .groupby(
-            [
-                "_process",
-                "_department"
-            ],
-
-            sort=False
-
+            yaxis=dict(
+                tickfont=dict(
+                    size=8,
+                    color="#12357D",
+                ),
+                showgrid=False,
+                showline=False,
+                zeroline=False,
+                autorange="reversed",
+            ),
         )
 
-        .agg(
-
-            total_l08=(
-                "_total_l08",
-                "sum"
-            ),
-
-            total_below_l08=(
-                "_total_below_l08",
-                "sum"
-            ),
-
-            completed_l08=(
-                "_completed_l08",
-                "sum"
-            ),
-
-            completed_below_l08=(
-                "_completed_below_l08",
-                "sum"
-            )
-
+        st.plotly_chart(
+            fig_heatmap,
+            use_container_width=True,
+            config={
+                "displayModeBar": False,
+                "responsive": True,
+            },
         )
 
-    )
-
-
-    pivot_source["total"] = (
-
-        pivot_source["total_l08"]
-        +
-        pivot_source["total_below_l08"]
-
-    )
-
-
-    pivot_source["completed"] = (
-
-        pivot_source["completed_l08"]
-        +
-        pivot_source["completed_below_l08"]
-
-    )
-
-
-    pivot_source["percentage"] = (
-
-        pivot_source.apply(
-
-            lambda row:
-
-                (
-                    row["completed"]
-                    /
-                    row["total"]
-                    *
-                    100
-                )
-
-                if row["total"] > 0
-
-                else 0,
-
-            axis=1
-
+    else:
+        st.markdown(
+            '<div class="empty-message">'
+            'No module/department data is available.'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
-    )
-
-
-    pivot_source = (
-        pivot_source
-        .reset_index()
-    )
-
-
-    table_data = pivot_source.pivot(
-
-        index="_process",
-
-        columns="_department",
-
-        values="percentage"
-
-    )
-
-
-    table_data = (
-        table_data
-        .fillna(0)
-    )
-
-
-    # =====================================================
-    # OVERALL PROCESS %
-    # =====================================================
-
-    overall_process = (
-
-        filtered_df
-
-        .groupby(
-            "_process",
-            sort=False
-        )
-
-        .agg(
-
-            total_l08=(
-                "_total_l08",
-                "sum"
-            ),
-
-            total_below_l08=(
-                "_total_below_l08",
-                "sum"
-            ),
-
-            completed_l08=(
-                "_completed_l08",
-                "sum"
-            ),
-
-            completed_below_l08=(
-                "_completed_below_l08",
-                "sum"
-            )
-
-        )
-
-    )
-
-
-    overall_process["total"] = (
-
-        overall_process["total_l08"]
-        +
-        overall_process["total_below_l08"]
-
-    )
-
-
-    overall_process["completed"] = (
-
-        overall_process["completed_l08"]
-        +
-        overall_process["completed_below_l08"]
-
-    )
-
-
-    overall_process["Overall"] = (
-
-        overall_process.apply(
-
-            lambda row:
-
-                (
-                    row["completed"]
-                    /
-                    row["total"]
-                    *
-                    100
-                )
-
-                if row["total"] > 0
-
-                else 0,
-
-            axis=1
-
-        )
-
-    )
-
-
-    table_data["Overall"] = (
-        overall_process["Overall"]
-    )
-
-
-    # =====================================================
-    # DEPARTMENT ORDER
-    # =====================================================
-
-    preferred_departments = [
-
-        "Blast Furnace-1",
-        "Blast Furnace-2",
-        "SMS-1",
-        "SMS-2",
-        "SMS",
-        "PSM GA",
-        "Coke Oven",
-        "Power Plant",
-        "Utilities",
-        "Lime Plant",
-        "Others"
-
-    ]
-
-
-    existing_columns = (
-        table_data.columns.tolist()
-    )
-
-
-    ordered_departments = [
-
-        value
-
-        for value
-        in preferred_departments
-
-        if value
-        in existing_columns
-
-    ]
-
-
-    remaining_departments = [
-
-        value
-
-        for value
-        in existing_columns
-
-        if value
-        not in ordered_departments
-
-        and value != "Overall"
-
-    ]
-
-
-    ordered_departments += sorted(
-
-        remaining_departments,
-
-        key=lambda x:
-        str(x).lower()
-
-    )
-
-
-    if "Overall" in table_data.columns:
-
-        ordered_departments.append(
-            "Overall"
-        )
-
-
-    table_data = table_data[
-        ordered_departments
-    ]
-
-
-    # =====================================================
-    # BUILD HTML TABLE
-    # =====================================================
-
-    html = """
-
-    <table class="training-table">
-
-        <thead>
-
-            <tr>
-
-                <th>
-                    Process
-                </th>
-
-    """
-
-
-    for col in table_data.columns:
-
-        html += f"""
-
-                <th>
-                    {col}
-                </th>
-
-        """
-
-
-    html += """
-
-            </tr>
-
-        </thead>
-
-        <tbody>
-
-    """
-
-
-    for process_name, row in (
-        table_data.iterrows()
-    ):
-
-        html += f"""
-
-            <tr>
-
-                <td>
-                    {process_name}
-                </td>
-
-        """
-
-
-        for col in table_data.columns:
-
-            value = row[col]
-
-
-            if pd.isna(value):
-
-                value = 0
-
-
-            extra_class = (
-
-                "overall"
-
-                if col == "Overall"
-
-                else ""
-
-            )
-
-
-            html += f"""
-
-                <td class="{extra_class}">
-
-                    {value:.1f}%
-
-                </td>
-
-            """
-
-
-        html += """
-
-            </tr>
-
-        """
-
-
-    html += """
-
-        </tbody>
-
-    </table>
-
-    """
-
-
-    st.html(
-        html
-    )
-
-
-else:
-
-    st.info(
-        "Process-wise training data is not available."
-    )
-
-
-st.html(
-
-    """
-        </div>
-    </div>
-    """
-
-)
-
-
-# =========================================================
-# FOOTER
-# =========================================================
-
-st.html(
-
-    """
-    <div class="footer">
-
-        📚 &nbsp;
-
-        © 2026 Training Dashboard
-
-        &nbsp; | &nbsp;
-
-        Training
-
-    </div>
-    """
-
-)

@@ -1,666 +1,1750 @@
-import streamlit as st
-import pandas as pd
+# ============================================================
+# PSM SC CONVENER DASHBOARD
+# All-Department Governance / Review / Action Dashboard
+# Built from the existing PSM All Departments data structure
+# ============================================================
+
+import io
+import re
+import base64
 from pathlib import Path
 from datetime import datetime
-import math
+
+import pandas as pd
+import requests
+from openpyxl import load_workbook
+import streamlit as st
+import streamlit.components.v1 as components
+import plotly.graph_objects as go
+
 
 # ============================================================
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="PSM Chairman Dashboard",
-    page_icon="🛡️",
-    layout="wide"
+    page_title="PSM SC Convener Dashboard",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# ============================================================
-# PATH
-# ============================================================
-BASE_DIR = Path(__file__).resolve().parent.parent
-DEPT_DIR = BASE_DIR / "data" / "departments"
 
 # ============================================================
-# CSS
+# GOOGLE SHEET - SAME SOURCE AS ALL DEPARTMENTS DASHBOARD
 # ============================================================
-st.markdown("""
+SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
+
+SHEETS = {
+    "PT": "1997330551",
+    "PHA": "1151637695",
+    "PHA Recommendation": "1114420199",
+    "MOC": "1493447251",
+    "PSSR": "1914804736",
+    "PS Incident": "354502422",
+    "Training": "1071736559",
+    "SOC-SOL": "510439154",
+    "Interlock": "1552637895",
+    "PSM CE": "1552637895",
+    "Failure Data": "1071263265",
+    "Barrier Audit": "1741048982",
+    "Audit Compliance": "1790395364",
+}
+
+ALL_DEPARTMENTS = [
+    "Blast Furnace",
+    "Coke Oven",
+    "SMS-1",
+    "SMS-2",
+    "DRI",
+    "Central Utility",
+    "CRM",
+    "WRM",
+    "CPP",
+    "Sinter",
+    "Tube Mill",
+    "CSP",
+    "Pellet & Beneficiation",
+    "LCP",
+]
+
+
+# ============================================================
+# STYLE
+# ============================================================
+st.markdown(
+    """
 <style>
-.stApp{background:#eef4f8;}
-.block-container{max-width:100%;padding:.45rem .55rem;}
+.stApp { background:#f3f8fc; }
+#MainMenu, footer { visibility:hidden; }
 
-.top{
-    background:linear-gradient(100deg,#062c4b,#0c879a);
-    border:2px solid #00a9d6;border-radius:12px;
-    color:#fff;text-align:center;padding:12px 10px 10px;
-}
-.top-main{font-size:18px;font-weight:900;letter-spacing:.4px;}
-.top-title{font-size:27px;font-weight:950;color:#ffd000;margin-top:3px;}
-.top-sub{font-size:13px;font-weight:800;margin-top:2px;}
-.online{
-    display:inline-block;margin-top:7px;padding:4px 18px;
-    border:1px solid #00e676;border-radius:20px;
-    color:#6dff9a;background:#063f2c;font-weight:900;
-}
-.dot{color:#48ef8b;}
-
-.sec{
-    background:linear-gradient(90deg,#075879,#0c879a);
-    color:#fff;text-align:center;font-weight:950;
-    padding:8px;border-radius:7px;margin:7px 0 5px;
+.block-container {
+    padding:0.25rem 0.35rem 0rem 0.35rem !important;
+    max-width:100%;
 }
 
-.card{
-    background:#fff;border:1px solid #c2d5e0;border-radius:8px;
-    padding:10px;text-align:center;min-height:82px;
-}
-.card-label{font-size:10px;font-weight:900;color:#31556c;}
-.card-value{font-size:25px;font-weight:950;color:#123a56;margin-top:5px;}
-.card-target{font-size:10px;color:#547286;margin-top:3px;}
-
-.note{
-    background:#e7f5ec;border:1px solid #55c58a;color:#075c39;
-    border-radius:7px;padding:7px 10px;font-size:12px;font-weight:800;
-}
-.warn{
-    background:#fff3d6;border:1px solid #e5b649;color:#765000;
-    border-radius:7px;padding:7px 10px;font-size:12px;font-weight:800;
+div[data-testid="stMetric"] {
+    background:#ffffff;
+    border:1px solid #cbddea;
+    border-radius:7px;
+    padding:7px !important;
+    min-height:78px;
 }
 
-.pillar{
-    background:#fff;border:1px solid #c3d6e1;border-radius:8px;
-    padding:9px;text-align:center;min-height:105px;
+div[data-testid="stMetricLabel"] {
+    font-size:9px !important;
+    font-weight:800 !important;
+    color:#20384f !important;
+    white-space:nowrap !important;
 }
-.pn{font-size:10px;font-weight:900;color:#385a70;}
-.pname{font-size:12px;font-weight:900;color:#153b55;min-height:30px;}
-.pscore{font-size:24px;font-weight:950;margin-top:3px;}
-.good{color:#198b35;}
-.amber{color:#d88a00;}
-.bad{color:#d92626;}
-.na{color:#758695;}
 
-table{font-size:12px;}
+div[data-testid="stMetricValue"] {
+    color:#123f77 !important;
+    font-size:25px !important;
+    font-weight:900 !important;
+}
+
+.convener-card {
+    background:#ffffff;
+    border:1px solid #d3e0ea;
+    border-radius:8px;
+    padding:9px;
+    margin-bottom:8px;
+    box-shadow:0 1px 4px rgba(20,65,95,.06);
+}
+
+.section-bar {
+    background:#07518b;
+    color:#ffffff;
+    border-radius:4px;
+    padding:6px 9px;
+    font-size:11px;
+    font-weight:900;
+    margin:3px 0 7px 0;
+}
+
+.sub-title {
+    color:#173f70;
+    font-size:10px;
+    font-weight:900;
+    margin:4px 0;
+}
+
+.live-bar {
+    background:#ffffff;
+    border:1px solid #cbddea;
+    border-radius:5px;
+    padding:5px 9px;
+    color:#4f6678;
+    font-size:10px;
+    margin:4px 0 7px 0;
+}
+
+.priority-box {
+    background:#fff8f8;
+    border:1px solid #efc9c9;
+    border-radius:5px;
+    padding:7px;
+}
+
+.footer {
+    text-align:center;
+    color:#627689;
+    background:#edf4f8;
+    border-top:1px solid #cbdce7;
+    padding:7px;
+    font-size:9px;
+    font-weight:800;
+    margin-top:7px;
+}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # ============================================================
 # HELPERS
 # ============================================================
-def clean_num(v):
-    if v is None:
-        return 0.0
-    try:
-        if isinstance(v, str):
-            v = v.replace(",", "").replace("%", "").strip()
-        x = float(v)
-        if math.isnan(x):
-            return 0.0
-        return x
-    except Exception:
-        return 0.0
+def norm(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value).strip().lower())
 
-def fmt(v):
-    x = clean_num(v)
-    return f"{x:.0f}" if x.is_integer() else f"{x:.1f}"
 
-def ratio_score(actual, plan):
-    plan = clean_num(plan)
-    actual = clean_num(actual)
-    if plan <= 0:
+def find_col(df, candidates):
+    if df is None or df.empty:
         return None
-    return max(0, min(100, actual / plan * 100))
 
-def status_class(score):
-    if score is None:
-        return "na"
-    if score >= 90:
-        return "good"
-    if score >= 70:
-        return "amber"
-    return "bad"
+    normalized = {norm(c): c for c in df.columns}
 
-def find_workbook_files():
-    if not DEPT_DIR.exists():
-        return []
-    return sorted(
-        p for p in DEPT_DIR.glob("*.xlsx")
-        if not p.name.startswith("~$")
-    )
+    for candidate in candidates:
+        key = norm(candidate)
+        if key in normalized:
+            return normalized[key]
 
-@st.cache_data(ttl=30)
-def read_department_files():
-    result = {}
-    for path in find_workbook_files():
-        try:
-            xls = pd.ExcelFile(path)
-            if "PSM Dashboard" in xls.sheet_names:
-                # Header=None is intentional because the supplied
-                # department tracker uses multiple header rows.
-                df = pd.read_excel(path, sheet_name="PSM Dashboard", header=None)
-                result[path.stem] = df
-        except Exception:
-            pass
-    return result
+    for column in df.columns:
+        ckey = norm(column)
+        for candidate in candidates:
+            nkey = norm(candidate)
+            if nkey in ckey or ckey in nkey:
+                return column
 
-def get_row(df, label):
-    if df.empty:
-        return None
-    for i in range(len(df)):
-        for j in range(min(df.shape[1], 3)):
-            value = str(df.iat[i, j]).strip().lower()
-            if value == label.lower():
-                return i
     return None
 
-def cell(df, row, col):
-    if row is None or row >= len(df) or col >= df.shape[1]:
-        return 0
-    return clean_num(df.iat[row, col])
 
-# ============================================================
-# LOAD REAL DATA
-# ============================================================
-files = read_department_files()
+def clean_dataframe(df):
+    if df is None or df.empty:
+        return pd.DataFrame()
 
-st.markdown("""
-<div class="top">
-    <div class="top-main">PROCESS SAFETY MANAGEMENT DIGITAL VISION WALL</div>
-    <div class="top-title">SCREEN 06 : PSM CHAIRMAN DASHBOARD</div>
-    <div class="top-sub">
-        Strategic Oversight | Governance Leadership | Risk Management | Performance Excellence
-    </div>
-    <div class="online"><span class="dot">●</span> PLANT STATUS : ONLINE</div>
-</div>
-""", unsafe_allow_html=True)
+    out = df.copy()
+    out.columns = [
+        str(c).strip().replace("\n", " ").replace("\r", " ")
+        for c in out.columns
+    ]
+    out = out.dropna(how="all").copy()
 
-# ============================================================
-# DEPARTMENT SELECTOR
-# ============================================================
-names = list(files.keys())
+    for c in out.columns:
+        if out[c].dtype == "object":
+            out[c] = out[c].astype(str).str.strip()
 
-if names:
-    selected = st.selectbox(
-        "SELECT DEPARTMENT",
-        ["All Departments"] + names,
-        key="chairman_department"
+    return out
+
+
+def load_csv_from_url(url):
+    response = requests.get(
+        url,
+        timeout=30,
+        headers={"User-Agent": "Mozilla/5.0"},
     )
-else:
-    selected = "All Departments"
+    response.raise_for_status()
+    return pd.read_csv(
+        io.StringIO(response.content.decode("utf-8-sig"))
+    )
 
-if selected == "All Departments":
-    selected_files = files
-else:
-    selected_files = {selected: files[selected]}
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_google_sheet(gid):
+    if not gid:
+        return pd.DataFrame()
+
+    export_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=csv&gid={gid}"
+    )
+
+    try:
+        return clean_dataframe(load_csv_from_url(export_url))
+    except Exception:
+        try:
+            gviz_url = (
+                f"https://docs.google.com/spreadsheets/d/"
+                f"{SPREADSHEET_ID}/gviz/tq?"
+                f"tqx=out:csv&gid={gid}"
+            )
+            return clean_dataframe(load_csv_from_url(gviz_url))
+        except Exception:
+            return pd.DataFrame()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_interlock_sheet():
+    """
+    Uses the same header-based discovery approach as the existing
+    All Departments dashboard so the actual Interlock register is used.
+    """
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        required = {
+            "sno",
+            "department",
+            "interlockdescription",
+            "datebypassed",
+            "presentstatusactionrequired",
+        }
+
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+            buffered = []
+            header_found = None
+
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                headers = {
+                    re.sub(
+                        r"[^a-z0-9]+",
+                        "",
+                        str(v).strip().lower()
+                    )
+                    for v in row
+                    if v is not None
+                }
+
+                if required.issubset(headers):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            valid_columns = [
+                i for i, v in enumerate(headers)
+                if v is not None and str(v).strip()
+            ]
+
+            clean_headers = [
+                str(headers[i]).strip()
+                for i in valid_columns
+            ]
+
+            records = []
+            for row in all_rows[header_found + 1:]:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    v is not None and str(v).strip()
+                    for v in values
+                ):
+                    records.append(values)
+
+            workbook.close()
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+        workbook.close()
+
+    except Exception:
+        pass
+
+    return pd.DataFrame()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_psm_ce_sheet():
+    """
+    Uses distinctive PSM CE headers to locate the real register.
+    """
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx"
+    )
+
+    try:
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=True,
+            read_only=True,
+        )
+
+        def nh(value):
+            text = str(value).strip().lower()
+            text = text.replace("–", "-").replace("—", "-")
+            text = text.replace("&", "and")
+            return re.sub(r"[^a-z0-9]+", "", text)
+
+        for worksheet in workbook.worksheets:
+            rows = worksheet.iter_rows(values_only=True)
+            buffered = []
+            header_found = None
+
+            for row_number, row in enumerate(rows):
+                buffered.append(row)
+                if row_number >= 9:
+                    break
+
+                h = {nh(v) for v in row if v is not None}
+
+                if (
+                    "slno" in h
+                    and "month" in h
+                    and "department" in h
+                    and any("noofpsmcefailedbreakdown" in x for x in h)
+                    and any(
+                        "complianceofpsmce" in x
+                        and "mechanical" in x
+                        and "generated" in x
+                        for x in h
+                    )
+                    and any(
+                        "complianceofpsmce" in x
+                        and "mechanical" in x
+                        and "completed" in x
+                        for x in h
+                    )
+                    and any(
+                        "complianceofpsmce" in x
+                        and ("ei" in x or "eandi" in x)
+                        and "generated" in x
+                        for x in h
+                    )
+                    and any(
+                        "complianceofpsmce" in x
+                        and ("ei" in x or "eandi" in x)
+                        and "completed" in x
+                        for x in h
+                    )
+                ):
+                    header_found = row_number
+                    break
+
+            if header_found is None:
+                continue
+
+            all_rows = list(buffered)
+            all_rows.extend(list(rows))
+
+            headers = list(all_rows[header_found])
+            valid_columns = [
+                i for i, v in enumerate(headers)
+                if v is not None and str(v).strip()
+            ]
+
+            clean_headers = [
+                str(headers[i]).strip()
+                for i in valid_columns
+            ]
+
+            records = []
+            for row in all_rows[header_found + 1:]:
+                values = [
+                    row[i] if i < len(row) else None
+                    for i in valid_columns
+                ]
+                if any(
+                    v is not None and str(v).strip()
+                    for v in values
+                ):
+                    records.append(values)
+
+            workbook.close()
+            return clean_dataframe(
+                pd.DataFrame(records, columns=clean_headers)
+            )
+
+        workbook.close()
+
+    except Exception:
+        pass
+
+    return pd.DataFrame()
+
+
+def filter_department(df, department):
+    df = clean_dataframe(df)
+
+    if df.empty:
+        return df
+
+    col = find_col(
+        df,
+        [
+            "Department",
+            "Departments",
+            "Dept",
+            "Department Name",
+            "Department_Name",
+            "Dept Name",
+            "Dept_Name",
+        ],
+    )
+
+    if col is None:
+        return df.iloc[0:0].copy()
+
+    values = df[col].fillna("").astype(str).str.strip()
+    target = norm(department)
+
+    if target == "blastfurnace":
+        mask = values.str.contains(
+            r"blast\s*[-_/ ]*\s*furnace",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "cokeoven":
+        mask = values.str.contains(
+            r"coke\s*[-_/ ]*oven",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "sms1":
+        mask = values.str.contains(
+            r"sms\s*[-_/ ]*1",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "sms2":
+        mask = values.str.contains(
+            r"sms\s*[-_/ ]*2",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "centralutility":
+        mask = values.str.contains(
+            r"central\s*[-_/ ]*utility",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "tubemill":
+        mask = values.str.contains(
+            r"tube\s*[-_/ ]*mill",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    elif target == "pelletbeneficiation":
+        mask = values.str.contains(
+            r"pellet.*beneficiation|beneficiation.*pellet",
+            case=False,
+            regex=True,
+            na=False,
+        )
+    else:
+        mask = values.map(norm).eq(target)
+
+    return df.loc[mask].copy()
+
+
+def status_series(df, candidates=None):
+    if df is None or df.empty:
+        return pd.Series(dtype=str)
+
+    if candidates is None:
+        candidates = [
+            "Status",
+            "Current Status",
+            "Action Status",
+            "Completion Status",
+            "Investigation Status",
+            "Recommendation Status",
+        ]
+
+    col = find_col(df, candidates)
+    if col is None:
+        return pd.Series([""] * len(df), index=df.index)
+
+    return (
+        df[col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+
+def completion_rate(df, candidates=None):
+    if df is None or df.empty:
+        return None
+
+    s = status_series(df, candidates)
+
+    if s.empty or not (s != "").any():
+        return None
+
+    completed = s.str.contains(
+        r"\bcompleted?\b|\bcomplete\b|\bclosed\b|\bdone\b",
+        regex=True,
+        na=False,
+    ).sum()
+
+    applicable = (s != "").sum()
+
+    return round(
+        float(completed) / float(applicable) * 100,
+        1,
+    ) if applicable else None
+
+
+def pct_text(value):
+    return "—" if value is None else f"{value:.0f}%"
+
+
+def status_colour(value):
+    if value is None:
+        return "#8a97a5"
+    if value >= 90:
+        return "#18864b"
+    if value >= 75:
+        return "#d88a00"
+    return "#d71920"
+
+
+def numeric_total(df, col):
+    if df is None or df.empty or col is None:
+        return 0
+    return int(
+        pd.to_numeric(df[col], errors="coerce")
+        .fillna(0)
+        .sum()
+    )
+
+
+def module_open_count(df, candidates=None):
+    if df is None or df.empty:
+        return 0
+
+    s = status_series(df, candidates)
+
+    return int(
+        s.str.contains(
+            r"open|pending|ongoing|in progress|overdue",
+            regex=True,
+            na=False,
+        ).sum()
+    )
+
+
+def build_priority_register():
+    rows = []
+
+    def add_records(df, module, id_candidates, desc_candidates, status_candidates):
+        if df is None or df.empty:
+            return
+
+        id_col = find_col(df, id_candidates)
+        desc_col = find_col(df, desc_candidates)
+        stat_col = find_col(df, status_candidates)
+
+        if stat_col is None:
+            return
+
+        s = (
+            df[stat_col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+        mask = s.str.contains(
+            r"open|pending|ongoing|in progress|overdue",
+            regex=True,
+            na=False,
+        )
+
+        pending = df.loc[mask].copy()
+
+        for _, row in pending.iterrows():
+            rows.append(
+                {
+                    "Module": module,
+                    "Department": str(
+                        row[find_col(
+                            df,
+                            ["Department", "Departments", "Dept"]
+                        )]
+                    ).strip()
+                    if find_col(df, ["Department", "Departments", "Dept"])
+                    else "—",
+                    "Reference": str(row[id_col]).strip()
+                    if id_col else "—",
+                    "Action / Description": str(row[desc_col]).strip()
+                    if desc_col else "—",
+                    "Status": str(row[stat_col]).strip(),
+                }
+            )
+
+    add_records(
+        rec,
+        "PHA Recommendation",
+        ["PHA No", "Recommendation No", "Recommendation ID", "ID"],
+        ["Recommendation Description", "Recommendation", "Description"],
+        [
+            "Status (Open/Close)",
+            "Status Open Close",
+            "Open/Close Status",
+            "Recommendation Status",
+            "Status",
+        ],
+    )
+
+    add_records(
+        moc,
+        "MOC",
+        ["MOC No", "MOC No.", "MOC Number", "MOC ID", "Request No", "ID"],
+        ["Description of Change", "MOC Description", "Change Description", "Description"],
+        ["Status (Open/Close)", "Status (Open / Close)", "MOC Status", "Status"],
+    )
+
+    add_records(
+        pssr,
+        "PSSR",
+        ["PSSR No.", "PSSR No", "PSSR ID", "ID"],
+        ["PSSR Description", "Description", "PSSR Name"],
+        [
+            "Overdue/Pending/Completed",
+            "Overdue / Pending / Completed",
+            "Status",
+            "Current Status",
+        ],
+    )
+
+    # Interlock uses a dedicated status field.
+    if interlock is not None and not interlock.empty:
+        status_col = find_col(
+            interlock,
+            [
+                "Present Status / Action Required",
+                "Present Status",
+                "Status / Action Required",
+                "Status",
+            ],
+        )
+        dept_col = find_col(
+            interlock,
+            ["Department", "Departments", "Dept"]
+        )
+        desc_col = find_col(
+            interlock,
+            ["Interlock Description", "Interlock Details", "Description"]
+        )
+        sno_col = find_col(
+            interlock,
+            ["S.No.", "S No", "S.No", "Serial No", "Sr No"]
+        )
+
+        if status_col:
+            s = (
+                interlock[status_col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+            mask = s.str.contains(
+                r"due\s*for\s*normalization|normalization\s*pending",
+                regex=True,
+                na=False,
+            )
+
+            for _, row in interlock.loc[mask].iterrows():
+                rows.append(
+                    {
+                        "Module": "Interlock Bypass",
+                        "Department": str(row[dept_col]).strip()
+                        if dept_col else "—",
+                        "Reference": str(row[sno_col]).strip()
+                        if sno_col else "—",
+                        "Action / Description": str(row[desc_col]).strip()
+                        if desc_col else "—",
+                        "Status": str(row[status_col]).strip(),
+                    }
+                )
+
+    return pd.DataFrame(rows)
+
 
 # ============================================================
-# AGGREGATION FROM THE REAL DEPARTMENT SHEETS
+# LOAD DATA
 # ============================================================
-# Row 5 in the supplied tracker = For the Month
-# Row 6 in the supplied tracker = Year till date
-month_label = "For the Month"
-ytd_label = "Year till date"
+pt = load_google_sheet(SHEETS["PT"])
+pha = load_google_sheet(SHEETS["PHA"])
+rec = load_google_sheet(SHEETS["PHA Recommendation"])
+moc = load_google_sheet(SHEETS["MOC"])
+pssr = load_google_sheet(SHEETS["PSSR"])
+incident = load_google_sheet(SHEETS["PS Incident"])
+training = load_google_sheet(SHEETS["Training"])
+soc = load_google_sheet(SHEETS["SOC-SOL"])
+interlock = load_interlock_sheet()
+psm_ce = load_psm_ce_sheet()
+failure_data = load_google_sheet(SHEETS["Failure Data"])
+barrier = load_google_sheet(SHEETS["Barrier Audit"])
+audit = load_google_sheet(SHEETS["Audit Compliance"])
 
-month_values = {}
-ytd_values = {}
-
-for dept, df in selected_files.items():
-    mr = get_row(df, month_label)
-    yr = get_row(df, ytd_label)
-
-    # Actual tracker column positions (0-based), based on the
-    # supplied PSM Dashboard department sheet.
-    cols = {
-        "inc_l1": 1, "inc_l2": 2, "inc_l3": 3, "inc_l4": 4,
-        "pending_inv": 5,
-        "soc": 6, "sol": 7,
-        "critical_failed": 8,
-        "mech_gen": 9, "mech_done": 10,
-        "iem_gen": 11, "iem_done": 12,
-        "z01_open_mech": 13, "z01_closed_mech": 14,
-        "z01_open_iem": 15, "z01_closed_iem": 16,
-        "barrier_plan": 17, "barrier_actual": 18,
-        "barrier_total": 19, "barrier_assessed": 20,
-        "barrier_unacceptable": 21,
-        "tabletop_plan": 22, "tabletop_actual": 23,
-        "third_close": 1, "third_delayed": 2,
-        "incident_rec_close": 3, "incident_rec_delayed": 4,
-        "rcfa_overdue": 5,
-        "pt_plan": 6, "pt_actual": 7,
-        "pha_plan": 8, "pha_actual": 9,
-        "pha_rec_close": 10, "pha_rec_delayed": 11,
-        "audit_close": 12, "audit_delayed": 13,
-        "moc_pending15": 14,
-        "moc_kaizen": 16,
-        "emergency_moc": 18,
-        "temp_moc_overdue": 20,
-        "bypass_open": 22,
-        "normalisation_overdue": 23,
-    }
-
-    for k, c in cols.items():
-        month_values[k] = month_values.get(k, 0) + cell(df, mr, c)
-        ytd_values[k] = ytd_values.get(k, 0) + cell(df, yr, c)
 
 # ============================================================
-# TOP CARDS
+# HEADER
 # ============================================================
+BASE_DIR = Path(__file__).resolve().parent
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+
+def image_to_base64(path):
+    try:
+        if path.exists():
+            return base64.b64encode(path.read_bytes()).decode("utf-8")
+    except Exception:
+        pass
+    return ""
+
+
+logo_base64 = image_to_base64(logo_path)
 now = datetime.now()
 
-c1, c2, c3, c4 = st.columns(4)
+header_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {{
+    margin:0;
+    font-family:Arial,Helvetica,sans-serif;
+}}
+.header {{
+    height:92px;
+    border-radius:7px;
+    overflow:hidden;
+    position:relative;
+    background:linear-gradient(
+        90deg,#031d34 0%,#052b49 45%,#07385c 100%
+    );
+    box-shadow:0 3px 9px rgba(0,0,0,.18);
+}}
+.logo {{
+    position:absolute;
+    left:8px;
+    top:11px;
+    width:180px;
+    height:68px;
+    background:#fff;
+    border-radius:5px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}}
+.logo img {{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+}}
+.title {{
+    position:absolute;
+    left:50%;
+    top:12px;
+    transform:translateX(-50%);
+    text-align:center;
+    color:#fff;
+    white-space:nowrap;
+}}
+.main {{
+    font-size:27px;
+    font-weight:900;
+    letter-spacing:.4px;
+}}
+.main span {{
+    color:#f28c00;
+}}
+.sub {{
+    margin-top:7px;
+    font-size:12px;
+    letter-spacing:3.4px;
+}}
+.tag {{
+    margin-top:6px;
+    font-size:7px;
+    letter-spacing:2px;
+    color:rgba(255,255,255,.82);
+}}
+.right {{
+    position:absolute;
+    right:15px;
+    top:15px;
+    color:#fff;
+    text-align:right;
+    padding-left:15px;
+    border-left:2px solid rgba(255,255,255,.55);
+}}
+.date {{
+    font-size:10px;
+}}
+.time {{
+    margin-top:4px;
+    font-size:21px;
+    font-weight:800;
+}}
+.orange {{
+    position:absolute;
+    bottom:0;
+    left:0;
+    width:100%;
+    height:4px;
+    background:#f28c00;
+}}
+</style>
+</head>
+<body>
+<div class="header">
+    <div class="logo">
+        {"<img src='data:image/jpeg;base64," + logo_base64 + "'>" if logo_base64 else ""}
+    </div>
 
-for col, label, value, target in [
-    (c1, "DATE", now.strftime("%d-%b-%Y"), "Local system date"),
-    (c2, "TIME", now.strftime("%I:%M:%S %p"), "Live application time"),
-    (c3, "SELECTED DEPARTMENT", selected, "Real department workbook"),
-    (c4, "REAL EXCEL FILES", len(selected_files), "Department files loaded"),
-]:
-    with col:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{label}</div>
-                <div class="card-value" style="font-size:22px;">{value}</div>
-                <div class="card-target">{target}</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
+    <div class="title">
+        <div class="main">SC <span>CONVENER</span></div>
+        <div class="sub">PSM DIGITAL DASHBOARD</div>
+        <div class="tag">GOVERNANCE &nbsp;|&nbsp; REVIEW &nbsp;|&nbsp; ACTION &nbsp;|&nbsp; COMPLIANCE</div>
+    </div>
 
-if files:
-    st.markdown(
-        f'<div class="note">🟢 REAL EXCEL DATA LOADED • '
-        f'{len(selected_files)} department file(s) selected • '
-        f'All values below are calculated from the department tracker.</div>',
-        unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        '<div class="warn">🟡 No usable department Excel file found in '
-        'data/departments. Put the department .xlsx files there.</div>',
-        unsafe_allow_html=True
-    )
+    <div class="right">
+        <div class="date">{now.strftime("%d %b %Y").upper()}</div>
+        <div class="time">{now.strftime("%I:%M %p")}</div>
+    </div>
 
-# ============================================================
-# 1. OVERALL PSM HEALTH INDEX
-# ============================================================
-st.markdown('<div class="sec">1. OVERALL PSM HEALTH INDEX</div>', unsafe_allow_html=True)
+    <div class="orange"></div>
+</div>
+</body>
+</html>
+"""
 
-# Data-derived health indicators from the supplied tracker.
-scores = []
+components.html(header_html, height=108, scrolling=False)
 
-for actual_key, plan_key in [
-    ("pt_actual", "pt_plan"),
-    ("pha_actual", "pha_plan"),
-    ("barrier_actual", "barrier_plan"),
-    ("tabletop_actual", "tabletop_plan"),
-]:
-    s = ratio_score(month_values.get(actual_key), month_values.get(plan_key))
-    if s is not None:
-        scores.append(s)
-
-# Incident / overdue components: zero is best.
-overdue_items = (
-    month_values.get("pending_inv", 0)
-    + month_values.get("rcfa_overdue", 0)
-    + month_values.get("temp_moc_overdue", 0)
-    + month_values.get("normalisation_overdue", 0)
-)
-
-if scores:
-    health = sum(scores) / len(scores)
-    # Penalise open/overdue items without creating a score when no data exists.
-    health = max(0, min(100, health - min(overdue_items * 2, 20)))
-    health_text = f"{health:.1f}%"
-else:
-    health = None
-    health_text = "N/A"
-
-a, b, c, d = st.columns(4)
-
-cards = [
-    ("OVERALL PSM SCORE", health_text, "Calculated from available tracker metrics"),
-    ("LAST MONTH", "N/A", "No historical score column in department tracker"),
-    ("LAST YEAR", "N/A", "No historical score column in department tracker"),
-    ("OVERDUE / OPEN ITEMS", fmt(overdue_items), "Real tracker count"),
-]
-
-for col, (lab, val, sub) in zip([a,b,c,d], cards):
-    with col:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{lab}</div>
-                <div class="card-value">{val}</div>
-                <div class="card-target">{sub}</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-# ============================================================
-# 2. 14 PILLARS
-# ============================================================
-st.markdown('<div class="sec">2. PSM PILLAR SUMMARY — 14 PILLARS</div>', unsafe_allow_html=True)
-
-# These are the standard dashboard pillar names. Scores are only
-# calculated where a direct compliance ratio exists in the tracker.
-pillars = [
-    ("Process Safety Information", None),
-    ("Process Hazard Analysis", ratio_score(month_values.get("pha_actual"), month_values.get("pha_plan"))),
-    ("Operating Procedures", ratio_score(month_values.get("pt_actual"), month_values.get("pt_plan"))),
-    ("Mechanical Integrity", ratio_score(
-        month_values.get("mech_done") + month_values.get("iem_done"),
-        month_values.get("mech_gen") + month_values.get("iem_gen")
-    )),
-    ("Training & Competency", None),
-    ("Management of Change", None),
-    ("Pre-Startup Safety Review", None),
-    ("Contractor Safety", None),
-    ("Emergency Preparedness", ratio_score(month_values.get("tabletop_actual"), month_values.get("tabletop_plan"))),
-    ("Incident Investigation", ratio_score(
-        month_values.get("incident_rec_close"),
-        month_values.get("incident_rec_close") + month_values.get("incident_rec_delayed")
-    )),
-    ("Compliance & Audit", ratio_score(
-        month_values.get("audit_close"),
-        month_values.get("audit_close") + month_values.get("audit_delayed")
-    )),
-    ("Risk Management", ratio_score(
-        month_values.get("barrier_assessed"),
-        month_values.get("barrier_total")
-    )),
-    ("Management Review", None),
-    ("PSM Governance", ratio_score(
-        month_values.get("third_close"),
-        month_values.get("third_close") + month_values.get("third_delayed")
-    )),
-]
-
-cols = st.columns(2)
-
-for i, (name, score) in enumerate(pillars):
-    cls = status_class(score)
-    text = "N/A" if score is None else f"{score:.0f}%"
-    target = (
-        "Data not available in current tracker"
-        if score is None
-        else ("≥ 90% Excellent" if score >= 90 else "70–89% Needs Attention" if score >= 70 else "< 70% Poor")
-    )
-
-    with cols[i % 2]:
-        st.markdown(
-            f"""<div class="pillar">
-                <div class="pn">PILLAR {i+1}</div>
-                <div class="pname">{name}</div>
-                <div class="pscore {cls}">{text}</div>
-                <div class="card-target">{target}</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
 
 # ============================================================
-# 3. STRATEGIC PRIORITY TRACKER
+# LIVE DATA BAR
 # ============================================================
-st.markdown('<div class="sec">3. STRATEGIC PRIORITY TRACKER — CHAIRMAN VIEW</div>', unsafe_allow_html=True)
-
-priority = pd.DataFrame([
-    ["Process Safety Incidents", fmt(sum(month_values.get(k,0) for k in ["inc_l1","inc_l2","inc_l3","inc_l4"]))],
-    ["Investigation Pending >30 Days", fmt(month_values.get("pending_inv",0))],
-    ["PSM Critical Equipment Failures", fmt(month_values.get("critical_failed",0))],
-    ["Barrier Unacceptable", fmt(month_values.get("barrier_unacceptable",0))],
-    ["MOC Pending >15 Days", fmt(month_values.get("moc_pending15",0))],
-    ["Interlock Bypass Open", fmt(month_values.get("bypass_open",0))],
-    ["Normalisation Overdue", fmt(month_values.get("normalisation_overdue",0))],
-], columns=["Priority Area", "Real Current Value"])
-
-st.dataframe(priority, use_container_width=True, hide_index=True)
-
-# ============================================================
-# 4. KEY PERFORMANCE INDICATORS
-# ============================================================
-st.markdown('<div class="sec">4. KEY PERFORMANCE INDICATORS — REAL DATA</div>', unsafe_allow_html=True)
-
-kpis = [
-    ("PROCESS SAFETY INCIDENTS",
-     sum(month_values.get(k,0) for k in ["inc_l1","inc_l2","inc_l3","inc_l4"])),
-    ("INVESTIGATION PENDING >30 DAYS", month_values.get("pending_inv",0)),
-    ("PSM CRITICAL EQUIPMENT FAILED", month_values.get("critical_failed",0)),
-    ("PHA ON SCHEDULE", ratio_score(month_values.get("pha_actual"), month_values.get("pha_plan"))),
-    ("PT ON SCHEDULE", ratio_score(month_values.get("pt_actual"), month_values.get("pt_plan"))),
-    ("BARRIER HEALTH ASSESSED", ratio_score(month_values.get("barrier_assessed"), month_values.get("barrier_total"))),
-]
-
-kc = st.columns(3)
-for i, (lab, val) in enumerate(kpis):
-    value = "N/A" if val is None else (f"{val:.1f}%" if isinstance(val,float) and val <= 100 else fmt(val))
-    with kc[i % 3]:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{lab}</div>
-                <div class="card-value">{value}</div>
-                <div class="card-target">Real Excel value</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-# ============================================================
-# 5. DEPARTMENT PERFORMANCE
-# ============================================================
-st.markdown('<div class="sec">5. DEPARTMENT PERFORMANCE MATRIX</div>', unsafe_allow_html=True)
-
-dept_rows = []
-
-for dept, df in files.items():
-    mr = get_row(df, month_label)
-
-    pt_plan = cell(df, mr, 6)
-    pt_actual = cell(df, mr, 7)
-    pha_plan = cell(df, mr, 8)
-    pha_actual = cell(df, mr, 9)
-
-    parts = [
-        s for s in [
-            ratio_score(pt_actual, pt_plan),
-            ratio_score(pha_actual, pha_plan)
-        ] if s is not None
+available_modules = sum(
+    1
+    for df in [
+        pt, pha, rec, moc, pssr, incident, training,
+        soc, interlock, psm_ce, failure_data, barrier, audit
     ]
-
-    score = sum(parts) / len(parts) if parts else None
-
-    dept_rows.append({
-        "Department": dept,
-        "PSM Score": "N/A" if score is None else round(score, 1),
-        "PT Plan": pt_plan,
-        "PT Actual": pt_actual,
-        "PHA Plan": pha_plan,
-        "PHA Actual": pha_actual,
-    })
-
-st.dataframe(
-    pd.DataFrame(dept_rows),
-    use_container_width=True,
-    hide_index=True
+    if df is not None and not df.empty
 )
-
-# ============================================================
-# 6. OVERDUE / CRITICAL ACTIONS
-# ============================================================
-st.markdown('<div class="sec">6. TOP OVERDUE / CRITICAL ITEMS</div>', unsafe_allow_html=True)
-
-actions = pd.DataFrame([
-    ["Investigation pending >30 days", month_values.get("pending_inv",0)],
-    ["RCFA actions overdue", month_values.get("rcfa_overdue",0)],
-    ["Temporary MOC restoration overdue", month_values.get("temp_moc_overdue",0)],
-    ["Normalisation overdue", month_values.get("normalisation_overdue",0)],
-    ["PHA recommendations delayed", month_values.get("pha_rec_delayed",0)],
-    ["Audit recommendations delayed", month_values.get("audit_delayed",0)],
-    ["Third-party recommendations delayed", month_values.get("third_delayed",0)],
-], columns=["Action / Issue", "Count"])
-
-st.dataframe(actions, use_container_width=True, hide_index=True)
-
-# ============================================================
-# 7. RISK / BARRIER EXPOSURE
-# ============================================================
-st.markdown('<div class="sec">7. RISK / BARRIER EXPOSURE SUMMARY</div>', unsafe_allow_html=True)
-
-r1, r2, r3, r4 = st.columns(4)
-
-risk_cards = [
-    ("TOTAL BARRIERS", month_values.get("barrier_total",0)),
-    ("ASSESSED", month_values.get("barrier_assessed",0)),
-    ("UNACCEPTABLE", month_values.get("barrier_unacceptable",0)),
-    ("OPEN / BYPASS", month_values.get("bypass_open",0)),
-]
-
-for col, (lab, val) in zip([r1,r2,r3,r4], risk_cards):
-    with col:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{lab}</div>
-                <div class="card-value">{fmt(val)}</div>
-                <div class="card-target">Real Excel value</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-# ============================================================
-# 8. INCIDENT SUMMARY
-# ============================================================
-st.markdown('<div class="sec">8. INCIDENT SUMMARY — REAL DATA</div>', unsafe_allow_html=True)
-
-inc = pd.DataFrame([
-    ["Level 1", month_values.get("inc_l1",0)],
-    ["Level 2", month_values.get("inc_l2",0)],
-    ["Level 3", month_values.get("inc_l3",0)],
-    ["Level 4", month_values.get("inc_l4",0)],
-], columns=["Incident Level", "For the Month"])
-
-st.dataframe(inc, use_container_width=True, hide_index=True)
-
-# ============================================================
-# 9. BUDGET / MOC
-# ============================================================
-st.markdown('<div class="sec">9. MOC / GOVERNANCE UTILIZATION</div>', unsafe_allow_html=True)
-
-m1, m2, m3, m4 = st.columns(4)
-
-for col, (lab, val) in zip(
-    [m1,m2,m3,m4],
-    [
-        ("MOC PENDING >15 DAYS", month_values.get("moc_pending15",0)),
-        ("KAIZEN MOC", month_values.get("moc_kaizen",0)),
-        ("EMERGENCY / TEMP MOC", month_values.get("emergency_moc",0)),
-        ("TEMP MOC OVERDUE", month_values.get("temp_moc_overdue",0)),
-    ]
-):
-    with col:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{lab}</div>
-                <div class="card-value">{fmt(val)}</div>
-                <div class="card-target">Real Excel value</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-# ============================================================
-# 10. COMMITTEE / TABLE TOP
-# ============================================================
-st.markdown('<div class="sec">10. COMMITTEE / TABLE TOP EXERCISE OVERVIEW</div>', unsafe_allow_html=True)
-
-t1, t2 = st.columns(2)
-
-for col, lab, actual, plan in [
-    (t1, "TABLE TOP EXERCISE", month_values.get("tabletop_actual",0), month_values.get("tabletop_plan",0)),
-    (t2, "BARRIER AUDIT", month_values.get("barrier_actual",0), month_values.get("barrier_plan",0)),
-]:
-    score = ratio_score(actual, plan)
-    with col:
-        st.markdown(
-            f"""<div class="card">
-                <div class="card-label">{lab}</div>
-                <div class="card-value">{fmt(actual)} / {fmt(plan)}</div>
-                <div class="card-target">
-                    Achievement: {"N/A" if score is None else f"{score:.1f}%"}
-                </div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-# ============================================================
-# 11. DATA QUALITY / RECORD STATUS
-# ============================================================
-st.markdown('<div class="sec">11. DOCUMENT & RECORD DATA STATUS</div>', unsafe_allow_html=True)
-
-st.info(
-    "The supplied department tracker does not contain a dedicated "
-    "document/records compliance table. No document score is fabricated."
-)
-
-# ============================================================
-# 12. CHAIRMAN INSIGHTS
-# ============================================================
-st.markdown('<div class="sec">12. DATA-DRIVEN INSIGHTS FOR CHAIRMAN</div>', unsafe_allow_html=True)
-
-insights = []
-
-if month_values.get("pending_inv",0) > 0:
-    insights.append(f"• {fmt(month_values['pending_inv'])} process-safety investigations are pending beyond 30 days.")
-
-if month_values.get("critical_failed",0) > 0:
-    insights.append(f"• {fmt(month_values['critical_failed'])} PSM critical equipment failure(s) are recorded.")
-
-if month_values.get("barrier_unacceptable",0) > 0:
-    insights.append(f"• {fmt(month_values['barrier_unacceptable'])} unacceptable barrier(s) are recorded.")
-
-if month_values.get("normalisation_overdue",0) > 0:
-    insights.append(f"• {fmt(month_values['normalisation_overdue'])} interlock normalisation item(s) are overdue.")
-
-if not insights:
-    insights.append("• No critical issue was identified from the available tracker values.")
 
 st.markdown(
-    '<div class="note">' + "<br>".join(insights) + '</div>',
-    unsafe_allow_html=True
+    f"""
+<div class="live-bar">
+<b>LIVE PSM DATA</b>
+&nbsp; | &nbsp; Google Sheet
+&nbsp; | &nbsp; Auto refresh: 5 min
+&nbsp; | &nbsp; Modules available: <b>{available_modules}/13</b>
+&nbsp; | &nbsp; Last load:
+<b>{datetime.now().strftime("%d-%b-%Y %H:%M:%S")}</b>
+</div>
+""",
+    unsafe_allow_html=True,
 )
 
-# ============================================================
-# 13. DECISION / GOVERNANCE LOG
-# ============================================================
-st.markdown('<div class="sec">13. DECISION / GOVERNANCE LOG</div>', unsafe_allow_html=True)
-
-gov = pd.DataFrame([
-    ["Third-party recommendations delayed", month_values.get("third_delayed",0)],
-    ["Incident investigation recommendations delayed", month_values.get("incident_rec_delayed",0)],
-    ["PHA recommendations delayed", month_values.get("pha_rec_delayed",0)],
-    ["Audit recommendations delayed", month_values.get("audit_delayed",0)],
-    ["MOC pending >15 days", month_values.get("moc_pending15",0)],
-], columns=["Governance Item", "Real Count"])
-
-st.dataframe(gov, use_container_width=True, hide_index=True)
 
 # ============================================================
-# 14. QUICK ACTIONS
+# GLOBAL DEPARTMENT FILTER
 # ============================================================
-st.markdown('<div class="sec">14. QUICK ACTION SHORTCUTS</div>', unsafe_allow_html=True)
 
-q1, q2, q3, q4 = st.columns(4)
-
-with q1:
-    if st.button("🏭 All Departments", use_container_width=True):
-        st.switch_page("pages/07_All_Departments.py")
-
-
-with q3:
-    st.download_button(
-        "⬇️ Export Summary",
-        data=pd.DataFrame(dept_rows).to_csv(index=False),
-        file_name="PSM_Chairman_Department_Summary.csv",
-        mime="text/csv",
-        use_container_width=True
+filter_col, clear_col = st.columns([5, 1], gap="small")
+with filter_col:
+    selected_department = st.selectbox(
+        "Select Department",
+        ["All Departments"] + ALL_DEPARTMENTS,
+        index=0,
+        key="sc_convener_department_filter",
     )
 
-with q4:
-    if st.button("🔄 Refresh Real Data", use_container_width=True):
-        st.cache_data.clear()
+with clear_col:
+    st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+    if st.button("↻ ALL", use_container_width=True, key="sc_convener_clear_filter"):
+        st.session_state["sc_convener_department_filter"] = "All Departments"
         st.rerun()
 
-st.caption(
-    "Source: department Excel files in data/departments. "
-    "No dashboard value is fabricated when the source field is unavailable."
+# Apply the selected department to every dashboard data source.
+def apply_global_filter(df):
+    if selected_department == "All Departments":
+        return df
+    return filter_department(df, selected_department)
+
+pt = apply_global_filter(pt)
+pha = apply_global_filter(pha)
+rec = apply_global_filter(rec)
+moc = apply_global_filter(moc)
+pssr = apply_global_filter(pssr)
+incident = apply_global_filter(incident)
+training = apply_global_filter(training)
+soc = apply_global_filter(soc)
+interlock = apply_global_filter(interlock)
+psm_ce = apply_global_filter(psm_ce)
+failure_data = apply_global_filter(failure_data)
+barrier = apply_global_filter(barrier)
+audit = apply_global_filter(audit)
+
+# The scorecard and priority register are already built from these filtered
+# dataframes, so the selected department automatically propagates to them.
+
+st.markdown(
+    f'<div class="live-bar"><b>VIEW:</b> {selected_department} &nbsp; | &nbsp; All KPI, chart and register data below follow this selection.</div>',
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# EXECUTIVE KPI STRIP
+# ============================================================
+priority = build_priority_register()
+
+total_departments = len(ALL_DEPARTMENTS)
+
+total_psm_records = sum(
+    len(df) for df in [
+        pt, pha, rec, moc, pssr, incident,
+        training, soc, interlock, psm_ce,
+        failure_data, barrier, audit
+    ]
+    if df is not None
+)
+
+open_actions = len(priority)
+
+# PSI
+incident_dept_col = find_col(
+    incident,
+    ["Department", "Departments", "Dept"]
+)
+total_incidents = (
+    int(
+        incident[incident_dept_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace(["", "-", "nan", "None"], pd.NA)
+        .notna()
+        .sum()
+    )
+    if incident_dept_col and not incident.empty
+    else 0
+)
+
+# PSM CE
+failed_col = find_col(
+    psm_ce,
+    [
+        "No. of PSM CE failed (Breakdown)",
+        "No. Of PSM CE Failed (Breakdown)",
+        "PSM CE Failed",
+        "PSM CE Failed (Breakdown)",
+    ],
+)
+total_ce_failed = numeric_total(psm_ce, failed_col)
+
+# Barrier
+assessed_col = find_col(
+    barrier,
+    ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
+)
+unacceptable_col = find_col(
+    barrier,
+    [
+        "Barrier Health (C4/C5) (Number) Unacceptable",
+        "Unacceptable Barrier",
+        "Unacceptable",
+    ]
+)
+barrier_unacceptable = numeric_total(barrier, unacceptable_col)
+
+# Training overall
+training_completion = None
+if not training.empty:
+    total_cols = [
+        find_col(training, ["Total Employees (L08 & Above)"]),
+        find_col(training, ["Total Employees (Below L08)"]),
+        find_col(training, ["Total Associates"]),
+        find_col(training, ["Total Contractual Workers"]),
+    ]
+    done_cols = [
+        find_col(training, ["Completed Training (L08 & Above)"]),
+        find_col(training, ["Completed Training (Below L08)"]),
+        find_col(training, ["Completed Training (Associates)"]),
+        find_col(training, ["Completed Training (Contracts)"]),
+    ]
+
+    if all(total_cols) and all(done_cols):
+        total_people = sum(numeric_total(training, c) for c in total_cols)
+        done_people = sum(numeric_total(training, c) for c in done_cols)
+        if total_people:
+            training_completion = round(done_people / total_people * 100, 1)
+
+# Audit
+audit_date_col = find_col(
+    audit,
+    ["Audit Date", "Last Audit Date", "Date"]
+)
+audit_done = 0
+audit_pending = 0
+if audit_date_col and not audit.empty:
+    audit_dates = pd.to_datetime(
+        audit[audit_date_col],
+        errors="coerce"
+    )
+    audit_done = int(audit_dates.notna().sum())
+    audit_pending = int(audit_dates.isna().sum())
+
+kpi_items = [
+    ("DEPARTMENTS", total_departments),
+    ("PSM RECORDS", total_psm_records),
+    ("OPEN / PENDING ACTIONS", open_actions),
+    ("PROCESS SAFETY INCIDENTS", total_incidents),
+    ("PSM CE FAILED", total_ce_failed),
+    ("BARRIER UNACCEPTABLE", barrier_unacceptable),
+    ("TRAINING COMPLIANCE", pct_text(training_completion)),
+    ("AUDIT PENDING", audit_pending),
+]
+
+kcols = st.columns(8, gap="small")
+for col, (label, value) in zip(kcols, kpi_items):
+    with col:
+        st.metric(label, value)
+
+
+# ============================================================
+# DEPARTMENT SCORECARD
+# ============================================================
+st.markdown(
+    '<div class="section-bar">DEPARTMENT-WISE PSM GOVERNANCE SCORECARD</div>',
+    unsafe_allow_html=True,
+)
+
+score_rows = []
+
+for dept in ALL_DEPARTMENTS:
+    d_pt = filter_department(pt, dept)
+    d_pha = filter_department(pha, dept)
+    d_rec = filter_department(rec, dept)
+    d_moc = filter_department(moc, dept)
+    d_pssr = filter_department(pssr, dept)
+    d_inc = filter_department(incident, dept)
+    d_int = filter_department(interlock, dept)
+    d_bar = filter_department(barrier, dept)
+
+    rates = [
+        completion_rate(d_pt),
+        completion_rate(d_pha),
+        completion_rate(
+            d_rec,
+            [
+                "Status (Open/Close)",
+                "Status Open Close",
+                "Open/Close Status",
+                "Recommendation Status",
+                "Status",
+            ],
+        ),
+        completion_rate(d_moc),
+        completion_rate(
+            d_pssr,
+            [
+                "Overdue/Pending/Completed",
+                "Overdue / Pending / Completed",
+                "Status",
+                "Current Status",
+            ],
+        ),
+    ]
+
+    valid_rates = [x for x in rates if x is not None]
+    overall = round(sum(valid_rates) / len(valid_rates), 1) if valid_rates else None
+
+    open_count = sum(
+        module_open_count(x)
+        for x in [d_rec, d_moc, d_pssr]
+    )
+
+    # Interlock pending normalization
+    int_status_col = find_col(
+        d_int,
+        [
+            "Present Status / Action Required",
+            "Present Status",
+            "Status / Action Required",
+            "Status",
+        ]
+    )
+    if int_status_col and not d_int.empty:
+        int_pending = int(
+            d_int[int_status_col]
+            .fillna("")
+            .astype(str)
+            .str.contains(
+                r"due\s*for\s*normalization|normalization\s*pending",
+                case=False,
+                regex=True,
+                na=False,
+            )
+            .sum()
+        )
+        open_count += int_pending
+
+    # Incident count
+    inc_count = len(d_inc)
+
+    # Unacceptable barriers
+    bar_bad = numeric_total(d_bar, unacceptable_col)
+
+    score_rows.append(
+        {
+            "Department": dept,
+            "PT": pct_text(rates[0]),
+            "PHA": pct_text(rates[1]),
+            "PHA Rec.": pct_text(rates[2]),
+            "MOC": pct_text(rates[3]),
+            "PSSR": pct_text(rates[4]),
+            "Open Actions": open_count,
+            "PSI": inc_count,
+            "Unacceptable Barrier": bar_bad,
+            "Overall": pct_text(overall),
+        }
+    )
+
+score_df = pd.DataFrame(score_rows)
+
+def score_style(value):
+    text = str(value).replace("%", "").strip()
+    try:
+        v = float(text)
+    except Exception:
+        return "color:#7d8995;text-align:center;"
+
+    if v >= 90:
+        return "background-color:#dff2e6;color:#176b3a;font-weight:800;text-align:center;"
+    if v >= 75:
+        return "background-color:#fff0cf;color:#9a6500;font-weight:800;text-align:center;"
+    return "background-color:#ffe0e0;color:#b51f2a;font-weight:800;text-align:center;"
+
+styled_score = (
+    score_df.style
+    .map(
+        score_style,
+        subset=["PT", "PHA", "PHA Rec.", "MOC", "PSSR", "Overall"]
+    )
+    .set_properties(
+        subset=["Department"],
+        **{"font-weight":"800","color":"#173f70"}
+    )
+)
+
+st.dataframe(
+    styled_score,
+    use_container_width=True,
+    hide_index=True,
+    height=390,
+    column_config={
+        "Department": st.column_config.TextColumn("Department"),
+        "PT": st.column_config.TextColumn("PT"),
+        "PHA": st.column_config.TextColumn("PHA"),
+        "PHA Rec.": st.column_config.TextColumn("PHA Rec."),
+        "MOC": st.column_config.TextColumn("MOC"),
+        "PSSR": st.column_config.TextColumn("PSSR"),
+        "Open Actions": st.column_config.NumberColumn("Open Actions"),
+        "PSI": st.column_config.NumberColumn("PSI"),
+        "Unacceptable Barrier": st.column_config.NumberColumn("Unacceptable Barrier"),
+        "Overall": st.column_config.TextColumn("Overall PSM"),
+    },
+)
+
+
+# ============================================================
+# PRIORITY ACTIONS + RISK SNAPSHOT
+# ============================================================
+left, right = st.columns([1.45, 1], gap="small")
+
+
+# ------------------------------------------------------------
+# PRIORITY ACTION REGISTER
+# ------------------------------------------------------------
+with left:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="section-bar">SC CONVENER PRIORITY ACTION REGISTER</div>',
+            unsafe_allow_html=True,
+        )
+
+        if priority.empty:
+            st.success("No open / pending action records found.")
+        else:
+            priority = priority.copy()
+
+            def priority_style(v):
+                t = str(v).lower()
+                if "overdue" in t:
+                    return "background-color:#ffdede;color:#b51f2a;font-weight:800;"
+                if "pending" in t or "open" in t:
+                    return "background-color:#fff0cf;color:#9a6500;font-weight:800;"
+                return ""
+
+            priority_styled = priority.style.map(
+                priority_style,
+                subset=["Status"]
+            )
+
+            st.dataframe(
+                priority_styled,
+                use_container_width=True,
+                hide_index=True,
+                height=330,
+                column_config={
+                    "Module": st.column_config.TextColumn("Module"),
+                    "Department": st.column_config.TextColumn("Department"),
+                    "Reference": st.column_config.TextColumn("Ref."),
+                    "Action / Description": st.column_config.TextColumn("Action / Description"),
+                    "Status": st.column_config.TextColumn("Status"),
+                },
+            )
+
+
+# ------------------------------------------------------------
+# RISK SNAPSHOT
+# ------------------------------------------------------------
+with right:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="section-bar">PROCESS SAFETY RISK SNAPSHOT</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Incident classification
+        classification_col = find_col(
+            incident,
+            [
+                "Incident Classification",
+                "Incident classification",
+                "Classification",
+            ],
+        )
+
+        level_col = find_col(
+            incident,
+            [
+                "Incident Level",
+                "Incident level",
+                "Level",
+            ],
+        )
+
+        if classification_col and not incident.empty:
+            vals = (
+                incident[classification_col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+            vals = vals[vals != ""]
+
+            def standard_classification(x):
+                if "serious" in x and "process" in x and "incident" in x:
+                    return "Serious Process Incident"
+                if "process" in x and "incident" in x:
+                    return "Process Incident"
+                if "near" in x and "miss" in x:
+                    return "Near Miss"
+                return x.title()
+
+            counts = vals.map(standard_classification).value_counts()
+
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=counts.values,
+                        y=counts.index,
+                        orientation="h",
+                        text=counts.values,
+                        textposition="outside",
+                    )
+                ]
+            )
+            fig.update_layout(
+                height=170,
+                margin=dict(l=5,r=20,t=5,b=5),
+                showlegend=False,
+                font=dict(size=9),
+                xaxis=dict(dtick=1, showgrid=True),
+                yaxis=dict(autorange="reversed"),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+            )
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                config={"displayModeBar":False},
+            )
+
+        r1, r2, r3 = st.columns(3)
+        with r1:
+            st.metric("INCIDENTS", total_incidents)
+        with r2:
+            st.metric("PSM CE FAILED", total_ce_failed)
+        with r3:
+            st.metric("BARRIER UNACCEPTABLE", barrier_unacceptable)
+
+
+# ============================================================
+# TRAINING + PSM CE
+# ============================================================
+left, right = st.columns([1, 1], gap="small")
+
+
+# ------------------------------------------------------------
+# TRAINING
+# ------------------------------------------------------------
+with left:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="section-bar">TRAINING COMPLIANCE BY DEPARTMENT</div>',
+            unsafe_allow_html=True,
+        )
+
+        if training.empty:
+            st.info("No training data available.")
+        else:
+            dept_col = find_col(
+                training,
+                ["Department", "Departments", "Dept"]
+            )
+            process_col = find_col(training, ["Process"])
+
+            total_cols = [
+                find_col(training, ["Total Employees (L08 & Above)"]),
+                find_col(training, ["Total Employees (Below L08)"]),
+                find_col(training, ["Total Associates"]),
+                find_col(training, ["Total Contractual Workers"]),
+            ]
+            done_cols = [
+                find_col(training, ["Completed Training (L08 & Above)"]),
+                find_col(training, ["Completed Training (Below L08)"]),
+                find_col(training, ["Completed Training (Associates)"]),
+                find_col(training, ["Completed Training (Contracts)"]),
+            ]
+
+            if dept_col and all(total_cols) and all(done_cols):
+                tr = training.copy()
+
+                for c in total_cols + done_cols:
+                    tr[c] = pd.to_numeric(
+                        tr[c].astype(str)
+                        .str.replace(",", "", regex=False)
+                        .str.replace("%", "", regex=False),
+                        errors="coerce",
+                    ).fillna(0)
+
+                tr["Total"] = tr[total_cols].sum(axis=1)
+                tr["Completed"] = tr[done_cols].sum(axis=1)
+
+                tr["Compliance"] = (
+                    tr["Completed"]
+                    .div(tr["Total"].replace(0, pd.NA))
+                    .mul(100)
+                )
+
+                train_dept = (
+                    tr.groupby(dept_col, dropna=True)
+                    .agg(
+                        Total=("Total","sum"),
+                        Completed=("Completed","sum")
+                    )
+                    .reset_index()
+                )
+
+                train_dept["Compliance"] = (
+                    train_dept["Completed"]
+                    .div(train_dept["Total"].replace(0,pd.NA))
+                    .mul(100)
+                    .round(1)
+                )
+
+                train_dept = train_dept.rename(
+                    columns={dept_col:"Department"}
+                )
+                train_dept["Compliance"] = train_dept["Compliance"].apply(
+                    lambda x: "—" if pd.isna(x) else f"{x:.0f}%"
+                )
+
+                st.dataframe(
+                    train_dept[
+                        ["Department","Total","Completed","Compliance"]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=300,
+                )
+            else:
+                st.warning("Training columns could not be mapped.")
+
+
+# ------------------------------------------------------------
+# PSM CE
+# ------------------------------------------------------------
+with right:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="section-bar">PSM CE COMPLETION — DEPARTMENT VIEW</div>',
+            unsafe_allow_html=True,
+        )
+
+        if psm_ce.empty:
+            st.info("No PSM CE data available.")
+        else:
+            dept_col = find_col(psm_ce, ["Department","Dept"])
+
+            mech_gen = find_col(
+                psm_ce,
+                [
+                    "Compliance of PSM CE MO – Mechanical – Generated",
+                    "Compliance of PSM CE MO - Mechanical - Generated",
+                    "PSM CE MO Mechanical Generated",
+                ]
+            )
+            mech_done = find_col(
+                psm_ce,
+                [
+                    "Compliance of PSM CE MO – Mechanical – Completed",
+                    "Compliance of PSM CE MO - Mechanical - Completed",
+                    "PSM CE MO Mechanical Completed",
+                ]
+            )
+            ei_gen = find_col(
+                psm_ce,
+                [
+                    "Compliance of PSM CE MO – E&I – Generated",
+                    "Compliance of PSM CE MO - E&I - Generated",
+                    "PSM CE MO E&I Generated",
+                ]
+            )
+            ei_done = find_col(
+                psm_ce,
+                [
+                    "Compliance of PSM CE MO – E&I – Completed",
+                    "Compliance of PSM CE MO - E&I - Completed",
+                    "PSM CE MO E&I Completed",
+                ]
+            )
+
+            if dept_col:
+                ce = pd.DataFrame({
+                    "Department": psm_ce[dept_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip(),
+                    "M Generated": pd.to_numeric(
+                        psm_ce[mech_gen], errors="coerce"
+                    ).fillna(0) if mech_gen else 0,
+                    "M Completed": pd.to_numeric(
+                        psm_ce[mech_done], errors="coerce"
+                    ).fillna(0) if mech_done else 0,
+                    "E&I Generated": pd.to_numeric(
+                        psm_ce[ei_gen], errors="coerce"
+                    ).fillna(0) if ei_gen else 0,
+                    "E&I Completed": pd.to_numeric(
+                        psm_ce[ei_done], errors="coerce"
+                    ).fillna(0) if ei_done else 0,
+                })
+
+                ce = (
+                    ce.groupby("Department", as_index=False)
+                    [["M Generated","M Completed","E&I Generated","E&I Completed"]]
+                    .sum()
+                )
+
+                ce = ce[ce["Department"] != ""]
+
+                ce["M %"] = (
+                    ce["M Completed"]
+                    .div(ce["M Generated"].replace(0,pd.NA))
+                    .mul(100)
+                )
+                ce["E&I %"] = (
+                    ce["E&I Completed"]
+                    .div(ce["E&I Generated"].replace(0,pd.NA))
+                    .mul(100)
+                )
+
+                display_ce = ce[
+                    ["Department","M %","E&I %"]
+                ].copy()
+
+                for c in ["M %","E&I %"]:
+                    display_ce[c] = display_ce[c].apply(
+                        lambda x: "—" if pd.isna(x) else f"{x:.0f}%"
+                    )
+
+                st.dataframe(
+                    display_ce,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=300,
+                )
+
+
+# ============================================================
+# SOC / SOL MONTHLY TREND
+# ============================================================
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-bar">SOC / SOL DEVIATION — MONTHLY TREND</div>',
+        unsafe_allow_html=True,
+    )
+
+    if soc.empty:
+        st.info("No SOC / SOL data available.")
+    else:
+        month_col = find_col(soc, ["Month"])
+        soc_col = find_col(
+            soc,
+            ["SOC Deviation","SOC Deviation Nos.","SOC Deviation No.","SOC"]
+        )
+        sol_col = find_col(
+            soc,
+            ["SOL Deviation","SOL Deviation Nos.","SOL Deviation No.","SOL"]
+        )
+
+        if month_col and soc_col and sol_col:
+            trend = pd.DataFrame({
+                "Month": soc[month_col].fillna("").astype(str).str.strip(),
+                "SOC": pd.to_numeric(soc[soc_col], errors="coerce").fillna(0),
+                "SOL": pd.to_numeric(soc[sol_col], errors="coerce").fillna(0),
+            })
+
+            trend = (
+                trend[trend["Month"] != ""]
+                .groupby("Month", as_index=False)[["SOC","SOL"]]
+                .sum()
+            )
+
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=trend["Month"],
+                    y=trend["SOC"],
+                    mode="lines+markers+text",
+                    name="SOC",
+                    text=trend["SOC"].astype(int),
+                    textposition="top center",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=trend["Month"],
+                    y=trend["SOL"],
+                    mode="lines+markers+text",
+                    name="SOL",
+                    text=trend["SOL"].astype(int),
+                    textposition="top center",
+                )
+            )
+
+            fig.update_layout(
+                height=260,
+                margin=dict(l=45,r=20,t=15,b=55),
+                font=dict(size=9),
+                hovermode="x unified",
+                xaxis=dict(tickangle=-35, showgrid=False),
+                yaxis=dict(
+                    title="No. of Deviations",
+                    rangemode="tozero",
+                    showgrid=True,
+                ),
+                legend=dict(
+                    orientation="h",
+                    y=1.05,
+                    x=1,
+                    xanchor="right"
+                ),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                config={"displayModeBar":False},
+            )
+        else:
+            st.warning("SOC / SOL columns could not be mapped.")
+
+
+# ============================================================
+# CONVENER REVIEW MESSAGE
+# ============================================================
+with st.container(border=True):
+    st.markdown(
+        '<div class="section-bar">SC CONVENER REVIEW FOCUS</div>',
+        unsafe_allow_html=True,
+    )
+
+    focus_cols = st.columns(4, gap="small")
+
+    focus_data = [
+        (
+            "ACTION CLOSURE",
+            f"{open_actions:,} open / pending records",
+            "Review ownership and target dates."
+        ),
+        (
+            "PROCESS SAFETY",
+            f"{total_incidents:,} process safety incidents",
+            "Review classification, level and investigation status."
+        ),
+        (
+            "BARRIER / PSM CE",
+            f"{barrier_unacceptable:,} unacceptable barriers",
+            "Prioritise weak / failed protection layers."
+        ),
+        (
+            "PEOPLE / COMPETENCY",
+            f"{pct_text(training_completion)} training compliance",
+            "Focus on departments below the required target."
+        ),
+    ]
+
+    for col, (title, value, note) in zip(focus_cols, focus_data):
+        with col:
+            st.markdown(
+                f"""
+                <div class="priority-box">
+                    <div style="font-size:10px;font-weight:900;color:#173f70;">
+                        {title}
+                    </div>
+                    <div style="font-size:17px;font-weight:900;color:#123f77;margin-top:4px;">
+                        {value}
+                    </div>
+                    <div style="font-size:9px;color:#627689;margin-top:4px;">
+                        {note}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+st.markdown(
+    f"""
+<div class="footer">
+PSM DIGITAL VISION WALL | SC CONVENER | ALL DEPARTMENTS |
+LIVE GOOGLE SHEET DATA | LAST REFRESH {datetime.now().strftime("%d-%b-%Y %H:%M:%S")}
+</div>
+""",
+    unsafe_allow_html=True,
 )
