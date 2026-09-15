@@ -2724,19 +2724,305 @@ with t2:
                 }
             )
 
-# ---------- QUICK NAVIGATION ----------
-panel_title("PSM MODULE NAVIGATION", "click a module for detailed view")
-nav1,nav2,nav3,nav4,nav5,nav6,nav7,nav8 = st.columns(8, gap="small")
-nav_items = [
-    ("PT","pages/09_PT.py"),("PHA","pages/10_PHA.py"),("MOC","pages/11_MOC.py"),
-    ("PSSR","pages/12_PSSR.py"),("TRAINING","pages/13_Training.py"),
-    ("PS INCIDENT","pages/14_PSI.py"),("INTERLOCK","pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py"),
-    ("PSM CE / BARRIER","pages/20_PSM CE & BARRIER HEALTH.py")
-]
-for col,(label,page) in zip([nav1,nav2,nav3,nav4,nav5,nav6,nav7,nav8],nav_items):
-    with col:
-        st.page_link(page, label=label, icon="↗")
+# ============================================================
+# PSM MODULE NAVIGATION
+# ============================================================
 
+st.markdown("""
+<style>
+
+/* =========================================================
+   PSM NAVIGATION HEADER
+   ========================================================= */
+
+.psm-nav-title {
+    width: 100%;
+    box-sizing: border-box;
+
+    background: linear-gradient(
+        90deg,
+        #073f78 0%,
+        #07518b 55%,
+        #0b6096 100%
+    );
+
+    color: #ffffff;
+
+    border-radius: 9px;
+
+    padding: 10px 16px;
+
+    margin: 6px 0 9px 0;
+
+    min-height: 46px;
+
+    font-size: 12px;
+    font-weight: 900;
+
+    letter-spacing: 0.5px;
+
+    box-shadow:
+        0 3px 9px rgba(15, 60, 95, 0.16);
+
+    line-height: 26px;
+}
+
+
+/* Instruction text */
+
+.psm-nav-title .nav-instruction {
+    float: right;
+
+    color: rgba(255, 255, 255, 0.82);
+
+    font-size: 8px;
+
+    font-weight: 700;
+
+    letter-spacing: 0.3px;
+
+    line-height: 26px;
+}
+
+/* =========================================================
+   PAGE LINK CARD
+   ========================================================= */
+
+/* Outer Streamlit page-link block */
+div[data-testid="stPageLink"] {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+
+/* Actual clickable card */
+div[data-testid="stPageLink"] a {
+    position: relative !important;
+
+    display: flex !important;
+
+    align-items: center !important;
+
+    justify-content: flex-start !important;
+
+    width: 100% !important;
+
+    min-height: 58px !important;
+
+    box-sizing: border-box !important;
+
+    padding: 9px 10px 9px 13px !important;
+
+    background: #ffffff !important;
+
+    border: 1px solid #d5e2ec !important;
+
+    border-radius: 9px !important;
+
+    color: #073f78 !important;
+
+    text-decoration: none !important;
+
+    box-shadow:
+        0 2px 7px rgba(20, 65, 95, 0.08) !important;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        border-color 0.18s ease,
+        background 0.18s ease !important;
+
+    overflow: hidden !important;
+}
+
+
+/* =========================================================
+   BLUE ACCENT STRIPE
+   ========================================================= */
+
+div[data-testid="stPageLink"] a::before {
+
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+    top: 0;
+    bottom: 0;
+
+    width: 4px;
+
+    background: #1261a0;
+
+    border-radius: 9px 0 0 9px;
+}
+
+
+/* =========================================================
+   HOVER EFFECT
+   ========================================================= */
+
+div[data-testid="stPageLink"] a:hover {
+
+    transform: translateY(-3px) !important;
+
+    background: #f8fbfe !important;
+
+    border-color: #8eb6d2 !important;
+
+    box-shadow:
+        0 7px 15px rgba(18, 63, 100, 0.15) !important;
+}
+
+
+/* =========================================================
+   PAGE LINK TEXT
+   ========================================================= */
+
+div[data-testid="stPageLink"] a p {
+
+    margin: 0 !important;
+
+    padding: 0 !important;
+
+    color: #173f70 !important;
+
+    font-size: 9px !important;
+
+    font-weight: 900 !important;
+
+    letter-spacing: 0.1px !important;
+
+    white-space: nowrap !important;
+}
+
+
+/* =========================================================
+   ICON
+   ========================================================= */
+
+div[data-testid="stPageLink"] a svg {
+
+    width: 18px !important;
+
+    height: 18px !important;
+
+    margin-right: 6px !important;
+
+    flex-shrink: 0 !important;
+}
+
+
+/* =========================================================
+   REMOVE STREAMLIT EXCESS SPACING
+   ========================================================= */
+
+div[data-testid="stPageLink"] + div {
+    margin-top: 0 !important;
+}
+
+
+/* =========================================================
+   COLUMN SPACING
+   ========================================================= */
+
+div[data-testid="column"] {
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# ============================================================
+# NAVIGATION HEADER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="psm-nav-title">
+        🔴 &nbsp; PSM MODULE NAVIGATION
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        <span class="nav-instruction">
+            CLICK A MODULE FOR DETAILED VIEW
+        </span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+# ============================================================
+# MODULE NAVIGATION
+# ============================================================
+
+nav1, nav2, nav3, nav4, nav5, nav6, nav7, nav8 = st.columns(
+    8,
+    gap="small"
+)
+
+
+with nav1:
+    st.page_link(
+        "pages/09_PT.py",
+        label="PT",
+        icon="📋"
+    )
+
+
+with nav2:
+    st.page_link(
+        "pages/10_PHA.py",
+        label="PHA",
+        icon="⚠️"
+    )
+
+
+with nav3:
+    st.page_link(
+        "pages/11_MOC.py",
+        label="MOC",
+        icon="🔄"
+    )
+
+
+with nav4:
+    st.page_link(
+        "pages/12_PSSR.py",
+        label="PSSR",
+        icon="🚀"
+    )
+
+
+with nav5:
+    st.page_link(
+        "pages/13_Training.py",
+        label="TRAINING",
+        icon="🎓"
+    )
+
+
+with nav6:
+    st.page_link(
+        "pages/14_PSI.py",
+        label="PS INCIDENT",
+        icon="🚨"
+    )
+
+
+with nav7:
+    st.page_link(
+        "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
+        label="INTERLOCK",
+        icon="⚙️"
+    )
+
+
+with nav8:
+    st.page_link(
+        "pages/20_PSM CE & BARRIER HEALTH.py",
+        label="PSM CE / BARRIER",
+        icon="🛡️"
+    )
 # ---------- FOOTER ----------
 st.markdown(
     f"""<div class="footer">
