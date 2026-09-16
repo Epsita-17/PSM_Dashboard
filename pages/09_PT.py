@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from streamlit_autorefresh import st_autorefresh
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -1342,7 +1343,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 current_date = now.strftime(
     "%d %b %Y"
