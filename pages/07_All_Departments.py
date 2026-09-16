@@ -332,7 +332,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 current_date = now.strftime(
     "%d %b %Y"
@@ -2136,7 +2136,7 @@ st.markdown(
         &nbsp; | &nbsp;
         Modules with data: <b>{module_count}</b>
         &nbsp; | &nbsp;
-        Last load: <b>{datetime.now().strftime("%d-%b-%Y %H:%M:%S")}</b>
+        Last load: <b>{datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d-%b-%Y %H:%M:%S")}</b>
     </div>
     """,
     unsafe_allow_html=True,
@@ -4518,7 +4518,7 @@ with st.container(border=True):
                     index=pending_interlock.index,
                 )
 
-            today = pd.Timestamp(datetime.now().date())
+            today = pd.Timestamp(datetime.now(ZoneInfo("Asia/Kolkata")).date())
             days_open = (today - raw_dates.dt.normalize()).dt.days
 
             register_df["Date Bypassed"] = (
