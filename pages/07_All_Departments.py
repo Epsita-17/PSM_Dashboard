@@ -332,7 +332,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now(ZoneInfo("Asia/Kolkata"))
+now = datetime.now()
 
 current_date = now.strftime(
     "%d %b %Y"
@@ -2290,7 +2290,7 @@ with d:
     ):
 
         show_module_title(
-            3,
+            4,
             "♙",
             "MOC"
         )
@@ -3774,8 +3774,8 @@ with a:
                 )
 
                 show_metric_row([
-                    ("TOTAL SOC", total_soc),
-                    ("TOTAL SOL", total_sol),
+                    ("TOTAL SOC DEVIATION", total_soc),
+                    ("TOTAL SOL DEVIATION", total_sol),
                 ])
 
                 # =================================================
@@ -4566,7 +4566,7 @@ with st.container(border=True):
     show_module_title(
         11,
         "",
-        "PSM CE NOTIFICATION"
+        "PSM CRITICAL EQUIPMENT NOTIFICATION"
     )
 
     psm_ce_data = clean_dataframe(psm_ce)
@@ -4700,7 +4700,7 @@ with st.container(border=True):
                 '<div style="background:#fff;border:1px solid #d5e0e8;border-radius:5px;padding:8px 12px;">'
                 '<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;'
                 'font-family:Arial,sans-serif;font-size:9px;font-weight:800;color:#627689;margin-bottom:6px;">'
-                '<div>Department</div><div>Mechanical MO</div><div></div><div>E&I MO</div><div></div>'
+                '<div>Department</div><div>MECHANICAL MAINTENANCE ORDER</div><div></div><div>E&I MAINTENANCE ORDER</div><div></div>'
                 '</div>'
                 + ''.join(progress_rows)
                 + '</div>'
@@ -5040,7 +5040,7 @@ with failure_col:
         show_module_title(
             13,
             "",
-            "PSM CE/BARRIER (C4/C5)FAILURE DETAILS"
+            "PSM CRITICAL EQUIPMENT/BARRIER (C4/C5)FAILURE DETAILS"
         )
 
         failure_df = clean_dataframe(failure_data)
