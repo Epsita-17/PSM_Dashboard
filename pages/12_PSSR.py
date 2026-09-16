@@ -202,6 +202,7 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -332,7 +333,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 current_date = now.strftime(
     "%d %b %Y"

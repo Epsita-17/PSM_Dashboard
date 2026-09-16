@@ -4,6 +4,7 @@ import numpy as np
 import base64
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import html
 import re
 
@@ -437,7 +438,7 @@ logo_base64 = image_to_base64(logo_path)
 if not logo_base64:
     logo_base64 = ""
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 current_date = now.strftime("%d %b %Y").upper()
 current_time = now.strftime("%I:%M %p")
 

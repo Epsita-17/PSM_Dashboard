@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 from html.parser import HTMLParser
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -331,7 +332,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 current_date = now.strftime(
     "%d %b %Y"

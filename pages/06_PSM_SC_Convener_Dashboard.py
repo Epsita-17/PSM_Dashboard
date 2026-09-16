@@ -9,6 +9,7 @@ import re
 import base64
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -804,7 +805,7 @@ def image_to_base64(path):
 
 
 logo_base64 = image_to_base64(logo_path)
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 header_html = f"""
 <!DOCTYPE html>

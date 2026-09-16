@@ -11,6 +11,7 @@ from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 from urllib.parse import quote
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import base64
 import streamlit.components.v1 as components
@@ -90,7 +91,7 @@ if not logo_base64:
 # DATE AND TIME
 # ============================================================
 
-now = datetime.now()
+now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
 current_date = now.strftime(
     "%d %b %Y"
