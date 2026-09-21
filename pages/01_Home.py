@@ -59,8 +59,8 @@ footer {
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# PSM_wheel.png is kept in the same folder as this Python file.
-PSM_WHEEL_PATH = BASE_DIR / "PSM_wheel.png"
+# PSM_Wheel.png is kept in the same folder as this Python file.
+PSM_WHEEL_PATH = BASE_DIR / "PSM_Wheel.png"
 
 try:
 
@@ -74,7 +74,7 @@ except FileNotFoundError:
 
     st.error(
         f"PSM Wheel image not found: {PSM_WHEEL_PATH}. "
-        "Please keep PSM_wheel.png in the same folder as this Python file."
+        "Please keep PSM_Wheel.png in the same folder as this Python file."
     )
 
     st.stop()
