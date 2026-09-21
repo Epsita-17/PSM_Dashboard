@@ -677,7 +677,7 @@ header_html = """
 
             <div class="main-title">
 
-                PSM SC & BARRIER HEALTH
+                PSM CE & BARRIER HEALTH
 
                 <span class="main-title-orange"></span>
 

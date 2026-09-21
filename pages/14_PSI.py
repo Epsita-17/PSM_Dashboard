@@ -32,7 +32,7 @@ st.markdown(
 
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
-    margin-top:-35px !important;
+    margin-top:-20px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -844,7 +844,7 @@ header_html = """
 
             <div class="main-title">
 
-                PROCESS SAFETY INCIDENT(PSI)
+                PROCESS SAFETY INCIDENT
 
                 <span class="main-title-orange"></span>
 

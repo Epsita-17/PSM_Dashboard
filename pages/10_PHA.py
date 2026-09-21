@@ -6,7 +6,7 @@ from io import StringIO
 from difflib import SequenceMatcher
 from html import escape
 from html.parser import HTMLParser
-
+from zoneinfo import ZoneInfo
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 st.set_page_config(
     page_title="PHA Dashboard",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 # ============================================================
 # STYLE
@@ -151,16 +151,6 @@ div[data-testid="stMetricLabel"] p {
     }
 
 
-/* ========================================================
-   REFRESH BUTTON — KEEP BELOW HEADER
-   ======================================================== */
-
-div[data-testid="stButton"] {
-    margin-top: 1px !important;
-    margin-bottom: 1px !important;
-}
-
-
 
     /* ========================================================
        MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
@@ -192,6 +182,73 @@ div[data-testid="stButton"] {
     unsafe_allow_html=True,
 )
 
+# =========================================================
+# HIDE STREAMLIT DEFAULT UI
+# =========================================================
+
+st.markdown("""
+<style>
+
+/* Hide Streamlit default menu */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* SHOW Streamlit default header */
+header {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* SHOW Streamlit toolbar */
+[data-testid="stToolbar"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* SHOW Deploy button */
+[data-testid="stAppDeployButton"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* Hide Streamlit decoration */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide status widget */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
+        margin-bottom: -65px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 #=============================================================
 #HEADER CODE
 #=============================================================
@@ -200,7 +257,6 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -250,7 +306,7 @@ st.markdown(
 
     .block-container {
     padding-top: 0 !important;
-    margin-top: -30px !important;
+    margin-top: -50px !important;
     padding-bottom: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -264,7 +320,7 @@ st.markdown(
 
     iframe {
         display: block !important;
-        margin-top: -20px !important;
+        margin-top: -50px !important;
         padding-top: 0 !important;
         border: 0 !important;
     }
@@ -364,11 +420,9 @@ header_html = """
    ============================================================ */
 
 .psm-header {
-
     position: relative;
-
-    width: 100%;
-
+    width: calc(100% + 10px);
+    margin-left: -5px;
     height: 90px;
 
     overflow: hidden;
@@ -643,7 +697,7 @@ header_html = """
 
     right: 16px;
 
-    top: 0;
+    top: 6px;
 
     width: 15%;
 
@@ -847,7 +901,7 @@ header_html = """
 
             <div class="main-title">
 
-                PROCESS HAZARD ANALYSIS(PHA)
+                PROCESS HAZARD ANALYSIS (PHA)
 
                 <span class="main-title-orange"></span>
 
@@ -968,17 +1022,6 @@ components.html(
     scrolling=False
 )
 
-st.markdown(
-    """
-    <style>
-    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
-        margin-bottom: -65px !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # ============================================================
 # GOOGLE SHEET
 # ============================================================
@@ -1003,6 +1046,8 @@ MUTED = "#667085"
 BORDER = "#D5E2F0"
 ROW_ALT = "#F7FAFD"
 LIGHT_BLUE = "#F5F9FD"
+
+
 
 # ============================================================
 # PAGE / UI CSS
@@ -1045,16 +1090,37 @@ st.markdown(
 
     .block-container {{ 
         max-width: 100% !important; 
-        padding-top: 0.8rem !important; 
-        padding-bottom: 1.5rem !important; 
-        padding-left: 1rem !important; 
-        padding-right: 1rem !important; 
+        padding-top: 0 !important; 
+        padding-bottom: 0 !important; 
+        padding-left: 0.35rem !important; 
+        padding-right: 0.35rem !important; 
+        margin-top: -35px !important;
+        margin-bottom: 0 !important;
     }} 
 
-    /* ---------- General spacing ---------- */ 
+    /* ---------- Fit all page visuals to the available screen ---------- */ 
 
     div[data-testid="stVerticalBlock"] > div {{ 
-        gap: 0.55rem; 
+        gap: 0 !important; 
+    }}
+
+    div[data-testid="stHorizontalBlock"] {{
+        gap: 0.35rem !important;
+    }}
+
+    div[data-testid="stVerticalBlockBorderWrapper"] {{
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }}
+
+    .section-title {{
+        margin: 0 0 6px 0 !important;
+    }}
+
+    .kpi-section-spacer {{
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }} 
 
     /* ---------- Department filter ---------- */ 
@@ -2499,4 +2565,3 @@ st.markdown(
     '<div class="footer">PHA Management Dashboard</div>',
     unsafe_allow_html=True
 )
-

@@ -3,12 +3,12 @@ import re
 import html
 import time
 from urllib.parse import quote
-
 import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+from zoneinfo import ZoneInfo
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -17,7 +17,7 @@ st.set_page_config(
     page_title="Training Dashboard",
     page_icon="📚",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 # ============================================================
 # STYLE
@@ -153,18 +153,6 @@ div[data-testid="stMetricLabel"] p {
         border:1px solid #d5e0e8;
     }
 
-
-/* ========================================================
-   REFRESH BUTTON — KEEP BELOW HEADER
-   ======================================================== */
-
-div[data-testid="stButton"] {
-    margin-top: 1px !important;
-    margin-bottom: 1px !important;
-}
-
-
-
     /* ========================================================
        MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
        ======================================================== */
@@ -203,7 +191,6 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -253,7 +240,7 @@ st.markdown(
 
     .block-container {
     padding-top: 0 !important;
-    margin-top: -30px !important;
+    margin-top: -50px !important;
     padding-bottom: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -367,11 +354,9 @@ header_html = """
    ============================================================ */
 
 .psm-header {
-
     position: relative;
-
-    width: 100%;
-
+    width: calc(100% + 10px);
+    margin-left: -5px;
     height: 90px;
 
     overflow: hidden;
@@ -646,7 +631,7 @@ header_html = """
 
     right: 16px;
 
-    top: 0;
+    top: 6px;
 
     width: 15%;
 
@@ -850,7 +835,7 @@ header_html = """
 
             <div class="main-title">
 
-                TRAINING 
+                TRAINING & COMPETENCY
 
                 <span class="main-title-orange"></span>
 
@@ -967,16 +952,17 @@ header_html = header_html.replace(
 
 components.html(
     header_html,
-    height=100,
+    height=114,
     scrolling=False
 )
+
+
 st.markdown(
     """
     <style>
     /* REMOVE SPACE BELOW HEADER IFRAME */
     div[data-testid="stVerticalBlock"] > div:has(> iframe) {
-        margin-bottom: -35px !important;
-        padding-bottom: 0px !important;
+        margin-bottom: -50px !important;
     }
 
     /* REMOVE TOP SPACE BEFORE FILTER ROW */
@@ -1798,16 +1784,7 @@ st.markdown(
             "Inter", 
             Arial, 
             sans-serif !important; 
-    } 
-
-    /* Hide Streamlit chrome. */ 
-    #MainMenu, 
-    header, 
-    footer, 
-    [data-testid="stHeader"], 
-    [data-testid="stToolbar"] { 
-        display: none !important; 
-    } 
+    }  
 
     /* Clean white dashboard background. */ 
     .stApp, 

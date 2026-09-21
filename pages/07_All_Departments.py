@@ -2,6 +2,7 @@ import io
 import re
 import base64
 from pathlib import Path
+from html import escape
 from html.parser import HTMLParser
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -23,6 +24,68 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# =========================================================
+# HIDE STREAMLIT DEFAULT UI
+# =========================================================
+
+st.markdown("""
+<style>
+
+/* Hide Streamlit default top menu */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* SHOW STREAMLIT DEFAULT HEADER */
+header {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* SHOW STREAMLIT TOP-RIGHT TOOLBAR */
+[data-testid="stToolbar"] {
+    visibility: visible !important;
+    display: flex !important;
+}
+
+/* SHOW DEPLOY BUTTON */
+[data-testid="stAppDeployButton"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* Hide decoration/status area */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide status widget if present */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Remove top padding created by Streamlit header */
+[data-testid="stAppViewContainer"] > .main {
+    padding-top: 0rem !important;
+}
+
+/* Keep your application itself visible */
+.stApp {
+    overflow-x: hidden !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # ============================================================
 # GOOGLE SHEET
 # ============================================================
@@ -41,7 +104,7 @@ SHEETS = {
     "PS Incident": "354502422",  # corrected: Incident
     "Training": "1071736559",  # corrected: Training
     "SOC-SOL": "510439154",
-    "Interlock ": 1552637895,
+    "Interlock ": 1595602222,
     "PSM CE ": 1552637895,
     "Failure Data": 1071263265,
     "Barrier Audit": "1741048982",
@@ -59,15 +122,11 @@ st.markdown(
         background:#f3f8fc;
     }
 
-    #MainMenu, footer {
-        visibility:hidden;
-    }
-
 
 
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
-    margin-top:-35px !important;
+    margin-top:-50px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -88,42 +147,71 @@ section.main {
 }
 
    div[data-testid="stMetric"] {
-    background:#ffffff;
-    border:1px solid #cbddea;
-    border-radius:7px;
-    padding:6px 6px !important;
-    min-height:72px;
-    overflow:visible !important;
-}
+        background:#ffffff;
+        border:1px solid #cbddea;
+        border-radius:7px;
+        padding:6px 6px !important;
+        min-height:72px;
+        overflow:visible !important;
+    }
 
-    div[data-testid="stMetricLabel"] {
-    font-size:9px !important;
-    font-weight:800 !important;
-    color:#20384f !important;
-    white-space:nowrap !important;
-    overflow:visible !important;
-    text-overflow:clip !important;
-    line-height:1.1 !important;
-}
-div[data-testid="stMetricLabel"],
-div[data-testid="stMetricLabel"] > div,
-div[data-testid="stMetricLabel"] p {
-    overflow:visible !important;
-    text-overflow:clip !important;
-    white-space:nowrap !important;
-    max-width:none !important;
-}
+    /* ============================================================
+       CUSTOM KPI CARDS
+       Uses HTML instead of st.metric so labels never become ...
+       ============================================================ */
 
-div[data-testid="stMetricLabel"] p {
-    margin:0 !important;
-    padding:0 !important;
-    font-size:8px !important;
-    line-height:1.1 !important;
-}
-    div[data-testid="stMetricValue"] {
+    .custom-kpi {
+        width:100% !important;
+        height:72px !important;
+        min-height:72px !important;
+        box-sizing:border-box !important;
+
+        background:#ffffff !important;
+        border:1px solid #cbddea !important;
+        border-radius:7px !important;
+
+        padding:7px 8px 5px 8px !important;
+        margin:0 !important;
+
+        display:flex !important;
+        flex-direction:column !important;
+        justify-content:space-between !important;
+        align-items:flex-start !important;
+
+        overflow:visible !important;
+    }
+
+    .custom-kpi-label {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+
+        color:#285775 !important;
+        font-size:11px !important;
+        font-weight:700 !important;
+        line-height:1.15 !important;
+        text-align:left !important;
+
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        word-break:normal !important;
+        overflow-wrap:anywhere !important;
+    }
+
+    .custom-kpi-value {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+
         color:#123f77 !important;
-        font-size:24px !important;
+        font-size:27px !important;
         font-weight:900 !important;
+        line-height:1 !important;
+        text-align:left !important;
+
+        white-space:nowrap !important;
+        overflow:visible !important;
     }
 
     .module-card {
@@ -363,13 +451,11 @@ header_html = """
    MAIN HEADER 
    ============================================================ */ 
 
-.psm-header { 
-
-    position: relative; 
-
-    width: 100%; 
-
-    height: 90px; 
+.psm-header {
+    position: relative;
+    width: calc(100% + 20px);
+    margin-left: -10px;
+    height: 90px;
 
     overflow: hidden; 
 
@@ -642,7 +728,7 @@ header_html = """
 
     right: 16px; 
 
-    top: 0; 
+    top: 6px; 
 
     width: 15%; 
 
@@ -782,7 +868,7 @@ header_html = """
 
     width: 100%; 
 
-    height: 4px; 
+    height: 7px; 
 
     background: #f28c00; 
 
@@ -1984,20 +2070,38 @@ def show_module_title(number, icon, title):
     if page:
         st.page_link(
             page,
-            label=f"🔴 {number} {icon} {title}",
+            label=f" {number} {icon} {title}",
         )
     else:
         st.markdown(
-            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
+            f'<div class="module-title"> {number} {icon} {title}</div>',
             unsafe_allow_html=True,
         )
 
 
+def show_kpi_card(label, value):
+    """Render one KPI card without Streamlit st.metric label truncation."""
+    safe_label = escape(str(label))
+    safe_value = escape(str(value))
+
+    st.markdown(
+        f"""
+        <div class="custom-kpi">
+            <div class="custom-kpi-label">{safe_label}</div>
+            <div class="custom-kpi-value">{safe_value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def show_metric_row(items):
-    cols = st.columns(len(items), gap="small")
+    """Render KPI cards with equal columns and reduced gaps."""
+    cols = st.columns(len(items), gap="xxsmall")
+
     for c, (label, value) in zip(cols, items):
         with c:
-            st.metric(label, value)
+            show_kpi_card(label, value)
 
 
 def get_date_column(df):
@@ -2143,18 +2247,25 @@ st.markdown(
 )
 
 # ============================================================
-# ROW 1 — PT / PHA / RECOMMENDATION / MOC
+# ROW 1 — PT / PHA / RECOMMENDATION
 # ============================================================
-a, b, c, d = st.columns(4, gap="small")
+
+a, b, c = st.columns(3, gap="small")
+
+
+# ============================================================
+# 1 — PROCESS TECHNOLOGY (PT)
+# ============================================================
 
 with a:
+
     with st.container(
-            border=True,
-            height=460
+        border=True,
+        height=460
     ):
-        # PT HEADER
+
         show_module_title(
-            1,
+            "",
             "",
             "PROCESS TECHNOLOGY (PT)"
         )
@@ -2163,7 +2274,7 @@ with a:
         x = status_counts(pt)
 
         show_metric_row([
-            ("TOTAL PT", x["total"]),
+            ("TOTAL", x["total"]),
             ("COMPLETED", x["completed"]),
             ("ONGOING", x["ongoing"]),
         ])
@@ -2172,32 +2283,53 @@ with a:
         show_register(
             "PT REGISTER",
             pt,
-            ["PT No", "PT No.", "PT ID", "ID"],
-            ["PT Description", "Description", "PT Name"],
-            ["Status", "Current Status"],
+            [
+                "PT No",
+                "PT No.",
+                "PT ID",
+                "ID"
+            ],
+            [
+                "NAME OF PT",
+                "Name of PT",
+                "PT Name",
+                "PT Description",
+                "Description",
+            ],
+            [
+                "Status",
+                "Current Status"
+            ],
         )
+
 
 # ============================================================
 # 2 — PROCESS HAZARD ANALYSIS (PHA)
 # ============================================================
 
-
 with b:
-    with st.container(border=True):
+
+    with st.container(
+        border=True,
+        height=460
+    ):
+
         show_module_title(
-            2,
-            "△",
+            "",
+            "",
             "PROCESS HAZARD ANALYSIS (PHA)"
         )
 
+        # PHA KPI
         x = status_counts(pha)
 
         show_metric_row([
-            ("TOTAL PHA", x["total"]),
+            ("TOTAL", x["total"]),
             ("COMPLETED", x["completed"]),
             ("ONGOING", x["ongoing"]),
         ])
 
+        # PHA REGISTER
         show_register(
             "PHA REGISTER",
             pha,
@@ -2208,9 +2340,11 @@ with b:
                 "ID"
             ],
             [
+                "NAME OF PHA",
+                "Name of PHA",
+                "PHA Name",
                 "PHA Description",
-                "Description",
-                "PHA Name"
+                "Description"
             ],
             [
                 "Status",
@@ -2218,18 +2352,25 @@ with b:
             ],
         )
 
+
 # ============================================================
 # 3 — PHA RECOMMENDATION
 # ============================================================
 
 with c:
-    with st.container(border=True):
+
+    with st.container(
+        border=True,
+        height=460
+    ):
+
         show_module_title(
-            3,
-            "♧",
+            "",
+            "",
             "PHA RECOMMENDATION"
         )
 
+        # PHA RECOMMENDATION KPI
         x = status_counts(
             rec,
             [
@@ -2242,7 +2383,7 @@ with c:
 
         show_metric_row([
             (
-                "TOTAL RECOMMENDATIONS",
+                "TOTAL",
                 x["total"]
             ),
             (
@@ -2255,6 +2396,7 @@ with c:
             ),
         ])
 
+        # RECOMMENDATION REGISTER
         show_register(
             "RECOMMENDATION REGISTER",
             rec,
@@ -2280,82 +2422,140 @@ with c:
         )
 
 # ============================================================
-# 4 — MANAGEMENT OF CHANGE (MOC)
+# MOC — FINAL HORIZONTAL LAYOUT
 # ============================================================
 
-with d:
-    with st.container(
-            border=True,
-            height=460
-    ):
+with st.container(
+        border=True,
+        height=460
+):
 
-        show_module_title(
-            4,
-            "♙",
-            "MOC"
-        )
+    # --------------------------------------------------------
+    # MOC TITLE
+    # --------------------------------------------------------
 
-        x = status_counts(moc)
+    show_module_title(
+        "",
+        "",
+        "MANAGEMENT OF CHANGE(MOC)"
+    )
 
-        show_metric_row([
-            ("TOTAL MOC", x["total"]),
-            ("OPEN", x["open"]),
-            ("CLOSED", x["closed"]),
-        ])
+    # --------------------------------------------------------
+    # MOC COLUMN MAPPING
+    # --------------------------------------------------------
 
-        # ----------------------------------------------------
-        # MOC COLUMN MAPPING
-        # ----------------------------------------------------
+    moc_change_type_col = find_col(
+        moc,
+        [
+            "Change Type (Permanent/Temporary/Emergency)",
+            "Change Type",
+            "Type",
+        ],
+    )
 
-        moc_change_type_col = find_col(
-            moc,
-            [
-                "Change Type (Permanent/Temporary/Emergency)",
-                "Change Type",
-                "Type",
-            ],
-        )
+    moc_category_col = find_col(
+        moc,
+        [
+            "Category of changes (Technology/Personnel/Facility)",
+            "Category of changes",
+            "Category",
+        ],
+    )
 
-        moc_category_col = find_col(
-            moc,
-            [
-                "Category of changes (Technology/Personnel/Facility)",
-                "Category of changes",
-                "Category",
-            ],
-        )
+    moc_chart = moc.copy()
 
-        moc_chart = moc.copy()
+    # ========================================================
+    # FOUR SECTIONS
+    #
+    # SUMMARY | TYPE CHART | CATEGORY CHART | REGISTER
+    # ========================================================
 
-        # ----------------------------------------------------
-        # ALL DEPARTMENTS
-        # ----------------------------------------------------
-        # No department filter is applied.
-        # The complete MOC sheet is used.
+    moc_kpi_col, moc_type_col, moc_category_col_box, moc_register_col = st.columns(
+        [0.70, 1.70, 1.70, 2.50],
+        gap="small"
+    )
 
-        # ----------------------------------------------------
-        # TWO DONUT CHARTS
-        # ----------------------------------------------------
+    # ========================================================
+    # 1 — MOC SUMMARY
+    # ========================================================
 
-        p1, p2 = st.columns(
-            2,
-            gap="small"
-        )
+    with moc_kpi_col:
 
-        # ====================================================
-        # TYPE-WISE
-        # ====================================================
-
-        with p1:
+        with st.container(
+                border=True,
+                height=390
+        ):
 
             st.markdown(
                 """
                 <div style="
-                    text-align:center;
-                    color:#173f70;
-                    font-size:10px;
+                    background:#07558E;
+                    color:white;
+                    font-size:9px;
                     font-weight:800;
-                    margin-bottom:4px;
+                    padding:8px 8px;
+                    border-radius:4px;
+                    text-align:center;
+                    margin-bottom:10px;
+                ">
+                    MOC SUMMARY
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            x = status_counts(moc)
+
+            # TOTAL
+            show_kpi_card(
+                "TOTAL",
+                x["total"]
+            )
+
+            st.markdown(
+                "<div style='height:6px;'></div>",
+                unsafe_allow_html=True
+            )
+
+            # OPEN
+            show_kpi_card(
+                "OPEN",
+                x["open"]
+            )
+
+            st.markdown(
+                "<div style='height:6px;'></div>",
+                unsafe_allow_html=True
+            )
+
+            # CLOSED
+            show_kpi_card(
+                "CLOSED",
+                x["closed"]
+            )
+
+    # ========================================================
+    # 2 — TYPE-WISE DISTRIBUTION
+    # ========================================================
+
+    with moc_type_col:
+
+        with st.container(
+                border=True,
+                height=390
+        ):
+
+            st.markdown(
+                """
+                <div style="
+                    background:#07558E;
+                    color:white;
+                    font-size:11px;
+                    font-weight:800;
+                    padding:8px 8px;
+                    border-radius:4px;
+                    text-align:center;
+                    margin-bottom:5px;
                 ">
                     TYPE-WISE DISTRIBUTION
                 </div>
@@ -2364,8 +2564,8 @@ with d:
             )
 
             if (
-                    moc_change_type_col
-                    and not moc_chart.empty
+                moc_change_type_col
+                and not moc_chart.empty
             ):
 
                 type_data = (
@@ -2377,7 +2577,7 @@ with d:
 
                 type_data = type_data[
                     type_data != ""
-                    ]
+                ]
 
                 type_counts = (
                     type_data.value_counts()
@@ -2395,17 +2595,17 @@ with d:
                         )
                     ]
 
+                    # -------------------------------
+                    # DONUT CHART
+                    # -------------------------------
+
                     fig_type = go.Figure(
                         data=[
                             go.Pie(
                                 labels=type_labels,
                                 values=type_counts.values,
-                                hole=0.58,
+                                hole=0.60,
                                 textinfo="none",
-                                domain=dict(
-                                    x=[0.00, 0.55],
-                                    y=[0.08, 0.92],
-                                ),
                                 hovertemplate=(
                                     "%{label}"
                                     "<extra></extra>"
@@ -2414,24 +2614,55 @@ with d:
                         ]
                     )
 
+                    # -------------------------------
+                    # CENTER TEXT
+                    # -------------------------------
+
+                    fig_type.add_annotation(
+                        text=(
+                            f"<b>{x['total']}</b>"
+                            "<br>"
+                            "<span style='font-size:11px'>"
+                            "Total MOC"
+                            "</span>"
+                        ),
+                        x=0.5,
+                        y=0.5,
+                        showarrow=False,
+                        font=dict(
+                            size=24,
+                            color="#173F70"
+                        ),
+                        align="center",
+                    )
+
                     fig_type.update_layout(
-                        height=115,
+                        height=330,
+
                         margin=dict(
-                            l=0,
-                            r=0,
-                            t=0,
-                            b=0
+                            l=5,
+                            r=5,
+                            t=5,
+                            b=45
                         ),
+
+                        # LEGEND AT BOTTOM
                         showlegend=True,
+
                         legend=dict(
-                            orientation="v",
-                            x=0.72,
-                            y=0.5,
-                            xanchor="left",
-                            yanchor="middle",
-                            font=dict(size=8),
+                            orientation="h",
+                            x=0.5,
+                            y=-0.08,
+                            xanchor="center",
+                            yanchor="top",
+                            font=dict(
+                                size=9
+                            ),
                         ),
-                        font=dict(size=8),
+
+                        font=dict(
+                            size=9
+                        ),
                     )
 
                     st.plotly_chart(
@@ -2440,7 +2671,7 @@ with d:
                         config={
                             "displayModeBar": False
                         },
-                        key="bf_moc_type_donut",
+                        key="moc_type_donut_final",
                     )
 
                 else:
@@ -2455,20 +2686,28 @@ with d:
                     "MOC Change Type column not found."
                 )
 
-        # ====================================================
-        # CATEGORY-WISE
-        # ====================================================
+    # ========================================================
+    # 3 — CATEGORY-WISE DISTRIBUTION
+    # ========================================================
 
-        with p2:
+    with moc_category_col_box:
+
+        with st.container(
+                border=True,
+                height=390
+        ):
 
             st.markdown(
                 """
                 <div style="
-                    text-align:center;
-                    color:#173f70;
-                    font-size:10px;
+                    background:#07558E;
+                    color:white;
+                    font-size:11px;
                     font-weight:800;
-                    margin-bottom:4px;
+                    padding:8px 8px;
+                    border-radius:4px;
+                    text-align:center;
+                    margin-bottom:5px;
                 ">
                     CATEGORY-WISE DISTRIBUTION
                 </div>
@@ -2477,8 +2716,8 @@ with d:
             )
 
             if (
-                    moc_category_col
-                    and not moc_chart.empty
+                moc_category_col
+                and not moc_chart.empty
             ):
 
                 category_data = (
@@ -2490,7 +2729,7 @@ with d:
 
                 category_data = category_data[
                     category_data != ""
-                    ]
+                ]
 
                 category_counts = (
                     category_data.value_counts()
@@ -2508,17 +2747,17 @@ with d:
                         )
                     ]
 
+                    # -------------------------------
+                    # DONUT CHART
+                    # -------------------------------
+
                     fig_category = go.Figure(
                         data=[
                             go.Pie(
                                 labels=category_labels,
                                 values=category_counts.values,
-                                hole=0.58,
+                                hole=0.60,
                                 textinfo="none",
-                                domain=dict(
-                                    x=[0.00, 0.55],
-                                    y=[0.08, 0.92],
-                                ),
                                 hovertemplate=(
                                     "%{label}"
                                     "<extra></extra>"
@@ -2527,24 +2766,55 @@ with d:
                         ]
                     )
 
+                    # -------------------------------
+                    # CENTER TEXT
+                    # -------------------------------
+
+                    fig_category.add_annotation(
+                        text=(
+                            f"<b>{x['total']}</b>"
+                            "<br>"
+                            "<span style='font-size:11px'>"
+                            "Total MOC"
+                            "</span>"
+                        ),
+                        x=0.5,
+                        y=0.5,
+                        showarrow=False,
+                        font=dict(
+                            size=24,
+                            color="#173F70"
+                        ),
+                        align="center",
+                    )
+
                     fig_category.update_layout(
-                        height=115,
+                        height=330,
+
                         margin=dict(
-                            l=0,
-                            r=0,
-                            t=0,
-                            b=0
+                            l=5,
+                            r=5,
+                            t=5,
+                            b=45
                         ),
+
+                        # LEGEND AT BOTTOM
                         showlegend=True,
+
                         legend=dict(
-                            orientation="v",
-                            x=0.72,
-                            y=0.5,
-                            xanchor="left",
-                            yanchor="middle",
-                            font=dict(size=8),
+                            orientation="h",
+                            x=0.5,
+                            y=-0.08,
+                            xanchor="center",
+                            yanchor="top",
+                            font=dict(
+                                size=9
+                            ),
                         ),
-                        font=dict(size=8),
+
+                        font=dict(
+                            size=9
+                        ),
                     )
 
                     st.plotly_chart(
@@ -2553,7 +2823,7 @@ with d:
                         config={
                             "displayModeBar": False
                         },
-                        key="bf_moc_category_donut",
+                        key="moc_category_donut_final",
                     )
 
                 else:
@@ -2568,12 +2838,89 @@ with d:
                     "MOC Category column not found."
                 )
 
-        # ----------------------------------------------------
-        # MOC REGISTER
-        # MOC No. / Description / Type / Status / Remarks
-        # ----------------------------------------------------
-        show_moc_register(moc)
+    # ========================================================
+    # 4 — MOC REGISTER
+    # ========================================================
 
+    with moc_register_col:
+
+        with st.container(
+                border=True,
+                height=390
+        ):
+
+            st.markdown(
+                """
+                <div style="
+                    background:#07558E;
+                    color:white;
+                    font-size:11px;
+                    font-weight:800;
+                    padding:8px 10px;
+                    border-radius:4px;
+                    text-align:left;
+                    margin-bottom:8px;
+                ">
+                    MOC REGISTER
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ------------------------------------------------
+            # CREATE MOC REGISTER DATA
+            # ------------------------------------------------
+
+            register_df = make_moc_register(moc)
+
+            if register_df.empty:
+
+                st.info("No MOC records found.")
+
+            else:
+
+                styled_df = (
+                    register_df.style
+                    .map(
+                        status_style,
+                        subset=["Status"]
+                    )
+                )
+
+                st.dataframe(
+                    styled_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=315,
+
+                    column_config={
+
+                        "MOC No.": st.column_config.TextColumn(
+                            "MOC No.",
+                            width="medium"
+                        ),
+
+                        "Description": st.column_config.TextColumn(
+                            "Description",
+                            width="large"
+                        ),
+
+                        "Type": st.column_config.TextColumn(
+                            "Type",
+                            width="small"
+                        ),
+
+                        "Status": st.column_config.TextColumn(
+                            "Status",
+                            width="small"
+                        ),
+
+                        "Remarks": st.column_config.TextColumn(
+                            "Remarks",
+                            width="small"
+                        ),
+                    },
+                )
 # ============================================================
 # ROW 2 — PSSR / INCIDENT / TRAINING
 # ============================================================
@@ -2588,10 +2935,13 @@ a, b, c = st.columns(
 # ============================================================
 
 with a:
-    with st.container(border=True):
+    with st.container(
+        border=True,
+        height=460
+    ):
 
         show_module_title(
-            5,
+            "",
             "",
             "PRE-STARTUP SAFETY REVIEW (PSSR)"
         )
@@ -2665,7 +3015,7 @@ with a:
         # KPI CARDS
         # --------------------------------------------------------
         show_metric_row([
-            ("TOTAL PSSR", total_pssr),
+            ("TOTAL", total_pssr),
             ("COMPLETED", completed_pssr),
             ("PENDING", pending_pssr),
             ("OVERDUE", overdue_pssr),
@@ -2707,8 +3057,8 @@ with b:
     ):
 
         show_module_title(
-            6,
-            "⚠",
+            "",
+            "",
             "PROCESS SAFETY INCIDENT"
         )
 
@@ -2849,27 +3199,24 @@ with b:
         # ----------------------------------------------------
 
         m1, m2, m3 = st.columns(
-            [0.70, 0.70, 0.70],
-            gap="small"
+            [1, 1, 1],
+            gap="xxsmall"
         )
 
         with m1:
-
-            st.metric(
-                "TOTAL INCIDENTS",
+            show_kpi_card(
+                "TOTAL",
                 int(total_incidents)
             )
 
         with m2:
-
-            st.metric(
+            show_kpi_card(
                 "INVESTIGATION COMPLETED",
                 int(investigation_completed)
             )
 
         with m3:
-
-            st.metric(
+            show_kpi_card(
                 "INVESTIGATION PENDING",
                 int(investigation_pending)
             )
@@ -3231,8 +3578,8 @@ with c:
     ):
 
         show_module_title(
-            7,
-            "♙",
+            "",
+            "",
             "TRAINING"
         )
 
@@ -3681,7 +4028,7 @@ with a:
     ):
 
         show_module_title(
-            8,
+            "",
             "",
             "SOC / SOL DEVIATION"
         )
@@ -4014,8 +4361,8 @@ with b:
     ):
 
         show_module_title(
-            9,
-            "♙",
+            "",
+            "",
             "AUDIT / COMPLIANCE"
         )
 
@@ -4048,13 +4395,19 @@ with b:
             else:
                 pending_audit = int(len(audit))
 
-        ak1, ak2 = st.columns(2, gap="small")
+        ak1, ak2 = st.columns(2, gap="xxsmall")
 
         with ak1:
-            st.metric("TOTAL NO. OF AUDIT DONE", total_audit_done)
+            show_kpi_card(
+                "TOTAL NO. OF AUDIT DONE",
+                total_audit_done
+            )
 
         with ak2:
-            st.metric("PENDING FOR AUDIT", pending_audit)
+            show_kpi_card(
+                "PENDING FOR AUDIT",
+                pending_audit
+            )
 
         # ========================================================
         # AUDIT / COMPLIANCE REGISTER
@@ -4288,7 +4641,7 @@ with b:
 with st.container(border=True):
 
     show_module_title(
-        10,
+        "",
         "",
         "INTERLOCK BYPASS"
     )
@@ -4370,8 +4723,8 @@ with st.container(border=True):
     # ------------------------------------------------------------
     # KPI
     # ------------------------------------------------------------
-    st.metric(
-        "Normalization Pending",
+    show_kpi_card(
+        "NORMALIZATION PENDING",
         f"{pending_count:,}",
     )
 
@@ -4564,7 +4917,7 @@ with st.container(border=True):
 with st.container(border=True):
 
     show_module_title(
-        11,
+        "",
         "",
         "PSM CRITICAL EQUIPMENT NOTIFICATION"
     )
@@ -4632,10 +4985,10 @@ with st.container(border=True):
     # Short dashboard labels.
     show_metric_row([
         ("TOTAL PSM CE FAILED", total_psm_ce_failed),
-        ("M-MO GEN", mech_generated),
-        ("M-MO COMP", mech_completed),
-        ("E&I-MO GEN", ei_generated),
-        ("E&I-MO COMP", ei_completed),
+        ("MECHANICAL-MAINTENANCE ORDER GENERATED", mech_generated),
+        ("MECHANICAL-MAINTENANCE ORDER COMPLETED", mech_completed),
+        ("E&I-MAINTENANCE ORDER GENERATED", ei_generated),
+        ("E&I-MAINTENANCE ORDER COMPLETED", ei_completed),
     ])
 
     # --------------------------------------------------------
@@ -4743,7 +5096,7 @@ with barrier_col:
     with st.container(border=True, height=520):
 
         show_module_title(
-            12,
+            "",
             "",
             "(C4/C5)BARRIER AUDIT"
         )
@@ -5038,7 +5391,7 @@ with failure_col:
     with st.container(border=True, height=520):
 
         show_module_title(
-            13,
+            "",
             "",
             "PSM CRITICAL EQUIPMENT/BARRIER (C4/C5)FAILURE DETAILS"
         )
@@ -5078,11 +5431,19 @@ with failure_col:
 
             total_psm_ce = type_counts["PSM CE"]
             total_barrier = type_counts["Barrier"]
-            total_psm_col, total_barrier_col = st.columns(2, gap="small")
+            total_psm_col, total_barrier_col = st.columns(2, gap="xxsmall")
+
             with total_psm_col:
-                st.metric("PSM CE", total_psm_ce)
+                show_kpi_card(
+                    "PSM CE",
+                    total_psm_ce
+                )
+
             with total_barrier_col:
-                st.metric("BARRIER", total_barrier)
+                show_kpi_card(
+                    "BARRIER",
+                    total_barrier
+                )
 
             # ----------------------------------------------------
             # GRAPHICAL REPRESENTATION — FAILURE COUNT

@@ -654,7 +654,7 @@ header_html = """
 
             <div class="main-title">
 
-                RMHS
+                MIQA
 
                 <span class="main-title-orange"></span>
 

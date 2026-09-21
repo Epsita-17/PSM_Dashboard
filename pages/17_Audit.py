@@ -49,7 +49,8 @@ st.markdown(
     }
 
     [data-testid="stHeader"] {
-        display: none !important;
+    background: transparent !important;
+}
         height: 0 !important;
         min-height: 0 !important;
         padding: 0 !important;

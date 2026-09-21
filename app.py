@@ -274,7 +274,7 @@ with st.sidebar:
 
 home_page = st.Page(
     str(BASE_DIR / "pages" / "01_Home.py"),
-    title="Home",
+    title="HOME",
     icon="🏠",
     default=True
 )
@@ -285,8 +285,8 @@ home_page = st.Page(
 # ------------------------------------------------------------
 
 executive_page = st.Page(
-    str(BASE_DIR / "pages" / "02_Executive_Dashboard.py"),
-    title="Executive Dashboard",
+    str(BASE_DIR / "pages" / "02_Executive.py"),
+    title="EXECUTIVE ",
     icon="📊"
 )
 
@@ -297,7 +297,7 @@ executive_page = st.Page(
 
 apex_page = st.Page(
     str(BASE_DIR / "pages" / "03_Apex_Committee.py"),
-    title="Apex Committee",
+    title="APEX COMMITTEE",
     icon="👥"
 )
 
@@ -305,23 +305,23 @@ apex_page = st.Page(
 
 
 # ------------------------------------------------------------
-# 05 SUB COMMITTEE CHAIRMAN
+# 05 PSM SC CHAIRMAN
 # ------------------------------------------------------------
 
-sub_committee_chairman_page = st.Page(
-    str(BASE_DIR / "pages" / "05_Sub_Committee_Chairman.py"),
-    title="Sub Committee Chairman",
+PSM_SC_Chairman_page = st.Page(
+    str(BASE_DIR / "pages" / "05_PSM_SC_Chairman.py"),
+    title="PSM SC CHAIRMAN",
     icon="👔"
 )
 
 
 # ------------------------------------------------------------
-# 06 PSM SC CHAIRMAN DASHBOARD
+# 06 PSM SC CONVENER DASHBOARD
 # ------------------------------------------------------------
 
 psm_sc_convener_page = st.Page(
     str(BASE_DIR / "pages" / "06_PSM_SC_Convener_Dashboard.py"),
-    title="PSM SC Convener Dashboard",
+    title="PSM SC CONVENER",
     icon="👤"
 )
 
@@ -347,8 +347,8 @@ all_departments_page = st.Page(
 
 blast_furnace_page = st.Page(
     str(BASE_DIR / "departments" / "01_Blast_Furnace.py"),
-    title="Blast Furnace",
-    icon="🔥"
+    title="BLAST FURNACE",
+    icon="🏭"
 )
 
 
@@ -358,7 +358,7 @@ blast_furnace_page = st.Page(
 
 coke_oven_page = st.Page(
     str(BASE_DIR / "departments" / "02_Coke_Oven.py"),
-    title="Coke Oven",
+    title="COKE OVEN",
     icon="🏭"
 )
 
@@ -392,7 +392,7 @@ sms_2_page = st.Page(
 dri_page = st.Page(
     str(BASE_DIR / "departments" / "06_DRI.py"),
     title="DRI",
-    icon="⚙️"
+    icon="🏭"
 )
 
 
@@ -402,8 +402,8 @@ dri_page = st.Page(
 
 cu_page = st.Page(
     str(BASE_DIR / "departments" / "07_CU.py"),
-    title="Central Utility",
-    icon="💧"
+    title="CENTRAL UTILITY",
+    icon="🏭"
 )
 
 
@@ -414,7 +414,7 @@ cu_page = st.Page(
 crm_page = st.Page(
     str(BASE_DIR / "departments" / "08_CRM.py"),
     title="CRM",
-    icon="⚙️"
+    icon="🏭"
 )
 
 
@@ -425,7 +425,7 @@ crm_page = st.Page(
 wrm_page = st.Page(
     str(BASE_DIR / "departments" / "09_WRM.py"),
     title="WRM",
-    icon="⚙️"
+    icon="🏭"
 )
 
 
@@ -436,7 +436,7 @@ wrm_page = st.Page(
 cpp_page = st.Page(
     str(BASE_DIR / "departments" / "10_CPP.py"),
     title="CPP",
-    icon="⚡"
+    icon="🏭"
 )
 
 
@@ -446,7 +446,7 @@ cpp_page = st.Page(
 
 sinter_page = st.Page(
     str(BASE_DIR / "departments" / "11_Sinter.py"),
-    title="Sinter",
+    title="SINTER",
     icon="🏭"
 )
 
@@ -457,8 +457,8 @@ sinter_page = st.Page(
 
 tube_mill_page = st.Page(
     str(BASE_DIR / "departments" / "12_Tube_Mill.py"),
-    title="Tube Mill",
-    icon="⚙️"
+    title="TUBE MILL",
+    icon="🏭"
 )
 
 
@@ -479,7 +479,7 @@ csp_page = st.Page(
 
 pellet_beneficiation_page = st.Page(
     str(BASE_DIR / "departments" / "14_Pellet_Beneficiation.py"),
-    title="Pellet & Beneficiation",
+    title="PELLET & BENEFICIATION",
     icon="🏭"
 )
 
@@ -491,7 +491,7 @@ pellet_beneficiation_page = st.Page(
 lcp_page = st.Page(
     str(BASE_DIR / "departments" / "15_LCP.py"),
     title="LCP",
-    icon="⚙️"
+    icon="🏭"
 )
 
 
@@ -502,7 +502,7 @@ lcp_page = st.Page(
 rmhs_page = st.Page(
     str(BASE_DIR / "departments" / "17_RMHS.py"),
     title="RMHS",
-    icon="⚙️"
+    icon="🏭"
 )
 
 # ------------------------------------------------------------
@@ -512,7 +512,7 @@ rmhs_page = st.Page(
 projects_page = st.Page(
     str(BASE_DIR / "departments" / "18_Projects.py"),
     title="PROJECTS",
-    icon="⚙️"
+    icon="🏭"
 )
 
 
@@ -572,7 +572,7 @@ pssr_page = st.Page(
 
 training_page = st.Page(
     str(BASE_DIR / "pages" / "13_Training.py"),
-    title="Training & Competency",
+    title="TRAINING",
     icon="🎓"
 )
 
@@ -594,7 +594,7 @@ op_page = st.Page(
 
 psi_page = st.Page(
     str(BASE_DIR / "pages" / "14_PSI.py"),
-    title="Process Safety Incident",
+    title="PROCESS SAFETY INCIDENT",
     icon="🚨"
 )
 
@@ -604,7 +604,7 @@ psi_page = st.Page(
 
 audit_page = st.Page(
     str(BASE_DIR / "pages" / "17_Audit.py"),
-    title="Audit",
+    title="AUDIT",
     icon="📊"
 )
 
@@ -613,7 +613,7 @@ audit_page = st.Page(
 # ------------------------------------------------------------
 incident_library_page = st.Page(
     str(BASE_DIR / "pages" / "18_Incident Library.py"),
-    title="Incident Library",
+    title="INCIDENT LIBRARY",
     icon="📚"
 )
 
@@ -637,11 +637,21 @@ psm_ce_barrier_health_page = st.Page(
     icon="🛡️"
 )
 
-# 21 JSW SAFETY STANDARDS
+# ------------------------------------------------------------
+# 21 PSM CE & BARRIER HEALTH
+# ------------------------------------------------------------
+
+MIQA_page = st.Page(
+    str(BASE_DIR / "pages" / "21_MIQA.py"),
+    title="MIQA",
+    icon="🛡️"
+)
+
+# 22 JSW SAFETY STANDARDS
 # ------------------------------------------------------------
 
 jsw_safety_standards_page = st.Page(
-    str(BASE_DIR / "pages" / "21_JSW_Safety_Standards.py"),
+    str(BASE_DIR / "pages" / "22_JSW_Safety_Standards.py"),
     title="JSW SAFETY STANDARDS",
     icon="📚"
 )
@@ -654,7 +664,7 @@ jsw_safety_standards_page = st.Page(
 
 reports_page = st.Page(
     str(BASE_DIR / "pages" / "16_Document Reprosotory.py"),
-    title="Document Repository",
+    title="DOCUMENT REPROSOTORY",
     icon="📄"
 )
 
@@ -669,7 +679,7 @@ pg = st.navigation(
             home_page,
             executive_page,
             apex_page,
-            sub_committee_chairman_page,
+            PSM_SC_Chairman_page,
             psm_sc_convener_page
         ],
 
@@ -708,6 +718,7 @@ pg = st.navigation(
     incident_library_page,
     alarm_interlock_management_page,
     psm_ce_barrier_health_page,
+    MIQA_page,
     jsw_safety_standards_page
 ],
         "REPORTING": [

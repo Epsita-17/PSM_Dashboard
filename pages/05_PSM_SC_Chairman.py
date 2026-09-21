@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="PSM Sub Committee Chairman Dashboard",
+    page_title="PSM SC Chairman Dashboard",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -48,6 +48,59 @@ SHEETS = {
     "Audit Compliance": "1790395364",
 }
 
+
+# =========================================================
+# HIDE STREAMLIT DEFAULT UI
+# =========================================================
+
+st.markdown("""
+<style>
+
+/* Hide Streamlit default menu */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Show Streamlit default header */
+header {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* Show Streamlit toolbar */
+[data-testid="stToolbar"] {
+    visibility: visible !important;
+    display: flex !important;
+}
+
+/* Show Deploy button */
+[data-testid="stAppDeployButton"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* Hide Streamlit decoration */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide status widget */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # ============================================================
 # STYLE
 # ============================================================
@@ -67,7 +120,7 @@ st.markdown(
 
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
-    margin-top:-35px !important;
+    margin-top:-50px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -363,13 +416,12 @@ header_html = """
    MAIN HEADER 
    ============================================================ */ 
 
-.psm-header { 
-
-    position: relative; 
-
-    width: 100%; 
-
-    height: 90px; 
+.psm-header {
+    position: relative;
+    width: calc(100% + 20px);
+    margin-left: -10px;
+    margin-right: -10px;
+    height: 90px;
 
     overflow: hidden; 
 
@@ -642,7 +694,7 @@ header_html = """
 
     right: 16px; 
 
-    top: 0; 
+    top: 6px; 
 
     width: 15%; 
 
@@ -846,7 +898,7 @@ header_html = """
 
             <div class="main-title"> 
 
-                PSM SUB COMMITTEE CHAIRMAN 
+                PSM SC CHAIRMAN 
 
                 <span class="main-title-orange"></span> 
 
@@ -857,7 +909,7 @@ header_html = """
 
             <div class="subtitle"> 
 
-                PSM SUB COMMITTEE | EXECUTIVE COMMAND CENTER 
+                PSM DIGITAL DASHBOARD
 
             </div> 
 

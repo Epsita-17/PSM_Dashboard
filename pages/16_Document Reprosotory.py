@@ -606,7 +606,7 @@ header_html = """
 
             <div class="main-title"> 
 
-                PROCESS HAZARD ANALYSIS (PHA) 
+                DOCUMENT REPOSITORY
 
                 <span class="main-title-orange"></span> 
 

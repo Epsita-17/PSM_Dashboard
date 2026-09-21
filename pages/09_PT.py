@@ -1,1220 +1,170 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
-import os
-import base64
+import requests
+from io import StringIO
+import html
 import re
-import json
-from io import BytesIO
-from urllib.request import Request, urlopen
-from openpyxl import load_workbook
-from streamlit_autorefresh import st_autorefresh
 from pathlib import Path
 from datetime import datetime
+import streamlit.components.v1 as components
+import base64
 from zoneinfo import ZoneInfo
-# =========================================================
-# PAGE CONFIG
-# =========================================================
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
-    page_title="PSM Dashboard - PT",
-    page_icon="📊",
+    page_title="PSM Digital Dashboard",
+    page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 
 # =========================================================
-# SESSION STATE
+# HIDE STREAMLIT DEFAULT UI
 # =========================================================
 
-if "status_filter" not in st.session_state:
-    st.session_state.status_filter = "All"
-
-if "page_number" not in st.session_state:
-    st.session_state.page_number = 1
-
-if "department_selector" not in st.session_state:
-    st.session_state.department_selector = "All Departments"
-
-
-
-
-# =========================================================
-# AUTO REFRESH
-# =========================================================
-
-st_autorefresh(
-    interval=100000,
-    key="psm_auto_refresh"
-)
-
-
-# =========================================================
-# GOOGLE SHEET - SHEET2
-# =========================================================
-
-SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
-
-SHEET2_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/"
-    f"{SPREADSHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet=PT"
-)
-
-
-# These are the exact Google Sheet column names used by the PT register.
-STATUS_COLUMN = "Status (Ongoing/Completed)"
-LINK_COLUMN = "Attach PT Softcopy Link"
-APPROVAL_COLUMN = "Approved  (Yes/No)"
-
-
-def normalize_column_name(value):
-    """Normalize Google Sheet headers so line breaks/multiple spaces do not matter."""
-    return re.sub(r"\s+", " ", str(value).replace("\xa0", " ").replace("\n", " ")).strip().lower()
-
-
-@st.cache_data(ttl=60)
-def get_pt_data():
-
-    try:
-        data = pd.read_csv(SHEET2_CSV_URL)
-
-        data.columns = (
-            data.columns
-            .astype(str)
-            .str.replace("\xa0", " ", regex=False)
-            .str.replace("\n", " ", regex=False)
-            .str.strip()
-        )
-
-        for col in data.columns:
-
-            if data[col].dtype == "object":
-
-                data[col] = (
-                    data[col]
-                    .astype(str)
-                    .str.replace("\xa0", " ", regex=False)
-                    .str.strip()
-                )
-
-        data = data.replace(
-            {
-                "nan": "",
-                "NaN": "",
-                "NAN": ""
-            }
-        )
-
-        return data
-
-    except Exception as exc:
-
-        st.error(
-            f"Unable to load Google Sheet PT: {exc}"
-        )
-
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=60)
-def get_pt_document_links():
-    """Read the actual hyperlink target from the PT worksheet."""
-    links = {}
-    try:
-        xlsx_url = (
-            f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export"
-            f"?format=xlsx"
-        )
-        request = Request(xlsx_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request, timeout=30) as response:
-            workbook_bytes = response.read()
-
-        workbook = load_workbook(
-            filename=BytesIO(workbook_bytes),
-            read_only=False,
-            data_only=False
-        )
-        if "PT" not in workbook.sheetnames:
-            workbook.close()
-            return links
-
-        worksheet = workbook["PT"]
-        headers = {}
-        for cell in worksheet[1]:
-            if cell.value is not None:
-                header = str(cell.value).replace("\xa0", " ").strip()
-                headers[header] = cell.column
-
-        link_col = headers.get(LINK_COLUMN)
-        pt_col = headers.get("PT No.")
-        if not link_col or not pt_col:
-            workbook.close()
-            return links
-
-        formula_pattern = re.compile(
-            r'=HYPERLINK\s*\(\s*["\']([^"\']+)["\']',
-            re.IGNORECASE
-        )
-
-        for row_number in range(2, worksheet.max_row + 1):
-            pt_cell = worksheet.cell(row=row_number, column=pt_col)
-            link_cell = worksheet.cell(row=row_number, column=link_col)
-            pt_number = "" if pt_cell.value is None else str(pt_cell.value).strip()
-            if not pt_number:
-                continue
-
-            document_link = ""
-            if link_cell.hyperlink and link_cell.hyperlink.target:
-                document_link = str(link_cell.hyperlink.target).strip()
-
-            if not document_link and isinstance(link_cell.value, str):
-                match = formula_pattern.search(link_cell.value)
-                if match:
-                    document_link = match.group(1).strip()
-
-            if not document_link and isinstance(link_cell.value, str):
-                candidate = link_cell.value.strip()
-                if re.match(r"^https?://", candidate, re.IGNORECASE):
-                    document_link = candidate
-
-            if document_link:
-                links[pt_number] = document_link
-
-        workbook.close()
-    except Exception:
-        return links
-    return links
-
-
-df = get_pt_data()
-pt_document_links = get_pt_document_links()
-
-
-
-# =========================================================
-# ONLY COLUMNS REQUIRED FROM GOOGLE SHEET: PT
-# =========================================================
-
-required_columns = [
-    "PT No.",
-    "Department",
-    "Name of PT",
-    "Status (Ongoing/Completed)",
-    "Attach PT Softcopy Link"
-]
-
-# Resolve the real Google Sheet headers by normalized text.
-# This handles headers such as "Status  (Ongoing/Completed)"
-# or headers containing a line break/extra spaces.
-_normalized_columns = {normalize_column_name(col): col for col in df.columns}
-
-_column_aliases = {
-    "PT No.": ["PT No."],
-    "Department": ["Department"],
-    "Name of PT": ["Name of PT"],
-    "Status (Ongoing/Completed)": [
-        "Status (Ongoing/Completed)",
-        "Status  (Ongoing/Completed)"
-    ],
-    "Attach PT Softcopy Link": ["Attach PT Softcopy Link"]
-}
-
-_resolved_columns = {}
-for _required in required_columns:
-    _resolved = None
-    for _alias in _column_aliases.get(_required, [_required]):
-        _resolved = _normalized_columns.get(normalize_column_name(_alias))
-        if _resolved:
-            break
-    _resolved_columns[_required] = _resolved
-
-if _resolved_columns["Status (Ongoing/Completed)"]:
-    STATUS_COLUMN = _resolved_columns["Status (Ongoing/Completed)"]
-
-if _resolved_columns["Attach PT Softcopy Link"]:
-    LINK_COLUMN = _resolved_columns["Attach PT Softcopy Link"]
-
-required_columns = [
-    _resolved_columns[col] if _resolved_columns[col] else col
-    for col in required_columns
-]
-
-# =========================================================
-# CHECK DATA
-# =========================================================
-# =========================================================
-
-if df.empty:
-
-    st.error(
-        "No data found in Google Sheet: PT."
-    )
-
-    st.stop()
-
-
-missing_columns = [
-    column
-    for column in required_columns
-    if column not in df.columns
-]
-
-if missing_columns:
-
-    st.error(
-        "Some required columns are missing from Google Sheet: PT."
-    )
-
-    st.write("Missing columns:")
-    st.write(missing_columns)
-
-    st.write("Columns found in PT:")
-    st.write(df.columns.tolist())
-
-    st.stop()
-
-
-# =========================================================
-# GLOBAL CSS
-# LIGHT 3D INDUSTRIAL THEME
-# =========================================================
-
-st.markdown(
-    """
+st.markdown("""
 <style>
 
-/* =====================================================
-   REFERENCE-STYLE WHITE / NAVY INDUSTRIAL THEME
-   VISUAL ONLY — NO DATA / LOGIC CHANGES
-   ===================================================== */
-
-* {
-    box-sizing: border-box;
-}
-
-html,
-body,
-.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stAppViewContainer"] > .main {
-    margin: 0 !important;
-    padding: 0 !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-}
-
-#MainMenu,
-header,
-footer,
-[data-testid="stHeader"],
-[data-testid="stToolbar"] {
+/* Hide Streamlit default menu */
+#MainMenu {
+    visibility: hidden !important;
     display: none !important;
 }
 
-[data-testid="stMainBlockContainer"],
-[data-testid="stAppViewBlockContainer"],
-.block-container {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 6px !important;
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
 }
 
-[data-testid="stAppViewContainer"] > .main > div {
-    padding: 0 !important;
-}
-
-iframe {
+/* SHOW Streamlit default header */
+header {
+    visibility: visible !important;
     display: block !important;
-    border: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
 }
 
-
-/* =====================================================
-   MAIN BACKGROUND
-   ===================================================== */
-
-.stApp {
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #f7faff 55%,
-            #eef4fa 100%
-        ) !important;
-
-    color: #092d5c !important;
-
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif !important;
-}
-
-.stApp * {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
-}
-
-
-/* =====================================================
-   SPACING
-   ===================================================== */
-
-[data-testid="stVerticalBlock"] {
-    gap: 0.00rem !important;
-}
-
-[data-testid="stHorizontalBlock"] {
-    gap: 8px !important;
-}
-
-
-/* =====================================================
-   FILTER LABELS
-   ===================================================== */
-
-[data-testid="stSelectbox"] label {
-    color: #092d5c !important;
-    font-size: 12px !important;
-    font-weight: 900 !important;
-    letter-spacing: .35px !important;
-    margin-bottom: 3px !important;
-    padding-left: 4px !important;
-}
-
-
-/* =====================================================
-   SELECT BOX
-   ===================================================== */
-
-div[data-baseweb="select"] > div {
-    height: 38px !important;
-    min-height: 38px !important;
-    border-radius: 6px !important;
-
-    background:
-        #ffffff !important;
-
-    border:
-        1.5px solid #a9bfd8 !important;
-
-    box-shadow:
-        0 2px 5px rgba(8,45,92,.10),
-        inset 0 1px 0 rgba(255,255,255,.95) !important;
-}
-
-div[data-baseweb="select"]:hover > div {
-    border-color: #176fc1 !important;
-    box-shadow:
-        0 3px 8px rgba(8,76,135,.16) !important;
-}
-
-div[data-baseweb="select"] * {
-    color: #092d5c !important;
-    font-size: 12px !important;
-    font-weight: 700 !important;
-}
-
-div[data-baseweb="select"] svg {
-    fill: #0a4e91 !important;
-}
-
-
-/* =====================================================
-   MONTH + DEPARTMENT — ALIGN WITH RESET FILTERS
-   ===================================================== */
-
-/*
-   IMPORTANT:
-   Move only the two selectbox widgets.
-   The 22px spacers and the Reset Filters 46px spacer
-   remain unchanged, so the Reset Filters position is
-   not affected.
-*/
-
-/* Month */
-div[data-testid="stColumn"]:has(.month-filter-anchor)
-div[data-testid="stSelectbox"],
-div[data-testid="column"]:has(.month-filter-anchor)
-div[data-testid="stSelectbox"] {
-    transform: translateY(-3px) !important;
-}
-
-/* Department */
-div[data-testid="stColumn"]:has(.department-filter-anchor)
-div[data-testid="stSelectbox"],
-div[data-testid="column"]:has(.department-filter-anchor)
-div[data-testid="stSelectbox"] {
-    transform: translateY(-3px) !important;
-}
-
-
-/* =====================================================
-   TEXT INPUT
-   ===================================================== */
-
-div[data-testid="stTextInput"] input {
-    height: 40px !important;
-    min-height: 40px !important;
-    border-radius: 6px !important;
-
-    background:
-        #ffffff !important;
-
-    border:
-        1.5px solid #a9bfd8 !important;
-
-    color: #092d5c !important;
-
-    font-size: 12px !important;
-    font-weight: 600 !important;
-
-    box-shadow:
-        0 2px 5px rgba(8,45,92,.09),
-        inset 0 1px 2px rgba(0,0,0,.025) !important;
-}
-
-div[data-testid="stTextInput"] input:focus {
-    border-color: #126bc0 !important;
-
-    box-shadow:
-        0 0 0 1px #126bc0,
-        0 3px 9px rgba(18,107,192,.15) !important;
-}
-
-div[data-testid="stTextInput"] input::placeholder {
-    color: #657990 !important;
+/* SHOW Streamlit toolbar */
+[data-testid="stToolbar"] {
+    visibility: visible !important;
+    display: flex !important;
     opacity: 1 !important;
 }
 
-
-/* =====================================================
-   3D INDUSTRIAL BUTTONS
-   ===================================================== */
-
-div.stButton > button {
-    height: 36px !important;
-    min-height: 36px !important;
-
-    border-radius: 6px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #e8f0f8 100%
-        ) !important;
-
-    border:
-        1.5px solid #9db7d2 !important;
-
-    color: #07366d !important;
-
-    font-size: 12px !important;
-    font-weight: 900 !important;
-
-    box-shadow:
-        0 3px 0 #7897b6,
-        0 5px 9px rgba(6,48,91,.13),
-        inset 0 1px 0 rgba(255,255,255,.95) !important;
-
-    transition:
-        transform .12s ease,
-        box-shadow .12s ease,
-        background .12s ease !important;
-}
-
-div.stButton > button:hover {
-    border-color: #126bc0 !important;
-
-    color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #1685db 0%,
-            #075ca8 100%
-        ) !important;
-
-    transform:
-        translateY(-1px) !important;
-
-    box-shadow:
-        0 4px 0 #06477f,
-        0 7px 13px rgba(4,74,135,.24),
-        inset 0 1px 0 rgba(255,255,255,.28) !important;
-}
-
-div.stButton > button:active {
-    transform:
-        translateY(2px) !important;
-
-    box-shadow:
-        0 1px 0 #06477f,
-        0 3px 6px rgba(4,74,135,.18) !important;
-}
-
-div.stButton > button:disabled {
-    color: #8293a7 !important;
-    background: #eef3f7 !important;
-    border-color: #c5d2df !important;
-    box-shadow: none !important;
-}
-
-
-/* =====================================================
-   PT REGISTER TOOLBAR — ONLY THESE 4 BUTTONS
-   ALL / COMPLETED / ONGOING / REFRESH DATA
-   NORMAL = WHITE SHINING
-   HOVER = DEEP OCEAN BLUE
-   ===================================================== */
-
-/* The toolbar is the horizontal block containing the
-   Search input. Columns 2–5 are the four buttons. */
-
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(2) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(3) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(4) button,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(5) button {
-
-    background: #ffffff !important;
-    background-image: none !important;
-
-    color:
-        #075985 !important;
-
-    border:
-        1.5px solid #b8cfe0 !important;
-
-    box-shadow:
-        0 2px 4px rgba(0,0,0,.12),
-        inset 0 1px 0 #ffffff !important;
-
-    transition:
-        background .15s ease,
-        color .15s ease,
-        border-color .15s ease,
-        transform .15s ease,
-        box-shadow .15s ease !important;
-}
-
-
-/* Mouse over ONLY the four toolbar buttons */
-
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(2) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(3) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(4) button:hover,
-[data-testid="stHorizontalBlock"]:has(
-    [data-testid="stTextInput"]
-) > [data-testid="column"]:nth-child(5) button:hover {
-
-    background:
-        linear-gradient(
-            180deg,
-            #0b6f9f 0%,
-            #064f73 52%,
-            #043d5c 100%
-        ) !important;
-
-    color:
-        #ffffff !important;
-
-    border-color:
-        #064f73 !important;
-
-    transform:
-        translateY(-1px) !important;
-
-    box-shadow:
-        0 4px 0 #032f46,
-        0 8px 15px rgba(4,79,115,.30),
-        inset 0 1px 0 rgba(255,255,255,.28) !important;
-}
-
-
-/* =====================================================
-   KPI CARDS
-   ===================================================== */
-
-.kpi-card {
-    position: relative;
-    height: 125px;
-    overflow: hidden;
-
-    background:
-        linear-gradient(
-            145deg,
-            #ffffff 0%,
-            #ffffff 72%,
-            #edf4fa 100%
-        );
-
-    border:
-        1.5px solid #c2d3e4;
-
-    border-top:
-        4px solid #176fc1;
-
-    border-radius: 8px;
-
-    padding: 17px 16px;
-
-    box-shadow:
-        0 4px 10px rgba(6,48,91,.12),
-        0 1px 2px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,.98);
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease;
-}
-
-.kpi-card:hover {
-    transform: translateY(-2px);
-
-    box-shadow:
-        0 7px 16px rgba(6,48,91,.17),
-        0 2px 4px rgba(6,48,91,.08),
-        inset 0 1px 0 rgba(255,255,255,1);
-}
-
-.kpi-card.completed {
-    border-top-color: #19a657;
-}
-
-
-.kpi-card.ongoing {
-    border-top-color: #f18d05;
-}
-
-.kpi-card.approved {
-    border-top-color: #176fc1;
-}
-
-.kpi-card.pending {
-    border-top-color: #d94b4b;
-}
-
-
-/* =====================================================
-   KPI ICONS
-   ===================================================== */
-
-.kpi-icon {
-    display: none !important;
-}
-
-
-
-
-/* =====================================================
-   TOTAL PT — REMOVE ICON ONLY
-   ===================================================== */
-
-.kpi-card.total .kpi-icon {
-    display: none;
-}
-
-.kpi-card.total .kpi-content {
-    margin-left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-
+/* SHOW Deploy button */
+[data-testid="stAppDeployButton"] {
+    visibility: visible !important;
     display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    text-align: center !important;
+    opacity: 1 !important;
 }
 
-
-/* =====================================================
-   KPI TEXT — HIGH CONTRAST
-   ===================================================== */
-
-/* Keep all KPI text centered horizontally and vertically like TOTAL PT. */
-.kpi-card .kpi-content {
-    margin-left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-}
-
-.kpi-content {
-    margin-left: 78px;
-}
-
-.kpi-label {
-    color: #092d5c;
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: .15px;
-
-    text-align: center;
-}
-
-.kpi-card.completed .kpi-label {
-    color: #08783c;
-}
-
-
-.kpi-card.ongoing .kpi-label {
-    color: #b96700;
-}
-
-.kpi-card.approved .kpi-label {
-    color: #0a4e91;
-}
-
-.kpi-card.pending .kpi-label {
-    color: #b33a3a;
-}
-
-/* Keep the two document KPI titles on a single line. */
-.kpi-card.approved .kpi-label,
-.kpi-card.pending .kpi-label {
-    white-space: nowrap !important;
-    font-size: 13px !important;
-    letter-spacing: 0 !important;
-}
-
-.kpi-value {
-    font-size: 42px;
-    line-height: 1;
-    font-weight: 900;
-    margin-top: 6px;
-    color: #0a4e91;
-
-    text-align: center;
-}
-
-.kpi-value.green {
-    color: #159447 !important;
-}
-
-
-.kpi-value.orange {
-    color: #f0a000 !important;
-}
-
-.kpi-value.approved {
-    color: #176fc1 !important;
-}
-
-.kpi-value.pending {
-    color: #d94b4b !important;
-}
-
-.kpi-description {
-    color: #304d6d;
-    font-size: 11px;
-    font-weight: 700;
-    margin-top: 7px;
-
-    text-align: center;
-}
-
-.kpi-pattern {
+/* Hide Streamlit decoration */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
     display: none !important;
 }
 
-
-
-.kpi-arrow {
+/* Hide status widget */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
     display: none !important;
-}
-
-
-/* =====================================================
-   PT REGISTER PANEL
-   ===================================================== */
-
-.register-wrap {
-    background: #ffffff;
-
-    border:
-        1.5px solid #b7cce1;
-
-    border-radius:
-        7px 7px 0 0;
-
-    overflow: hidden;
-
-    box-shadow:
-        0 4px 10px rgba(7,45,82,.12);
-}
-
-.register-title {
-    height: 40px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 17px;
-
-    color: #ffffff;
-
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: .25px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0a4f91 0%,
-            #063b70 100%
-        );
-
-    border-bottom:
-        2px solid #176fc1;
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.16);
-}
-
-.register-icon {
-    margin-right: 9px;
-    color: #ffffff;
-}
-
-
-/* =====================================================
-   TABLE HEADER — REFERENCE MATCH
-   ===================================================== */
-
-.table-head {
-    min-height: 43px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0b4f91 0%,
-            #063c73 100%
-        );
-
-    color: #ffffff;
-
-    border-right:
-        1px solid #8caecc;
-
-    border-top:
-        1px solid #2879ba;
-
-    border-bottom:
-        1px solid #052f5b;
-
-    font-size: 12px;
-    line-height: 1.15;
-    font-weight: 900;
-
-    text-align: center;
-    padding: 5px 3px;
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.16);
-}
-
-
-/* =====================================================
-   TABLE CELLS — DARK BLUE CLEAR TEXT
-   ===================================================== */
-
-.table-cell {
-    min-height: 43px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    background:
-        #ffffff;
-
-    border-right:
-        1px solid #c8d6e4;
-
-    border-bottom:
-        1px solid #c8d6e4;
-
-    color:
-        #092d5c;
-
-    font-size:
-        11px;
-
-    line-height:
-        1.18;
-
-    font-weight:
-        600;
-
-    text-align:
-        center;
-
-    padding:
-        5px 4px;
-
-    word-break:
-        break-word;
-}
-
-.table-cell.alt {
-    background:
-        #f3f7fb;
-}
-
-.table-cell.left {
-    justify-content:
-        flex-start;
-
-    text-align:
-        left;
-
-    font-weight:
-        650;
-}
-/* =====================================================
-   STATUS — TEXT ONLY
-   ===================================================== */
-
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    min-width: auto;
-    padding: 0;
-
-    border-radius: 0;
-
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: .1px;
-
-    white-space: nowrap;
-}
-
-
-/* COMPLETED — GREEN TEXT ONLY */
-
-.status-completed {
-    background: transparent !important;
-    border: none !important;
-    color: #16A34A !important;
-    box-shadow: none !important;
-}
-
-
-/* ONGOING — ORANGE TEXT ONLY */
-
-.status-ongoing {
-    background: transparent !important;
-    border: none !important;
-    color: #EA8A00 !important;
-    box-shadow: none !important;
-}
-/* =====================================================
-   STREAMLIT TABLE ACTION BUTTONS
-   ===================================================== */
-
-.table-cell + div button,
-div[data-testid="column"] div.stButton > button {
-    font-size: 11px !important;
-    font-weight: 900 !important;
-}
-/* =====================================================
-   RECORD BAR / PAGINATION
-   ===================================================== */
-
-.record-bar {
-    height: 38px;
-
-    display: flex;
-    align-items: center;
-
-    padding: 0 12px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff 0%,
-            #edf3f8 100%
-        );
-
-    color:
-        #173f6d;
-
-    font-size:
-        11px;
-
-    font-weight:
-        800;
-
-    border-top:
-        1px solid #c4d4e3;
-
-    border-bottom:
-        1px solid #c4d4e3;
-
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.9);
-}
-
-
-/* =====================================================
-   DOWNLOAD BUTTON
-   ===================================================== */
-
-div.stDownloadButton > button {
-    border-radius: 6px !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #ffffff,
-            #e9f1f8
-        ) !important;
-
-    border:
-        1.5px solid #9eb8d2 !important;
-
-    color:
-        #083c76 !important;
-
-    font-size:
-        11px !important;
-
-    font-weight:
-        900 !important;
-
-    box-shadow:
-        0 3px 0 #7895b1,
-        0 5px 8px rgba(8,53,94,.12) !important;
-}
-
-div.stDownloadButton > button:hover {
-    color: #ffffff !important;
-
-    background:
-        linear-gradient(
-            180deg,
-            #1685db,
-            #075ca8
-        ) !important;
-
-    border-color:
-        #075ca8 !important;
-}
-
-
-/* =====================================================
-   INFO / ALERT
-   ===================================================== */
-
-div[data-testid="stAlert"] {
-    border-radius: 6px !important;
-
-    color: #123b68 !important;
-
-    box-shadow:
-        0 2px 7px rgba(20,70,100,.08) !important;
-}
-
-
-/* =====================================================
-   FOOTER
-   ===================================================== */
-
-.footer {
-    height: 34px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    color: #ffffff;
-
-    background:
-        linear-gradient(
-            180deg,
-            #0a4f91 0%,
-            #063563 100%
-        );
-
-    font-size:
-        11px;
-
-    font-weight:
-        800;
-
-    border-top:
-        2px solid #176fc1;
-
-    box-shadow:
-        0 -2px 8px rgba(0,0,0,.12);
-}
-
-
-/* =====================================================
-   SCROLLBAR
-   ===================================================== */
-
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #e9f0f6;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #8daac4;
-    border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #527fa6;
 }
 
 </style>
-""",
-    unsafe_allow_html=True
+""", unsafe_allow_html=True)
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# ============================================================
+# IMAGE TO BASE64
+# ============================================================
+
+def image_to_base64(file_path):
+
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        return ""
+
+    try:
+
+        with open(file_path, "rb") as file:
+
+            return base64.b64encode(
+                file.read()
+            ).decode("utf-8")
+
+    except Exception:
+
+        return ""
+
+
+# ============================================================
+# COMPANY LOGO
+# ============================================================
+
+logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
+
+logo_base64 = image_to_base64(logo_path)
+
+
+# ============================================================
+# FILE CHECK
+# ============================================================
+
+if not logo_base64:
+
+    st.error(
+        "jsw_jfe_logo.jpg not found. "
+        "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
+    )
+
+
+# ============================================================
+# DATE AND TIME
+# ============================================================
+
+now = datetime.now()
+
+current_date = now.strftime(
+    "%d %b %Y"
+).upper()
+
+current_time = now.strftime(
+    "%I:%M %p"
 )
+
+
+
+# ============================================================
+# GOOGLE SHEET
+# ============================================================
+
+GOOGLE_SHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
+SHEET_NAME = "PT"
+
+GOOGLE_SHEET_URL = (
+    f"https://docs.google.com/spreadsheets/d/"
+    f"{GOOGLE_SHEET_ID}/gviz/tq?"
+    f"tqx=out:csv&sheet={SHEET_NAME}"
+)
+
+#=============================================================
+#HEADER CODE
+#=============================================================
+import streamlit as st
+import streamlit.components.v1 as components
+import base64
+from pathlib import Path
+from datetime import datetime
+
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -1253,6 +203,7 @@ st.markdown(
     }
 
 
+
     [data-testid="stDecoration"] {
         display: none !important;
         height: 0 !important;
@@ -1261,13 +212,13 @@ st.markdown(
     }
 
     .block-container {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-        padding-bottom: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-        max-width: 100% !important;
-    }
+    padding-top: 0 !important;
+    margin-top: -30px !important;
+    padding-bottom: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
 
     .stApp {
         margin-top: 0 !important;
@@ -1276,7 +227,8 @@ st.markdown(
 
     iframe {
         display: block !important;
-        margin-top: -0px !important;
+        margin-top: -20px !important;
+        margin-bottom: -70px !important;
         padding-top: 0 !important;
         border: 0 !important;
     }
@@ -1376,11 +328,9 @@ header_html = """
    ============================================================ */
 
 .psm-header {
-
     position: relative;
-
-    width: 100%;
-
+    width: calc(100% + 10px);
+    margin-left: -5px;
     height: 90px;
 
     overflow: hidden;
@@ -1449,7 +399,7 @@ header_html = """
 
     border-radius: 5px;
 
-    padding: 4px;
+    padding: 10px;
 
     display: flex;
 
@@ -1616,6 +566,7 @@ header_html = """
 
 }
 
+
 /* ============================================================
    SUB-SUBTITLE / TAGLINE
    ============================================================ */
@@ -1654,7 +605,7 @@ header_html = """
 
     right: 16px;
 
-    top: 0;
+    top: 6px;
 
     width: 15%;
 
@@ -1691,7 +642,7 @@ header_html = """
 
     position: absolute;
 
-    left: 15px;
+    left: 0;
 
     top: 6px;
 
@@ -1794,7 +745,7 @@ header_html = """
 
     width: 100%;
 
-    height: 7px;
+    height: 9px;
 
     background: #f28c00;
 
@@ -1978,790 +929,1186 @@ components.html(
     height=114,
     scrolling=False
 )
-#======================================================================================================================
-# =========================================================
-# RESET FILTER
-# =========================================================
 
-def reset_pt_filters():
-    st.session_state.status_filter = "All"
-    st.session_state.page_number = 1
-    st.session_state.department_selector = "All Departments"
+# ============================================================
+# CSS
+# ============================================================
+
+st.markdown("""
+<style>
+
+/* ============================================================
+   PAGE
+   ============================================================ */
+
+.stApp {
+    background: #ffffff !important;
+}
+
+.main .block-container {
+    max-width: 100% !important;
+    padding: 0 28px 20px 28px !important;
+}
+
+footer {
+    visibility: hidden !important;
+}
+
+* {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+/* ============================================================
+   DEPARTMENT FILTER
+   SMALL + LEFT ALIGNED
+   ============================================================ */
+
+.department-area {
+    width: 18%;
+    margin-bottom: 18px;
+}
+
+.department-area div[data-baseweb="select"] > div {
+    min-height: 40px !important;
+    height: 40px !important;
+    background: #f6f8fb !important;
+    border: 1px solid #cbd8e6 !important;
+    border-radius: 5px !important;
+    box-shadow: none !important;
+}
+
+.department-area div[data-baseweb="select"] span {
+    color: #173f70 !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+/* ============================================================
+   SECTION CONTAINERS
+   PROCESS TECHNOLOGY + KPI CARDS
+   PT REGISTER + SEARCH + TABLE
+
+   These are Streamlit native bordered containers. Keeping the
+   border on the actual Streamlit container makes the border
+   wrap all widgets/elements inside it correctly.
+   ============================================================ */
+
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #ffffff !important;
+    border: 1px solid #cbd9e7 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(18, 63, 115, 0.04) !important;
+    margin-bottom: 18px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-radius: 8px !important;
+    padding: 20px !important;
+    overflow: visible !important;
+}
+
+/* Bottom space is created by a real child inside the Streamlit
+   bordered container. This reliably makes the outer border extend
+   below the KPI cards. */
+.kpi-section-spacer {
+    height: 32px !important;
+    width: 100%;
+    display: block;
+}
+
+/* Do not use artificial min-height here; Streamlit sizes the border
+   from its actual children, including the spacer above. */
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-card) > div {
+    padding-bottom: 0 !important;
+}
+
+/* ============================================================
+   PROCESS TECHNOLOGY TITLE
+   NO SEPARATE BORDER
+   ============================================================ */
+
+.section-title {
+    color: #17477d;
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    margin: 0 0 18px 0;
+    padding: 0;
+}
+
+/* ============================================================
+   KPI CARDS
+   NO BORDER / NO SEPARATE CONTAINER
+   ONLY LEFT ACCENT
+   ============================================================ */
+
+.kpi-card {
+    position: relative;
+    min-height: 128px;
+    height: 128px;
+    background: #ffffff;
+    border: 1px solid #d3deea !important;
+    border-radius: 6px !important;
+    padding: 13px 12px 10px 18px;
+    box-sizing: border-box;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(18, 63, 115, 0.045) !important;
+}
+
+.kpi-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: var(--accent);
+}
+
+.kpi-label {
+    color: var(--accent);
+    font-size: 14px;
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    margin-bottom: 8px;
+}
+
+.kpi-value {
+    color: var(--accent);
+    font-size: 40px;
+    line-height: 1;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.kpi-subtitle {
+    color: var(--accent);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 600;
+    opacity: 0.82;
+}
+
+/* ============================================================
+   PT REGISTER
+   TITLE + SEARCH + TABLE ARE INSIDE ONE BORDERED CONTAINER
+   ============================================================ */
+
+.register-title {
+    color: #17477d;
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: 0.2px;
+    margin: 0 0 13px 0;
+}
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+
+div[data-testid="stTextInput"] {
+    margin-bottom: 9px !important;
+}
+
+div[data-testid="stTextInput"] input {
+    min-height: 40px !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd8e6 !important;
+    border-radius: 5px !important;
+    color: #173f70 !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+div[data-testid="stTextInput"] input:focus {
+    border-color: #1c6fba !important;
+    box-shadow: 0 0 0 1px #1c6fba !important;
+}
+
+/* ============================================================
+   TABLE SCROLL
+   APPROX. 10 RECORDS AT A TIME
+   ============================================================ */
+
+.table-scroll {
+    height: 552px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid #ccd8e5;
+    border-radius: 5px;
+    background: #ffffff;
+}
+
+.table-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+    background: #aebfd0;
+    border-radius: 4px;
+}
+
+/* ============================================================
+   TABLE
+   ============================================================ */
+
+.pt-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    background: #ffffff;
+}
+
+.pt-table th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #17477d;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 750;
+    padding: 12px 10px;
+    text-align: left;
+    border-right: 1px solid rgba(255,255,255,0.25);
+    border-bottom: 1px solid #17477d;
+    white-space: nowrap;
+}
+
+.pt-table td {
+    color: #173f70;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 11px 10px;
+    border-right: 1px solid #d9e2ec;
+    border-bottom: 1px solid #d9e2ec;
+    vertical-align: middle;
+    word-wrap: break-word;
+    background: #ffffff;
+}
+
+.pt-table tbody tr:nth-child(even) td {
+    background: #f8fbfe;
+}
+
+.pt-table tbody tr:hover td {
+    background: #eef5fb;
+}
+
+/* ============================================================
+   TABLE WIDTHS
+   ============================================================ */
+
+.sr-col {
+    width: 6%;
+    text-align: center !important;
+}
+
+.pt-col {
+    width: 19%;
+}
+
+.dept-col {
+    width: 14%;
+}
+
+.name-col {
+    width: 28%;
+}
+
+.status-col {
+    width: 15%;
+    text-align: center !important;
+}
+
+.document-col {
+    width: 18%;
+    text-align: center !important;
+}
+
+/* ============================================================
+   STATUS
+   ============================================================ */
+
+.status-badge {
+    display: inline-block;
+    min-width: 82px;
+    padding: 4px 9px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.2px;
+    border: 1px solid transparent;
+}
+
+.status-completed {
+    color: #13834a;
+    background: #eef9f2;
+    border-color: #8ed0aa;
+}
+
+.status-pending {
+    color: #9a6500;
+    background: #fff9e8;
+    border-color: #e3bc55;
+}
+
+.status-ongoing {
+    color: #b77a00;
+    background: #fff9e8;
+    border-color: #e3bc55;
+}
+
+.status-approved {
+    color: #1768a9;
+    background: #edf5fc;
+    border-color: #9bc2e2;
+}
+
+.status-default {
+    color: #5d6874;
+    background: #f3f5f7;
+    border-color: #cbd3db;
+}
+
+/* ============================================================
+   DOCUMENT LINK
+   ============================================================ */
+
+.document-link {
+    color: #155b9e !important;
+    text-decoration: none !important;
+    font-weight: 700;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.document-link:hover {
+    color: #c7353d !important;
+    text-decoration: underline !important;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+
+.empty-state {
+    padding: 28px 18px;
+    text-align: center;
+    color: #718096;
+    font-size: 13px;
+    border: 1px dashed #cbd7e4;
+    border-radius: 5px;
+    background: #fafcff;
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+    .main .block-container {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+
+    .department-area {
+        width: 100%;
+    }
+
+    .kpi-card {
+        height: 118px;
+    }
+
+    .kpi-value {
+        font-size: 34px;
+    }
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 
-# =========================================================
-# FILTER SECTION
-# =========================================================
+# ============================================================
+# LOAD DATA
+# ============================================================
 
-filter_month, filter_department, filter_reset = st.columns(
-    [1.0, 1.0, 0.34],
-    gap="small"
+@st.cache_data(ttl=10)
+def load_data():
+
+    try:
+        response = requests.get(
+            GOOGLE_SHEET_URL,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        df = pd.read_csv(
+            StringIO(response.text)
+        )
+
+        if df.empty:
+            return pd.DataFrame(), None
+
+        df = df.dropna(
+            axis=1,
+            how="all"
+        )
+
+        df.columns = [
+            str(col).strip()
+            for col in df.columns
+        ]
+
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = (
+                    df[col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+
+        return df, None
+
+    except Exception as e:
+        return pd.DataFrame(), str(e)
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def normalize_column_name(name):
+    return re.sub(
+        r"[^a-z0-9]",
+        "",
+        str(name).lower()
+    )
+
+
+def find_column(df, possible_names):
+
+    normalized_columns = {
+        normalize_column_name(col): col
+        for col in df.columns
+    }
+
+    for name in possible_names:
+
+        key = normalize_column_name(name)
+
+        if key in normalized_columns:
+            return normalized_columns[key]
+
+    for name in possible_names:
+
+        key = normalize_column_name(name)
+
+        for normalized, original in normalized_columns.items():
+
+            if (
+                key in normalized
+                or normalized in key
+            ):
+                return original
+
+    return None
+
+
+def clean_value(value):
+
+    if pd.isna(value):
+        return ""
+
+    value = str(value).strip()
+
+    if value.lower() in ["nan", "none"]:
+        return ""
+
+    return value
+
+
+def get_status_class(status):
+
+    status = clean_value(status).upper()
+
+    if "COMPLETED" in status:
+        return "status-completed"
+
+    if "PENDING" in status:
+        return "status-pending"
+
+    if "ONGOING" in status:
+        return "status-ongoing"
+
+    if "APPROVED" in status:
+        return "status-approved"
+
+    return "status-default"
+
+
+def percentage(value, total):
+
+    if total == 0:
+        return 0
+
+    return round(
+        (value / total) * 100
+    )
+
+
+# ============================================================
+# GET DATA
+# ============================================================
+
+df, error = load_data()
+
+if error:
+
+    st.markdown(
+        f"""
+<div class="empty-state">
+<b>Unable to load the PT worksheet.</b>
+<br><br>
+Please ensure the Google Sheet is accessible and the worksheet is named <b>PT</b>.
+<br><br>
+{html.escape(error)}
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    st.stop()
+
+
+if df.empty:
+
+    st.markdown(
+        """
+<div class="empty-state">
+No data was found in the PT worksheet.
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    st.stop()
+
+
+# ============================================================
+# FIND COLUMNS
+# ============================================================
+
+pt_no_col = find_column(
+    df,
+    [
+        "PT No.",
+        "PT No",
+        "PT Number",
+        "PT Number.",
+        "Permit No",
+        "Permit Number"
+    ]
 )
 
-with filter_month:
-    st.markdown(
-        "<div class='month-filter-anchor' style='height:22px;'></div>",
-        unsafe_allow_html=True
-    )
+department_col = find_column(
+    df,
+    [
+        "Department",
+        "Dept",
+        "Department Name"
+    ]
+)
 
-    selected_month = st.selectbox(
-        "Month",
-        [
-            "August 2026",
-            "July 2026",
-            "June 2026",
-            "May 2026",
-            "April 2026",
-            "March 2026"
-        ],
-        index=0
-    )
+name_col = find_column(
+    df,
+    [
+        "Name of PT",
+        "PT Name",
+        "Name",
+        "Process Technology",
+        "Description"
+    ]
+)
 
-with filter_department:
-    st.markdown(
-        "<div class='department-filter-anchor' style='height:22px;'></div>",
-        unsafe_allow_html=True
-    )
+status_col = find_column(
+    df,
+    [
+        "Status",
+        "PT Status",
+        "Current Status"
+    ]
+)
 
-    department_values = (
-        df["Department"]
+approved_col = find_column(
+    df,
+    [
+        "Approved (Yes/No)",
+        "Approved(Yes/No)",
+        "Approved",
+        "Approval",
+        "Approved Yes No",
+        "Approved (Yes / No)",
+        "Approval Status"
+    ]
+)
+
+# IMPORTANT: The dashboard's "View Document" column must use the
+# URL stored in "Attach PT Softcopy Link". Do not use a column
+# named "View Document" because that may contain only a date/display value.
+document_col = find_column(
+    df,
+    [
+        "Attach PT Softcopy Link",
+        "Attach PT Softcopy Links",
+        "PT Softcopy Link",
+        "PT Softcopy Links",
+        "Attach PT Soft Copy Link",
+        "Attach PT Soft Copy Links",
+        "Softcopy Link",
+        "Soft Copy Link",
+        "Document Link",
+        "Document URL",
+        "File Link",
+        "Link",
+        "URL"
+    ]
+)
+
+# Fallbacks
+if pt_no_col is None:
+    pt_no_col = df.columns[0]
+
+if department_col is None and len(df.columns) > 1:
+    department_col = df.columns[1]
+
+if name_col is None and len(df.columns) > 2:
+    name_col = df.columns[2]
+
+if status_col is None and len(df.columns) > 3:
+    status_col = df.columns[3]
+
+# Do NOT fall back to a generic "View Document" / date column.
+# The document button is intentionally tied to the softcopy URL column.
+
+
+# ============================================================
+# DEPARTMENT FILTER
+# SMALL + LEFT SIDE
+# ============================================================
+
+st.markdown(
+    '<div class="department-area">',
+    unsafe_allow_html=True
+)
+
+if department_col:
+
+    departments = (
+        df[department_col]
         .fillna("")
         .astype(str)
         .str.strip()
     )
 
-    department_options = ["All Departments"] + sorted(
+    departments = sorted(
         [
-            value for value in department_values.unique().tolist()
-            if value and value.lower() != "nan"
-        ],
-        key=lambda x: x.lower()
+            d for d in departments.unique()
+            if d
+        ]
     )
+
+    department_options = [
+        "All Departments"
+    ] + departments
 
     selected_department = st.selectbox(
         "Department",
         department_options,
-        key="department_selector"
+        label_visibility="collapsed"
     )
 
-with filter_reset:
-    st.markdown(
-        "<div style='height:46px;'></div>",
-        unsafe_allow_html=True
-    )
+else:
+    selected_department = "All Departments"
 
-    st.button(
-        "↻ Reset Filters",
-        use_container_width=True,
-        key="reset_pt_filters_button",
-        on_click=reset_pt_filters
-    )
+st.markdown(
+    '</div>',
+    unsafe_allow_html=True
+)
 
 
-# =========================================================
-# FILTER DATA
-# =========================================================
+# ============================================================
+# APPLY DEPARTMENT FILTER
+# ============================================================
 
 filtered_df = df.copy()
 
-if selected_department != "All Departments":
+if (
+    selected_department != "All Departments"
+    and department_col
+):
+
     filtered_df = filtered_df[
-        filtered_df["Department"]
-        .fillna("")
+        filtered_df[department_col]
         .astype(str)
         .str.strip()
         == selected_department
     ]
 
-filtered_df[STATUS_COLUMN] = (
-    filtered_df[STATUS_COLUMN]
-    .fillna("")
-    .astype(str)
-    .str.strip()
-    .str.lower()
-)
 
-
-# =========================================================
-# KPI
-# =========================================================
+# ============================================================
+# KPI CALCULATIONS
+# ============================================================
 
 total_pt = len(filtered_df)
 
-completed = int(
-    (filtered_df[STATUS_COLUMN] == "completed").sum()
-)
-
-ongoing = int(
-    (filtered_df[STATUS_COLUMN] == "ongoing").sum()
-)
-
-# =========================================================
-# APPROVAL KPI
-# Source column: Approved  (Yes/No)
-# This column is NOT a required column.
-# It is used only for the two approval KPI boxes.
-# =========================================================
-
-def _find_approval_column(dataframe):
-    target = normalize_column_name("Approved  (Yes/No)")
-    for column in dataframe.columns:
-        if normalize_column_name(column) == target:
-            return column
-    return None
+approved = 0
+pending = 0
+completed = 0
+ongoing = 0
 
 
-_APPROVAL_SOURCE_COLUMN = _find_approval_column(df)
+# ------------------------------------------------------------
+# APPROVED / PENDING FOR APPROVAL
+# ------------------------------------------------------------
 
-if _APPROVAL_SOURCE_COLUMN is not None:
-    approval_values = (
-        df[_APPROVAL_SOURCE_COLUMN]
+if approved_col:
+
+    approval_series = (
+        filtered_df[approved_col]
         .fillna("")
         .astype(str)
         .str.strip()
-        .str.lower()
+        .str.upper()
     )
 
-    approved_documents = int(
-        (approval_values == "yes").sum()
-    )
+    approved = approval_series.isin(
+        [
+            "YES",
+            "Y",
+            "APPROVED",
+            "TRUE",
+            "1"
+        ]
+    ).sum()
 
-    pending_documents = int(
-        (approval_values == "no").sum()
-    )
+    pending = approval_series.isin(
+        [
+            "NO",
+            "N",
+            "PENDING",
+            "FALSE",
+            "0"
+        ]
+    ).sum()
+
 else:
-    approved_documents = 0
-    pending_documents = 0
 
-completion_percentage = (
-    completed / total_pt * 100
-    if total_pt
-    else 0
-)
+    if status_col:
 
-# Five KPI boxes are displayed in one row.
-k1, k2, k3, k4, k5 = st.columns(5, gap="small")
-
-cards = [
-    ("", "TOTAL PT", total_pt, "", "blue", "total"),
-    (
-        "",
-        "APPROVED",
-        approved_documents,
-        "",
-        "approved",
-        "approved"
-    ),
-    (
-        "",
-        "PENDING",
-        pending_documents,
-        "",
-        "pending",
-        "pending"
-    ),
-    (
-        "",
-        "COMPLETED",
-        completed,
-        f"",
-        "green",
-        "completed"
-    ),
-    (
-        "",
-        "ONGOING",
-        ongoing,
-        "",
-        "orange",
-        "ongoing"
-    )
-]
-
-for column, card in zip([k1, k2, k3, k4, k5], cards):
-    icon, label, value, description, color, extra = card
-
-    with column:
-        st.html(
-            f"""
-<div class="kpi-card {extra}">
-    <div class="kpi-icon">{icon}</div>
-    <div class="kpi-content">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value {color}">{value}</div>
-        <div class="kpi-description">{description}</div>
-    </div>
-    <div class="kpi-pattern"></div>
-    <div class="kpi-arrow">&gt;</div>
-</div>
-"""
+        status_series = (
+            filtered_df[status_col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
         )
 
+        approved = status_series.str.contains(
+            "APPROVED",
+            na=False
+        ).sum()
 
-# =========================================================
-# PT REGISTER
-# =========================================================
-
-st.html(
-    """
-<div class="register-wrap">
-    <div class="register-title">
-        <span class="register-icon">▣</span>
-        PT REGISTER
-    </div>
-</div>
-"""
-)
+        pending = status_series.str.contains(
+            "PENDING",
+            na=False
+        ).sum()
 
 
-# =========================================================
-# TOOLBAR
-# =========================================================
+# ------------------------------------------------------------
+# COMPLETED / ONGOING
+# ------------------------------------------------------------
 
-search_col, all_col, completed_col, ongoing_col, refresh_col = st.columns(
-    [2.8, 0.55, 0.85, 0.75, 1.05],
-    gap="small"
-)
+if status_col:
 
-with search_col:
-    search_text = st.text_input(
-        "Search",
-        placeholder="Search PT No., Name of PT, Department...",
-        label_visibility="collapsed",
-        key="pt_search"
-    )
-
-with all_col:
-    if st.button("All", use_container_width=True, key="pt_all"):
-        st.session_state.status_filter = "All"
-        st.session_state.page_number = 1
-        st.rerun()
-
-with completed_col:
-    if st.button("Completed", use_container_width=True, key="pt_completed"):
-        st.session_state.status_filter = "Completed"
-        st.session_state.page_number = 1
-        st.rerun()
-
-with ongoing_col:
-    if st.button("Ongoing", use_container_width=True, key="pt_ongoing"):
-        st.session_state.status_filter = "Ongoing"
-        st.session_state.page_number = 1
-        st.rerun()
-
-with refresh_col:
-    if st.button("↻ Refresh Data", use_container_width=True, key="pt_refresh"):
-        st.cache_data.clear()
-        st.rerun()
-
-
-# =========================================================
-# SEARCH + STATUS
-# =========================================================
-
-display_df = filtered_df.copy()
-
-if search_text.strip():
-    q = search_text.strip().lower()
-
-    search_mask = (
-        display_df["PT No."]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.contains(q, regex=False)
-        |
-        display_df["Department"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.contains(q, regex=False)
-        |
-        display_df["Name of PT"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.contains(q, regex=False)
-        |
-        display_df[STATUS_COLUMN]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.contains(q, regex=False)
-    )
-
-    display_df = display_df[search_mask]
-
-if st.session_state.status_filter != "All":
-    display_df = display_df[
-        display_df[STATUS_COLUMN]
+    status_series = (
+        filtered_df[status_col]
         .fillna("")
         .astype(str)
         .str.strip()
-        .str.lower()
-        ==
-        st.session_state.status_filter.lower()
-    ]
-
-
-# =========================================================
-# PAGINATION
-# =========================================================
-
-ROWS_PER_PAGE = 5
-total_entries = len(display_df)
-
-total_pages = max(
-    1,
-    (total_entries + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE
-)
-
-if st.session_state.page_number > total_pages:
-    st.session_state.page_number = total_pages
-
-page_number = st.session_state.page_number
-
-start_index = (page_number - 1) * ROWS_PER_PAGE
-end_index = start_index + ROWS_PER_PAGE
-
-page_df = display_df.iloc[start_index:end_index].copy()
-
-
-# =========================================================
-# TABLE CSS
-# =========================================================
-
-st.markdown(
-    """
-<style>
-.pt-simple-table {
-    width: 100%;
-    overflow-x: auto;
-    border: 1px solid #c8d6e4;
-    background: #ffffff;
-}
-
-.pt-simple-inner {
-    min-width: 900px;
-}
-
-.pt-simple-header,
-.pt-simple-row {
-    display: grid;
-    grid-template-columns:
-        0.60fr
-        1.10fr
-        1.45fr
-        2.20fr
-        1.20fr
-        1.30fr;
-}
-
-.pt-simple-header {
-    min-height: 44px;
-    background: linear-gradient(
-        180deg,
-        #0b4f91 0%,
-        #063c73 100%
-    );
-}
-
-.pt-simple-header > div {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 5px 4px;
-    color: #ffffff;
-    border-right: 1px solid #8caecc;
-    border-bottom: 1px solid #052f5b;
-    font-size: 12px;
-    font-weight: 900;
-    line-height: 1.15;
-    text-align: center;
-}
-
-.pt-simple-cell {
-    min-height: 43px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 5px 7px;
-    background: #ffffff;
-    color: #092d5c;
-    border-right: 1px solid #c8d6e4;
-    border-bottom: 1px solid #c8d6e4;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.18;
-    text-align: center;
-    word-break: break-word;
-}
-
-.pt-simple-cell.alt {
-    background: #f3f7fb;
-}
-
-.pt-simple-cell.left {
-    justify-content: flex-start;
-    text-align: left;
-}
-
-.pt-simple-status-completed {
-    color: #16A34A;
-    font-weight: 900;
-}
-
-.pt-simple-status-ongoing {
-    color: #EA8A00;
-    font-weight: 900;
-}
-
-.pt-view-link {
-    width: 100%;
-    min-height: 43px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
-    color: #174b87 !important;
-    text-decoration: none !important;
-    font-size: 11px;
-    font-weight: 900;
-    border: 0;
-    padding: 0;
-    margin: 0;
-    cursor: pointer;
-    font-family: Arial, Helvetica, sans-serif;
-}
-
-.pt-view-link.alt {
-    background: #f3f7fb;
-}
-
-.pt-view-link:hover {
-    background: #e8f1f9;
-    color: #075ca8 !important;
-}
-
-.pt-no-link {
-    width: 100%;
-    min-height: 43px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #ffffff;
-    color: #9aaabd;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.pt-no-link.alt {
-    background: #f3f7fb;
-}
-
-.pt-record-bar {
-    min-height: 38px;
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    background: linear-gradient(
-        180deg,
-        #ffffff 0%,
-        #edf3f8 100%
-    );
-    color: #173f6d;
-    font-size: 11px;
-    font-weight: 800;
-    border-top: 1px solid #c4d4e3;
-    border-bottom: 1px solid #c4d4e3;
-}
-
-.pt-pagination {
-    height: 38px !important;
-    min-height: 38px !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #173f6d;
-    font-size: 11px;
-    font-weight: 800;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.pt-pagination-row [data-testid="stHorizontalBlock"] {
-    align-items: center !important;
-}
-
-.pt-pagination-row [data-testid="stVerticalBlock"] {
-    justify-content: center !important;
-    gap: 0 !important;
-}
-
-.pt-pagination-row div.stButton {
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.pt-pagination-row div.stButton > button {
-    height: 36px !important;
-    min-height: 36px !important;
-    margin: 0 !important;
-}
-</style>
-""",
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# TABLE HEADER
-# =========================================================
-
-st.html(
-    """
-<div class="pt-simple-table">
-<div class="pt-simple-inner">
-<div class="pt-simple-header">
-    <div>Sr No.</div>
-    <div>PT No.</div>
-    <div>Department</div>
-    <div>Name of PT</div>
-    <div>Status</div>
-    <div>View Document</div>
-</div>
-</div>
-</div>
-"""
-)
-
-
-# =========================================================
-# TABLE DATA
-#
-# The URL is fetched from the SAME GOOGLE SHEET ROW:
-# Attach PT Softcopy Link
-#
-# That source column is hidden from the visible table.
-# =========================================================
-
-rows_html = [
-    '<div class="pt-simple-table">',
-    '<div class="pt-simple-inner">'
-]
-
-for row_no, (_, row) in enumerate(page_df.iterrows()):
-
-    alt = "alt" if row_no % 2 else ""
-
-    sr_no = start_index + row_no + 1
-
-    pt_no = str(row["PT No."]).strip()
-    department = str(row["Department"]).strip()
-    name_pt = str(row["Name of PT"]).strip()
-    status = str(row[STATUS_COLUMN]).strip()
-
-    # =====================================================
-    # FETCH DOCUMENT LINK FROM GOOGLE SHEET ROW
-    # =====================================================
-
-    # Fetch the actual URL from the same Google Sheet row.
-    document_link = pt_document_links.get(pt_no, "")
-
-    # Fallback when the sheet cell itself contains a plain URL.
-    if not document_link:
-        raw_link = row[LINK_COLUMN]
-        if not pd.isna(raw_link):
-            candidate_link = str(raw_link).strip()
-            if re.match(r"^https?://", candidate_link, re.IGNORECASE):
-                document_link = candidate_link
-
-    # HTML escaping for displayed values.
-    def esc(value):
-        return (
-            str(value)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-            .replace("'", "&#39;")
-        )
-
-    if status.lower() == "completed":
-        status_html = (
-            '<span class="pt-simple-status-completed">'
-            'COMPLETED'
-            '</span>'
-        )
-
-    elif status.lower() == "ongoing":
-        status_html = (
-            '<span class="pt-simple-status-ongoing">'
-            'ONGOING'
-            '</span>'
-        )
-
-    else:
-        status_html = esc(status) if status else "—"
-
-    if document_link:
-
-        safe_link = (
-            document_link
-            .replace("&", "&amp;")
-            .replace('"', "&quot;")
-            .replace("<", "%3C")
-            .replace(">", "%3E")
-        )
-
-        # A normal anchor is used deliberately. Streamlit does not intercept
-        # this click, so the browser opens the exact document URL in a new tab.
-        view_html = f"""
-<a
-    class=\"pt-view-link {alt}\"
-    href=\"{safe_link}\"
-    target=\"_blank\"
-    rel=\"noopener noreferrer\"
->
-    ◉ View
-</a>
-"""
-
-    else:
-
-        view_html = f"""
-<div class=\"pt-no-link {alt}\">
-    No Link
-</div>
-"""
-
-    rows_html.append(
-        f"""
-<div class="pt-simple-row">
-
-    <div class="pt-simple-cell {alt}">
-        {esc(sr_no)}
-    </div>
-
-    <div class="pt-simple-cell {alt}">
-        {esc(pt_no)}
-    </div>
-
-    <div class="pt-simple-cell {alt} left">
-        {esc(department)}
-    </div>
-
-    <div class="pt-simple-cell {alt} left">
-        {esc(name_pt)}
-    </div>
-
-    <div class="pt-simple-cell {alt}">
-        {status_html}
-    </div>
-
-    <div class="pt-simple-cell {alt}">
-        {view_html}
-    </div>
-
-</div>
-"""
+        .str.upper()
     )
 
-rows_html.append("</div></div>")
+    completed = status_series.str.contains(
+        "COMPLETED",
+        na=False
+    ).sum()
 
-st.html(
-    "".join(rows_html)
+    ongoing = status_series.str.contains(
+        "ONGOING",
+        na=False
+    ).sum()
+
+
+approved_pct = percentage(
+    approved,
+    total_pt
+)
+
+pending_pct = percentage(
+    pending,
+    total_pt
+)
+
+completed_pct = percentage(
+    completed,
+    total_pt
+)
+
+ongoing_pct = percentage(
+    ongoing,
+    total_pt
 )
 
 
-# =========================================================
-# RECORD COUNT + PAGINATION
-# =========================================================
+# ============================================================
+# SECTION 1
+# ONE SINGLE BORDER:
+# PROCESS TECHNOLOGY DOCUMENTATION + ALL KPI CARDS
+# ============================================================
+with st.container(border=True):
 
-first_entry = start_index + 1 if total_entries else 0
-last_entry = min(end_index, total_entries)
-
-if total_pages > 1:
-
-    # Keep Showing text, Previous, Page X of Y and Next
-    # on the same horizontal line and vertically centered.
     st.markdown(
-        '<div class="pt-pagination-row">',
+        '<div class="section-title">PROCESS TECHNOLOGY DOCUMENTATION</div>',
         unsafe_allow_html=True
     )
-
-    pg_showing, pg_prev, pg_page, pg_next, pg_end = st.columns(
-        [2.25, 1.05, 1.45, 1.05, 2.20],
+    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(
+        5,
         gap="small"
     )
 
-    with pg_showing:
+
+    with kpi1:
+
         st.markdown(
             f"""
-<div class="pt-record-bar">
-    Showing {first_entry} - {last_entry}
-    of {total_entries} entries
-</div>
-""",
+    <div class="kpi-card" style="--accent:#145a96;">
+    <div class="kpi-label">TOTAL</div>
+    <div class="kpi-value">{total_pt}</div>
+    <div class="kpi-subtitle">100% of PT records</div>
+    </div>
+    """,
             unsafe_allow_html=True
         )
 
-    with pg_prev:
-        if st.button(
-            "‹ Previous",
-            use_container_width=True,
-            key="pt_previous_page",
-            disabled=page_number <= 1
-        ):
-            st.session_state.page_number -= 1
-            st.rerun()
 
-    with pg_page:
+    with kpi2:
+
         st.markdown(
             f"""
-<div class="pt-pagination">
-    Page {page_number} of {total_pages}
-</div>
-""",
+    <div class="kpi-card" style="--accent:#176fc1;">
+    <div class="kpi-label">APPROVED</div>
+    <div class="kpi-value">{approved}</div>
+    <div class="kpi-subtitle">{approved_pct}% of total PT</div>
+    </div>
+    """,
             unsafe_allow_html=True
         )
 
-    with pg_next:
-        if st.button(
-            "Next ›",
-            use_container_width=True,
-            key="pt_next_page",
-            disabled=page_number >= total_pages
-        ):
-            st.session_state.page_number += 1
-            st.rerun()
 
+    with kpi3:
+
+        st.markdown(
+            f"""
+    <div class="kpi-card" style="--accent:#c58a00;">
+    <div class="kpi-label">PENDING FOR APPROVAL</div>
+    <div class="kpi-value">{pending}</div>
+    <div class="kpi-subtitle">{pending_pct}% of total PT</div>
+    </div>
+    """,
+            unsafe_allow_html=True
+        )
+
+
+    with kpi4:
+
+        st.markdown(
+            f"""
+    <div class="kpi-card" style="--accent:#14854a;">
+    <div class="kpi-label">COMPLETED</div>
+    <div class="kpi-value">{completed}</div>
+    <div class="kpi-subtitle">{completed_pct}% of total PT</div>
+    </div>
+    """,
+            unsafe_allow_html=True
+        )
+
+
+    with kpi5:
+
+        st.markdown(
+            f"""
+    <div class="kpi-card" style="--accent:#c7353d;">
+    <div class="kpi-label">ONGOING</div>
+    <div class="kpi-value">{ongoing}</div>
+    <div class="kpi-subtitle">{ongoing_pct}% of total PT</div>
+    </div>
+    """,
+            unsafe_allow_html=True
+        )
+
+    # Real vertical spacer INSIDE the bordered section.
+    # This creates a visible gap between the KPI cards and the bottom border.
     st.markdown(
-        '</div>',
+        '<div class="kpi-section-spacer"></div>',
         unsafe_allow_html=True
     )
 
-else:
+# ============================================================
+# SECTION 2
+# ONE SINGLE BORDER:
+# PT REGISTER + SEARCH + TABLE
+# ============================================================
+with st.container(border=True):
 
     st.markdown(
-        f"""
-<div class="pt-record-bar">
-    Showing {first_entry} - {last_entry}
-    of {total_entries} entries
-</div>
-""",
+        '<div class="register-title">PT REGISTER</div>',
         unsafe_allow_html=True
     )
+    # ============================================================
+    # SEARCH
+    # ============================================================
 
-# =========================================================
-# FOOTER
-# =========================================================
+    search_text = st.text_input(
+        "Search",
+        placeholder="Search PT No., Name of PT, Department...",
+        label_visibility="collapsed"
+    )
 
-st.markdown(
+
+    # ============================================================
+    # SEARCH FILTER
+    # ============================================================
+
+    display_df = filtered_df.copy()
+
+    if search_text.strip():
+
+        search_value = search_text.strip().lower()
+
+        search_mask = pd.Series(
+            False,
+            index=display_df.index
+        )
+
+        for column in display_df.columns:
+
+            try:
+
+                search_mask = (
+                    search_mask
+                    |
+                    display_df[column]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains(
+                        search_value,
+                        na=False,
+                        regex=False
+                    )
+                )
+
+            except Exception:
+                pass
+
+        display_df = display_df[
+            search_mask
+        ]
+
+
+    # ============================================================
+    # TABLE
+    # ============================================================
+
+    if display_df.empty:
+
+        st.markdown(
+            """
+    <div class="empty-state">
+    No PT records match the selected search.
+    </div>
+    """,
+            unsafe_allow_html=True
+        )
+
+    else:
+
+        table_html = """
+    <div class="table-scroll">
+
+    <table class="pt-table">
+
+    <thead>
+    <tr>
+    <th class="sr-col">Sr No.</th>
+    <th class="pt-col">PT No.</th>
+    <th class="dept-col">Department</th>
+    <th class="name-col">Name of PT</th>
+    <th class="status-col">Status</th>
+    <th class="document-col">View Document</th>
+    </tr>
+    </thead>
+
+    <tbody>
     """
-<div class="footer">
-    PROCESS SAFETY MANAGEMENT • DIGITAL OPERATIONS
-</div>
-""",
-    unsafe_allow_html=True
-)
+
+        # --------------------------------------------------------
+        # ROWS
+        # --------------------------------------------------------
+
+        for index, (_, row) in enumerate(
+            display_df.iterrows(),
+            start=1
+        ):
+
+            pt_number = (
+                clean_value(row[pt_no_col])
+                if pt_no_col in row
+                else ""
+            )
+
+            department = (
+                clean_value(row[department_col])
+                if department_col in row
+                else ""
+            )
+
+            pt_name = (
+                clean_value(row[name_col])
+                if name_col in row
+                else ""
+            )
+
+            status = (
+                clean_value(row[status_col])
+                if status_col in row
+                else ""
+            )
+
+            pt_number_safe = html.escape(
+                pt_number
+            )
+
+            department_safe = html.escape(
+                department
+            )
+
+            pt_name_safe = html.escape(
+                pt_name
+            )
+
+            status_safe = html.escape(
+                status
+            )
+
+
+            # ----------------------------------------------------
+            # STATUS BADGE
+            # ----------------------------------------------------
+
+            badge_class = get_status_class(
+                status
+            )
+
+            if status:
+
+                status_html = (
+                    f'<span class="status-badge '
+                    f'{badge_class}">'
+                    f'{status_safe.upper()}'
+                    f'</span>'
+                )
+
+            else:
+
+                status_html = "—"
+
+
+            # ----------------------------------------------------
+            # DOCUMENT
+            # ----------------------------------------------------
+
+            document_html = "—"
+
+            if (
+                document_col
+                and document_col in row
+            ):
+
+                document_value = clean_value(
+                    row[document_col]
+                )
+
+                if document_value:
+
+                    # Accept normal web links as well as Google Drive/Docs
+                    # links stored in the "Attach PT Softcopy Link" column.
+                    if re.match(r"^https?://", document_value, re.IGNORECASE):
+
+                        document_url = html.escape(
+                            document_value,
+                            quote=True
+                        )
+
+                        document_html = (
+                            f'<a class="document-link" '
+                            f'href="{document_url}" '
+                            f'target="_blank">'
+                            f'View Document'
+                            f'</a>'
+                        )
+
+                    else:
+
+                        document_html = html.escape(
+                            document_value
+                        )
+
+
+            table_html += f"""
+    <tr>
+    <td class="sr-col">{index}</td>
+    <td>{pt_number_safe}</td>
+    <td>{department_safe}</td>
+    <td>{pt_name_safe}</td>
+    <td class="status-col">{status_html}</td>
+    <td class="document-col">{document_html}</td>
+    </tr>
+    """
+
+
+        table_html += """
+    </tbody>
+    </table>
+
+    </div>
+    """
+
+        st.markdown(
+            table_html,
+            unsafe_allow_html=True
+        )

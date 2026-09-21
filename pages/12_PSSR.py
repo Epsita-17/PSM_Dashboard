@@ -7,7 +7,7 @@ import re
 from io import StringIO
 from html.parser import HTMLParser
 from urllib.parse import quote, urljoin
-
+from zoneinfo import ZoneInfo
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -37,7 +37,7 @@ st.markdown(
 
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
-    margin-top:-35px !important;
+    margin-top:0px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -153,17 +153,6 @@ div[data-testid="stMetricLabel"] p {
     }
 
 
-/* ========================================================
-   REFRESH BUTTON — KEEP BELOW HEADER
-   ======================================================== */
-
-div[data-testid="stButton"] {
-    margin-top: 1px !important;
-    margin-bottom: 1px !important;
-}
-
-
-
     /* ========================================================
        MATCH CLICKABLE MODULE HEADINGS WITH NORMAL HEADINGS
        ======================================================== */
@@ -194,6 +183,42 @@ div[data-testid="stButton"] {
     unsafe_allow_html=True,
 )
 
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
+        margin-bottom: -65px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ============================================================
+# GOOGLE SHEET
+# ============================================================
+
+SHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
+SHEET_NAME = "PSSR"
+
+SHEET_CSV_URL = (
+    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+    f"/gviz/tq?tqx=out:csv&sheet={quote(SHEET_NAME)}"
+)
+
+# HTML export is used to recover the actual hyperlink behind
+# the filename displayed in the "Attach PSSR Softcopy" column.
+SHEET_HTML_URL = (
+    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+    f"/gviz/tq?tqx=out:html&sheet={quote(SHEET_NAME)}"
+)
+
+# Google Apps Script endpoint that returns the real hyperlink URL from
+# the Attach PSSR Softcopy cells. Fill this after deploying the Apps Script
+# shown below. Leave blank to use the existing HTML/CSV fallbacks.
+LINKS_API_URL = ""
+
 #=============================================================
 #HEADER CODE
 #=============================================================
@@ -202,7 +227,6 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -251,12 +275,10 @@ st.markdown(
     }
 
     .block-container {
-    padding-top: 0 !important;
-    margin-top: -30px !important;
-    padding-bottom: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    max-width: 100% !important;
+    padding:0rem 0.35rem 0rem 0.35rem !important;
+    margin-top:-47px !important;
+    margin-bottom:0px !important;
+    max-width:100%;
 }
 
     .stApp {
@@ -366,11 +388,9 @@ header_html = """
    ============================================================ */
 
 .psm-header {
-
     position: relative;
-
-    width: 100%;
-
+    width: calc(100% + 10px);
+    margin-left: -5px;
     height: 90px;
 
     overflow: hidden;
@@ -645,7 +665,7 @@ header_html = """
 
     right: 16px;
 
-    top: 0;
+    top: 6px;
 
     width: 15%;
 
@@ -849,7 +869,7 @@ header_html = """
 
             <div class="main-title">
 
-                PRE START-UP SAFETY REVIEW(PSSR)
+                PRE-STARTUP SAFETY REVIEW (PSSR)
 
                 <span class="main-title-orange"></span>
 
@@ -970,40 +990,6 @@ components.html(
     scrolling=False
 )
 
-st.markdown(
-    """
-    <style>
-    div[data-testid="stVerticalBlock"] > div:has(> iframe) {
-        margin-bottom: -65px !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ============================================================
-# GOOGLE SHEET
-# ============================================================
-
-SHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
-SHEET_NAME = "PSSR"
-
-SHEET_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet={quote(SHEET_NAME)}"
-)
-
-# HTML export is used to recover the actual hyperlink behind
-# the filename displayed in the "Attach PSSR Softcopy" column.
-SHEET_HTML_URL = (
-    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-    f"/gviz/tq?tqx=out:html&sheet={quote(SHEET_NAME)}"
-)
-
-# Google Apps Script endpoint that returns the real hyperlink URL from
-# the Attach PSSR Softcopy cells. Fill this after deploying the Apps Script
-# shown below. Leave blank to use the existing HTML/CSV fallbacks.
-LINKS_API_URL = ""
 
 # ============================================================
 # CSS
@@ -1019,11 +1005,15 @@ html, body, [class*="css"] {
 .stApp { 
     background: #FFFFFF; 
 } 
+header[data-testid="stHeader"] {
+    display: flex !important;
+    visibility: visible !important;
+}
 
-header[data-testid="stHeader"], 
-[data-testid="stDecoration"] { 
-    display: none !important; 
-} 
+[data-testid="stDecoration"] {
+    display: block !important;
+    visibility: visible !important;
+}
 
 #MainMenu, 
 footer { 

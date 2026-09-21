@@ -29,7 +29,57 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# =========================================================
+# HIDE STREAMLIT DEFAULT UI
+# =========================================================
 
+st.markdown("""
+<style>
+
+/* Hide Streamlit default menu */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit default header */
+header {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit toolbar */
+[data-testid="stToolbar"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Deploy button */
+[data-testid="stAppDeployButton"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit decoration */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide status widget */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # ============================================================
 # GOOGLE SHEET - SAME SOURCE AS ALL DEPARTMENTS DASHBOARD
 # ============================================================

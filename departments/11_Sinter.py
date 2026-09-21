@@ -4,6 +4,9 @@ import base64
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from html.parser import HTMLParser
+
+from openpyxl import load_workbook
 
 import pandas as pd
 import requests
@@ -35,15 +38,69 @@ SHEETS = {
     "PHA Recommendation": "1114420199",
     "MOC": "1493447251",
     "PSSR": "1914804736",
-    "PS Incident": "354502422",   # corrected: Incident
-    "Training": "1071736559",       # corrected: Training
+    "PS Incident": "354502422",  # corrected: Incident
+    "Training": "1071736559",  # corrected: Training
     "SOC-SOL": "510439154",
-    "Critical Equipment": None,
-    "Alarm": None,
-    "Barrier Audit": None,
+    "Interlock ": 1595602222,
+    "PSM CE ": 1552637895,
+    "Failure Data": 1071263265,
+    "Barrier Audit": "1741048982",
+    "Audit Compliance": "1790395364",
 }
 
+# =========================================================
+# HIDE STREAMLIT DEFAULT UI
+# =========================================================
 
+st.markdown("""
+<style>
+
+/* Hide Streamlit default menu */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide Streamlit footer */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* SHOW Streamlit default header */
+header {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* SHOW Streamlit toolbar */
+[data-testid="stToolbar"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* SHOW Deploy button */
+[data-testid="stAppDeployButton"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+/* Hide Streamlit decoration */
+[data-testid="stDecoration"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Hide status widget */
+[data-testid="stStatusWidget"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # ============================================================
 # STYLE
 # ============================================================
@@ -228,7 +285,6 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -278,7 +334,7 @@ st.markdown(
 
     .block-container {
     padding-top: 0 !important;
-    margin-top: -30px !important;
+    margin-top: -50px !important;
     padding-bottom: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
@@ -392,11 +448,9 @@ header_html = """
    ============================================================ */
 
 .psm-header {
-
     position: relative;
-
-    width: 100%;
-
+    width: calc(100% + 10px);
+    margin-left: -5px;
     height: 90px;
 
     overflow: hidden;
@@ -671,7 +725,7 @@ header_html = """
 
     right: 16px;
 
-    top: 0;
+    top: 6px;
 
     width: 15%;
 
@@ -996,6 +1050,7 @@ components.html(
     scrolling=False
 )
 
+
 st.markdown(
     """
     <style>
@@ -1159,7 +1214,296 @@ def load_google_sheet(gid):
             return clean_dataframe(df)
         except Exception:
             return pd.DataFrame()
+# ============================================================
+# AUDIT REPORT HYPERLINK LOADER
+# ============================================================
 
+class _AuditLinkParser(HTMLParser):
+    """Extract cell text and real hyperlinks from Google Sheets GViz HTML."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self._row = None
+        self._cell_open = False
+        self._cell_href = ""
+        self._cell_text = []
+        self._in_table = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        tag = tag.lower()
+
+        if tag == "table":
+            self._in_table = True
+
+        elif self._in_table and tag == "tr":
+            self._row = []
+
+        elif self._in_table and tag in ("td", "th") and self._row is not None:
+            self._cell_open = True
+            self._cell_href = ""
+            self._cell_text = []
+
+        elif self._in_table and tag == "a" and self._cell_open:
+            self._cell_href = attrs.get("href", "") or ""
+
+    def handle_data(self, data):
+        if self._cell_open:
+            self._cell_text.append(data)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+
+        if tag in ("td", "th") and self._cell_open:
+
+            self._row.append({
+                "text": " ".join(self._cell_text).strip(),
+                "href": self._cell_href.strip(),
+            })
+
+            self._cell_open = False
+            self._cell_href = ""
+            self._cell_text = []
+
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+        elif tag == "table":
+            self._in_table = False
+
+
+def load_audit_with_links(gid):
+    """
+    Load Audit Compliance sheet and recover
+    the actual Audit Report hyperlinks.
+    """
+
+    df = load_google_sheet(gid)
+
+    if df.empty or not gid:
+        return df
+
+    df = clean_dataframe(df).copy()
+
+    url_values = [""] * len(df)
+
+    # --------------------------------------------------------
+    # FIND AUDIT REPORT COLUMN
+    # --------------------------------------------------------
+
+    audit_report_col = find_col(
+        df,
+        [
+            "Audit Report",
+            "Audit Report Link",
+            "Compliance Report",
+            "Report",
+        ],
+    )
+
+    # --------------------------------------------------------
+    # METHOD 1 — XLSX HYPERLINKS
+    # --------------------------------------------------------
+
+    xlsx_url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{SPREADSHEET_ID}/export?format=xlsx&gid={gid}"
+    )
+
+    try:
+
+        response = requests.get(
+            xlsx_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+
+        response.raise_for_status()
+
+        workbook = load_workbook(
+            filename=io.BytesIO(response.content),
+            data_only=False,
+            read_only=False,
+        )
+
+        ws = workbook.active
+
+        header_row = None
+        report_col_num = None
+
+        for row in ws.iter_rows():
+
+            for cell in row:
+
+                value = norm(cell.value)
+
+                if value in {
+                    "auditreport",
+                    "auditreportlink",
+                    "compliancereport",
+                    "compliancereportlink",
+                    "report",
+                }:
+
+                    header_row = cell.row
+                    report_col_num = cell.column
+                    break
+
+            if report_col_num is not None:
+                break
+
+        if report_col_num is not None:
+
+            for row_no in range(
+                (header_row or 1) + 1,
+                ws.max_row + 1
+            ):
+
+                cell = ws.cell(
+                    row=row_no,
+                    column=report_col_num
+                )
+
+                url = ""
+
+                # Normal hyperlink
+                if cell.hyperlink:
+
+                    try:
+                        url = str(
+                            cell.hyperlink.target or ""
+                        ).strip()
+
+                    except Exception:
+                        url = ""
+
+                # HYPERLINK() formula
+                if not url and isinstance(cell.value, str):
+
+                    match = re.search(
+                        r'HYPERLINK\s*\(\s*["\']'
+                        r'(https?://[^"\']+)["\']',
+                        cell.value,
+                        flags=re.IGNORECASE,
+                    )
+
+                    if match:
+                        url = match.group(1).strip()
+
+                idx = (
+                    row_no
+                    - (header_row or 1)
+                    - 1
+                )
+
+                if (
+                    0 <= idx < len(url_values)
+                    and url
+                ):
+                    url_values[idx] = url
+
+        workbook.close()
+
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
+    # METHOD 2 — GVIZ HTML
+    # --------------------------------------------------------
+
+    try:
+
+        gviz_html_url = (
+            f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/gviz/tq?"
+            f"tqx=out:html&gid={gid}"
+        )
+
+        gviz_response = requests.get(
+            gviz_html_url,
+            timeout=30,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+
+        gviz_response.raise_for_status()
+
+        parser = _AuditLinkParser()
+
+        parser.feed(gviz_response.text)
+
+        if parser.rows and audit_report_col:
+
+            report_index = list(
+                df.columns
+            ).index(audit_report_col)
+
+            source_rows = parser.rows[1:]
+
+            for i, parsed_row in enumerate(
+                source_rows
+            ):
+
+                if i >= len(url_values):
+                    continue
+
+                if url_values[i]:
+                    continue
+
+                if report_index < len(parsed_row):
+
+                    href = parsed_row[
+                        report_index
+                    ].get(
+                        "href",
+                        ""
+                    ).strip()
+
+                    if href:
+                        url_values[i] = href
+
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
+    # METHOD 3 — FALLBACK TO GOOGLE SHEET CELL
+    # --------------------------------------------------------
+
+    if audit_report_col:
+
+        for i in range(len(df)):
+
+            if url_values[i]:
+                continue
+
+            report_name = str(
+                df.iloc[i][audit_report_col]
+            ).strip()
+
+            if (
+                report_name
+                and report_name.lower()
+                not in {"nan", "none"}
+            ):
+
+                sheet_row = i + 2
+
+                url_values[i] = (
+                    f"https://docs.google.com/"
+                    f"spreadsheets/d/"
+                    f"{SPREADSHEET_ID}/edit?"
+                    f"gid={gid}"
+                    f"&range=E{sheet_row}"
+                )
+
+    # --------------------------------------------------------
+    # STORE LIVE URL
+    # --------------------------------------------------------
+
+    df["__COMPLIANCE_REPORT_URL"] = url_values
+
+    return df
 
 def load_module(name):
     """Load a module and then apply the Sinter Plant filter."""
@@ -1425,10 +1769,59 @@ def get_date_column(df):
         ],
     )
 
+# ============================================================
+# CUSTOM KPI CARD
+# ============================================================
+
+def show_kpi_card(label, value):
+
+    html = f'''<div style="
+background:#ffffff;
+border:1px solid #cbddea;
+border-radius:8px;
+padding:10px 8px;
+min-height:75px;
+text-align:left;
+box-sizing:border-box;
+margin-bottom:8px;
+">
+<div style="
+color:#285779;
+font-size:11px;
+font-weight:800;
+line-height:1.2;
+margin-bottom:8px;
+">{label}</div>
+<div style="
+color:#123f77;
+font-size:28px;
+font-weight:900;
+line-height:1;
+">{value}</div>
+</div>'''
+
+    st.markdown(
+        html,
+        unsafe_allow_html=True,
+    )
+
+def get_date_column(df):
+    return find_col(
+        df,
+        [
+            "Date",
+            "Audit Date",
+            "Last Audit Date",
+            "Deviation Date",
+            "Record Date",
+            "Incident Date",
+        ],
+    )
 
 # ============================================================
 # LOAD DATA
 # ============================================================
+
 loaded = {}
 
 for module_name in SHEETS:
@@ -1442,7 +1835,12 @@ pssr = loaded["PSSR"]
 training = loaded["Training"]
 soc = loaded["SOC-SOL"]
 incident = loaded["PS Incident"]
-audit = loaded["Barrier Audit"]
+
+interlock = loaded["Interlock "]
+psm_ce = loaded["PSM CE "]
+audit = load_audit_with_links(SHEETS["Audit Compliance"])
+audit = filter_sinter_plant(audit)
+failure_data = loaded["Failure Data"]
 
 
 # ============================================================
@@ -1472,7 +1870,7 @@ st.markdown(
 # ============================================================
 # ROW 1 — PT / PHA / RECOMMENDATION / MOC
 # ============================================================
-a, b, c, d = st.columns(4, gap="small")
+a, b, c = st.columns(3, gap="small")
 
 
 with a:
@@ -1499,11 +1897,24 @@ with a:
         show_register(
             "PT REGISTER",
             pt,
-            ["PT No", "PT No.", "PT ID", "ID"],
-            ["PT Description", "Description", "PT Name"],
-            ["Status", "Current Status"],
+            [
+                "PT No",
+                "PT No.",
+                "PT ID",
+                "ID"
+            ],
+            [
+                "NAME OF PT",
+                "Name of PT",
+                "PT Name",
+                "PT Description",
+                "Description",
+            ],
+            [
+                "Status",
+                "Current Status"
+            ],
         )
-
 # ============================================================
 # 2 — PROCESS HAZARD ANALYSIS (PHA)
 # ============================================================
@@ -1617,27 +2028,23 @@ with c:
 
 # ============================================================
 # 4 — MANAGEMENT OF CHANGE (MOC)
+# SINTER — FINAL HORIZONTAL LAYOUT
 # ============================================================
 
-with d:
-    with st.container(
-            border=True,
-            height=365
+with st.container(
+        border=True,
+        height=460
     ):
 
+        # ----------------------------------------------------
+        # MOC TITLE
+        # ----------------------------------------------------
+
         show_module_title(
-            3,
-            "♙",
-            "MOC"
+            "",
+            "",
+            "MANAGEMENT OF CHANGE(MOC)"
         )
-
-        x = status_counts(moc)
-
-        show_metric_row([
-            ("TOTAL MOC", x["total"]),
-            ("OPEN", x["open"]),
-            ("CLOSED", x["closed"]),
-        ])
 
         # ----------------------------------------------------
         # MOC COLUMN MAPPING
@@ -1647,10 +2054,7 @@ with d:
             moc,
             [
                 "Change Type (Permanent/Temporary/Emergency)",
-                "Change Type (Permanent / Temporary / Emergency)",
                 "Change Type",
-                "MOC Change Type",
-                "Type of Change",
                 "Type",
             ],
         )
@@ -1659,277 +2063,621 @@ with d:
             moc,
             [
                 "Category of changes (Technology/Personnel/Facility)",
-                "Category of changes (Technology / Personnel / Facility)",
-                "Category of Changes",
-                "MOC Category",
-                "Change Category",
+                "Category of changes",
                 "Category",
             ],
         )
 
-        moc_chart = moc.copy()
+        # ====================================================
+        # SINTER MOC REGISTER
+        # ====================================================
 
-        # ----------------------------------------------------
-        # FILTER Sinter Plant
-        # ----------------------------------------------------
+        moc_chart = moc.copy()
 
         moc_department_col = find_col(
             moc,
             [
-                "Department",
-                "Departments",
-                "Dept",
-                "Department Name",
+                "Department", "Departments", "Dept", "Department Name",
             ],
         )
 
         if moc_department_col:
+
             moc_chart = moc_chart[
                 moc_chart[moc_department_col]
                 .fillna("")
                 .astype(str)
                 .str.strip()
+                .str.upper()
                 .str.contains(
-                    "Sinter Plant",
-                    case=False,
+                    "SINTER",
                     na=False
                 )
             ].copy()
 
-        # ----------------------------------------------------
-        # TWO DONUT CHARTS
-        # ----------------------------------------------------
+        # ====================================================
+        # FOUR HORIZONTAL SECTIONS
+        #
+        # SUMMARY | TYPE CHART | CATEGORY CHART | REGISTER
+        # ====================================================
 
-        p1, p2 = st.columns(
-            2,
+        moc_kpi_col, moc_type_col, moc_category_col_box, moc_register_col = st.columns(
+            [0.70, 1.70, 1.70, 2.50],
             gap="small"
         )
 
+        # ========================================================
+        # 1 — MOC SUMMARY
+        # ========================================================
+
+        with moc_kpi_col:
+
+            with st.container(
+                    border=True,
+                    height=390
+            ):
+                st.markdown(
+                    """
+                    <div style="
+                        background:#07558E;
+                        color:white;
+                        font-size:10px;
+                        font-weight:800;
+                        padding:10px 5px;
+                        border-radius:5px;
+                        text-align:center;
+                        margin-bottom:10px;
+                        white-space:nowrap;
+                    ">
+                        MOC SUMMARY
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                x = status_counts(moc_chart)
+
+                st.metric(
+                    label="TOTAL",
+                    value=x["total"]
+                )
+
+                st.metric(
+                    label="OPEN",
+                    value=x["open"]
+                )
+
+                st.metric(
+                    label="CLOSED",
+                    value=x["closed"]
+                )
+
         # ====================================================
-        # TYPE-WISE
+        # 2 — TYPE-WISE DISTRIBUTION
         # ====================================================
 
-        with p1:
+        with moc_type_col:
 
-            st.markdown(
-                """
-                <div style="
-                    text-align:center;
-                    color:#173f70;
-                    font-size:10px;
-                    font-weight:800;
-                    margin-bottom:4px;
-                ">
-                    TYPE-WISE DISTRIBUTION
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if (
-                moc_change_type_col
-                and not moc_chart.empty
+            with st.container(
+                border=True,
+                height=390
             ):
 
-                type_data = (
-                    moc_chart[moc_change_type_col]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
+                st.markdown(
+                    """
+                    <div style="
+                        background:#07558E;
+                        color:white;
+                        font-size:11px;
+                        font-weight:800;
+                        padding:8px 8px;
+                        border-radius:4px;
+                        text-align:center;
+                        margin-bottom:5px;
+                    ">
+                        TYPE-WISE DISTRIBUTION
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-                type_data = type_data[
-                    type_data != ""
-                ]
+                if (
+                    moc_change_type_col
+                    and not moc_chart.empty
+                ):
 
-                type_counts = (
-                    type_data.value_counts()
-                )
+                    type_data = (
+                        moc_chart[moc_change_type_col]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                    )
 
-                if not type_counts.empty:
-
-                    type_labels = [
-                        f"{label} {int(value)} "
-                        f"({value / type_counts.sum() * 100:.0f}%)"
-                        for label, value
-                        in zip(
-                            type_counts.index,
-                            type_counts.values
-                        )
+                    type_data = type_data[
+                        type_data != ""
                     ]
 
-                    fig_type = go.Figure(
-                        data=[
-                            go.Pie(
-                                labels=type_labels,
-                                values=type_counts.values,
-                                hole=0.58,
-                                textinfo="none",
-                                domain=dict(
-                                    x=[0.00, 0.55],
-                                    y=[0.08, 0.92],
-                                ),
-                                hovertemplate=(
-                                    "%{label}"
-                                    "<extra></extra>"
-                                ),
+                    type_counts = (
+                        type_data.value_counts()
+                    )
+
+                    if not type_counts.empty:
+
+                        type_labels = [
+                            f"{label} {int(value)} "
+                            f"({value / type_counts.sum() * 100:.0f}%)"
+                            for label, value
+                            in zip(
+                                type_counts.index,
+                                type_counts.values
                             )
                         ]
-                    )
 
-                    fig_type.update_layout(
-                        height=180,
-                        margin=dict(
-                            l=0,
-                            r=0,
-                            t=0,
-                            b=0
-                        ),
-                        showlegend=True,
-                        legend=dict(
-                            orientation="v",
-                            x=0.72,
+                        fig_type = go.Figure(
+                            data=[
+                                go.Pie(
+                                    labels=type_labels,
+                                    values=type_counts.values,
+                                    hole=0.60,
+                                    textinfo="none",
+                                    hovertemplate=(
+                                        "%{label}"
+                                        "<extra></extra>"
+                                    ),
+                                )
+                            ]
+                        )
+
+                        # CENTER VALUE
+                        fig_type.add_annotation(
+                            text=(
+                                f"<b>{x['total']}</b>"
+                                "<br>"
+                                "<span style='font-size:11px'>"
+                                "Total MOC"
+                                "</span>"
+                            ),
+                            x=0.5,
                             y=0.5,
-                            xanchor="left",
-                            yanchor="middle",
-                            font=dict(size=8),
-                        ),
-                        font=dict(size=8),
-                    )
+                            showarrow=False,
+                            font=dict(
+                                size=24,
+                                color="#173F70"
+                            ),
+                            align="center",
+                        )
 
-                    st.plotly_chart(
-                        fig_type,
-                        use_container_width=True,
-                        config={
-                            "displayModeBar": False
-                        },
-                        key="bf_moc_type_donut",
-                    )
+                        fig_type.update_layout(
+                            height=330,
+
+                            margin=dict(
+                                l=5,
+                                r=5,
+                                t=5,
+                                b=45
+                            ),
+
+                            showlegend=True,
+
+                            # LEGEND AT BOTTOM
+                            legend=dict(
+                                orientation="h",
+                                x=0.5,
+                                y=-0.08,
+                                xanchor="center",
+                                yanchor="top",
+                                font=dict(
+                                    size=9
+                                ),
+                            ),
+
+                            font=dict(
+                                size=9
+                            ),
+                        )
+
+                        st.plotly_chart(
+                            fig_type,
+                            use_container_width=True,
+                            config={
+                                "displayModeBar": False
+                            },
+                            key="coke_oven_type_donut_final",
+                        )
+
+                    else:
+
+                        st.info(
+                            "No SINTER MOC Type data found."
+                        )
 
                 else:
 
                     st.info(
-                        "No MOC Type data found."
+                        "MOC Change Type column not found."
                     )
 
-            else:
-
-                st.info(
-                    "MOC Change Type column not found."
-                )
-
         # ====================================================
-        # CATEGORY-WISE
+        # 3 — CATEGORY-WISE DISTRIBUTION
         # ====================================================
 
-        with p2:
+        with moc_category_col_box:
 
-            st.markdown(
-                """
-                <div style="
-                    text-align:center;
-                    color:#173f70;
-                    font-size:10px;
-                    font-weight:800;
-                    margin-bottom:4px;
-                ">
-                    CATEGORY-WISE DISTRIBUTION
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if (
-                moc_category_col
-                and not moc_chart.empty
+            with st.container(
+                border=True,
+                height=390
             ):
 
-                category_data = (
-                    moc_chart[moc_category_col]
-                    .fillna("")
-                    .astype(str)
-                    .str.strip()
+                st.markdown(
+                    """
+                    <div style="
+                        background:#07558E;
+                        color:white;
+                        font-size:11px;
+                        font-weight:800;
+                        padding:8px 8px;
+                        border-radius:4px;
+                        text-align:center;
+                        margin-bottom:5px;
+                    ">
+                        CATEGORY-WISE DISTRIBUTION
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-                category_data = category_data[
-                    category_data != ""
-                ]
+                if (
+                    moc_category_col
+                    and not moc_chart.empty
+                ):
 
-                category_counts = (
-                    category_data.value_counts()
-                )
+                    category_data = (
+                        moc_chart[moc_category_col]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                    )
 
-                if not category_counts.empty:
-
-                    category_labels = [
-                        f"{label} {int(value)} "
-                        f"({value / category_counts.sum() * 100:.0f}%)"
-                        for label, value
-                        in zip(
-                            category_counts.index,
-                            category_counts.values
-                        )
+                    category_data = category_data[
+                        category_data != ""
                     ]
 
-                    fig_category = go.Figure(
-                        data=[
-                            go.Pie(
-                                labels=category_labels,
-                                values=category_counts.values,
-                                hole=0.58,
-                                textinfo="none",
-                                domain=dict(
-                                    x=[0.00, 0.55],
-                                    y=[0.08, 0.92],
-                                ),
-                                hovertemplate=(
-                                    "%{label}"
-                                    "<extra></extra>"
-                                ),
+                    category_counts = (
+                        category_data.value_counts()
+                    )
+
+                    if not category_counts.empty:
+
+                        category_labels = [
+                            f"{label} {int(value)} "
+                            f"({value / category_counts.sum() * 100:.0f}%)"
+                            for label, value
+                            in zip(
+                                category_counts.index,
+                                category_counts.values
                             )
                         ]
-                    )
 
-                    fig_category.update_layout(
-                        height=180,
-                        margin=dict(
-                            l=0,
-                            r=0,
-                            t=0,
-                            b=0
-                        ),
-                        showlegend=True,
-                        legend=dict(
-                            orientation="v",
-                            x=0.72,
+                        fig_category = go.Figure(
+                            data=[
+                                go.Pie(
+                                    labels=category_labels,
+                                    values=category_counts.values,
+                                    hole=0.60,
+                                    textinfo="none",
+                                    hovertemplate=(
+                                        "%{label}"
+                                        "<extra></extra>"
+                                    ),
+                                )
+                            ]
+                        )
+
+                        # CENTER VALUE
+                        fig_category.add_annotation(
+                            text=(
+                                f"<b>{x['total']}</b>"
+                                "<br>"
+                                "<span style='font-size:11px'>"
+                                "Total MOC"
+                                "</span>"
+                            ),
+                            x=0.5,
                             y=0.5,
-                            xanchor="left",
-                            yanchor="middle",
-                            font=dict(size=8),
-                        ),
-                        font=dict(size=8),
-                    )
+                            showarrow=False,
+                            font=dict(
+                                size=24,
+                                color="#173F70"
+                            ),
+                            align="center",
+                        )
 
-                    st.plotly_chart(
-                        fig_category,
-                        use_container_width=True,
-                        config={
-                            "displayModeBar": False
-                        },
-                        key="bf_moc_category_donut",
-                    )
+                        fig_category.update_layout(
+                            height=330,
+
+                            margin=dict(
+                                l=5,
+                                r=5,
+                                t=5,
+                                b=45
+                            ),
+
+                            showlegend=True,
+
+                            # LEGEND AT BOTTOM
+                            legend=dict(
+                                orientation="h",
+                                x=0.5,
+                                y=-0.08,
+                                xanchor="center",
+                                yanchor="top",
+                                font=dict(
+                                    size=9
+                                ),
+                            ),
+
+                            font=dict(
+                                size=9
+                            ),
+                        )
+
+                        st.plotly_chart(
+                            fig_category,
+                            use_container_width=True,
+                            config={
+                                "displayModeBar": False
+                            },
+                            key="coke_oven_moc_category_donut_final",
+                        )
+
+                    else:
+
+                        st.info(
+                            "No SINTER MOC Category data found."
+                        )
 
                 else:
 
                     st.info(
-                        "No MOC Category data found."
+                        "MOC Category column not found."
                     )
 
-            else:
+        # ====================================================
+        # 4 — MOC REGISTER
+        # ====================================================
 
-                st.info(
-                    "MOC Category column not found."
+        with moc_register_col:
+
+            with st.container(
+                border=True,
+                height=390
+            ):
+
+                st.markdown(
+                    """
+                    <div style="
+                        background:#07558E;
+                        color:white;
+                        font-size:11px;
+                        font-weight:800;
+                        padding:8px 10px;
+                        border-radius:4px;
+                        text-align:left;
+                        margin-bottom:8px;
+                    ">
+                        MOC REGISTER
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
+
+                # ========================================================
+                # SINTER MOC REGISTER
+                # ========================================================
+
+                register_df = moc_chart.copy()
+
+                if register_df.empty:
+
+                    st.info(
+                        "No SINTER MOC records found."
+                    )
+
+                else:
+
+                    # ----------------------------------------------------
+                    # FIND MOC NUMBER COLUMN
+                    # ----------------------------------------------------
+
+                    moc_no_col = find_col(
+                        register_df,
+                        [
+                            "MOC No.",
+                            "MOC No",
+                            "MOC Number",
+                            "MOC ID",
+                            "ID",
+                        ],
+                    )
+
+                    # ----------------------------------------------------
+                    # FIND DESCRIPTION COLUMN
+                    # ----------------------------------------------------
+
+                    moc_desc_col = find_col(
+                        register_df,
+                        [
+                            "Description of Change",
+                            "Description",
+                            "MOC Description",
+                            "Name of MOC",
+                            "MOC Name",
+                        ],
+                    )
+
+                    # ----------------------------------------------------
+                    # FIND TYPE COLUMN
+                    # ----------------------------------------------------
+
+                    moc_type_col = find_col(
+                        register_df,
+                        [
+                            "Change Type (Permanent/Temporary/Emergency)",
+                            "Change Type",
+                            "Type",
+                        ],
+                    )
+
+                    # ----------------------------------------------------
+                    # FIND STATUS COLUMN
+                    # ----------------------------------------------------
+
+                    moc_status_col = find_col(
+                        register_df,
+                        [
+                            "Status",
+                            "Current Status",
+                            "MOC Status",
+                        ],
+                    )
+
+                    # ----------------------------------------------------
+                    # FIND REMARKS COLUMN
+                    # ----------------------------------------------------
+
+                    moc_remarks_col = find_col(
+                        register_df,
+                        [
+                            "Remarks",
+                            "Remark",
+                            "Comments",
+                        ],
+                    )
+
+                    # ----------------------------------------------------
+                    # CREATE DISPLAY REGISTER
+                    # ----------------------------------------------------
+
+                    display_moc = pd.DataFrame(
+                        index=register_df.index
+                    )
+
+                    if moc_no_col:
+
+                        display_moc["MOC No."] = (
+                            register_df[moc_no_col]
+                            .fillna("-")
+                            .astype(str)
+                            .str.strip()
+                        )
+
+                    else:
+
+                        display_moc["MOC No."] = "-"
+
+                    if moc_desc_col:
+
+                        display_moc["Description"] = (
+                            register_df[moc_desc_col]
+                            .fillna("-")
+                            .astype(str)
+                            .str.strip()
+                        )
+
+                    else:
+
+                        display_moc["Description"] = "-"
+
+                    if moc_type_col:
+
+                        display_moc["Type"] = (
+                            register_df[moc_type_col]
+                            .fillna("-")
+                            .astype(str)
+                            .str.strip()
+                        )
+
+                    else:
+
+                        display_moc["Type"] = "-"
+
+                    if moc_status_col:
+
+                        display_moc["Status"] = (
+                            register_df[moc_status_col]
+                            .fillna("-")
+                            .astype(str)
+                            .str.strip()
+                        )
+
+                    else:
+
+                        display_moc["Status"] = "-"
+
+                    if moc_remarks_col:
+
+                        display_moc["Remarks"] = (
+                            register_df[moc_remarks_col]
+                            .fillna("-")
+                            .astype(str)
+                            .str.strip()
+                        )
+
+                    else:
+
+                        display_moc["Remarks"] = "-"
+
+                    # ----------------------------------------------------
+                    # STATUS COLOUR
+                    # ----------------------------------------------------
+
+                    styled_df = (
+                        display_moc.style
+                        .map(
+                            status_style,
+                            subset=["Status"]
+                        )
+                    )
+
+                    # ----------------------------------------------------
+                    # DISPLAY REGISTER
+                    # ----------------------------------------------------
+
+                    st.dataframe(
+                        styled_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=315,
+
+                        column_config={
+
+                            "MOC No.": st.column_config.TextColumn(
+                                "MOC No.",
+                                width="medium"
+                            ),
+
+                            "Description": st.column_config.TextColumn(
+                                "Description",
+                                width="large"
+                            ),
+
+                            "Type": st.column_config.TextColumn(
+                                "Type",
+                                width="small"
+                            ),
+
+                            "Status": st.column_config.TextColumn(
+                                "Status",
+                                width="small"
+                            ),
+
+                            "Remarks": st.column_config.TextColumn(
+                                "Remarks",
+                                width="small"
+                            ),
+                        },
+                    )
+
 
 
 # ============================================================
@@ -3422,242 +4170,1134 @@ with a:
 # ============================================================
 
 with b:
-
     with st.container(
             border=True,
-            height=340
+            height=460
     ):
 
         show_module_title(
-            9,
-            "♙",
+            "",
+            "",
             "AUDIT / COMPLIANCE"
         )
 
-        audit_date_col = find_col(
-            audit,
-            [
-                "Audit Date",
-                "Last Audit Date",
-                "Date"
-            ],
-        )
+        # ========================================================
+        # AUDIT KPI SUMMARY
+        # ========================================================
 
-        compliance_col = find_col(
-            audit,
-            [
-                "Compliance",
-                "Compliance %",
-                "Score",
-                "Audit Score",
-                "Percentage",
-            ],
-        )
+        # TOTAL NO. OF AUDIT DONE = records with a valid Audit Date
+        # PENDING FOR AUDIT = records without a valid Audit Date
+        total_audit_done = 0
+        pending_audit = 0
 
-        q1, q2 = st.columns(
-            2,
-            gap="small"
-        )
+        if audit is not None and not audit.empty:
+            audit_date_for_kpi = find_col(
+                audit,
+                [
+                    "Audit Date",
+                    "Last Audit Date",
+                    "Date",
+                ],
+            )
 
-        # ====================================================
-        # LEFT SIDE
-        # ====================================================
-
-        with q1:
-
-            if (
-                audit_date_col
-                and not audit.empty
-            ):
-
-                dates = pd.to_datetime(
-                    audit[audit_date_col],
-                    errors="coerce"
-                ).dropna()
-
-                if not dates.empty:
-
-                    st.metric(
-                        "LAST AUDIT DATE",
-                        dates.max().strftime(
-                            "%d-%b-%Y"
-                        )
-                    )
-
-                else:
-
-                    st.metric(
-                        "LAST AUDIT DATE",
-                        "—"
-                    )
-
-            else:
-
-                st.metric(
-                    "LAST AUDIT DATE",
-                    "—"
+            if audit_date_for_kpi:
+                audit_dates = pd.to_datetime(
+                    audit[audit_date_for_kpi],
+                    errors="coerce",
                 )
+                total_audit_done = int(audit_dates.notna().sum())
+                pending_audit = int(audit_dates.isna().sum())
+            else:
+                pending_audit = int(len(audit))
 
-            if (
-                compliance_col
-                and not audit.empty
-            ):
+        ak1, ak2 = st.columns(2, gap="xxsmall")
 
-                values = pd.to_numeric(
-                    audit[compliance_col]
+        with ak1:
+            show_kpi_card(
+                "TOTAL NO. OF AUDIT DONE",
+                total_audit_done
+            )
+
+        with ak2:
+            show_kpi_card(
+                "PENDING FOR AUDIT",
+                pending_audit
+            )
+
+        # ========================================================
+        # AUDIT / COMPLIANCE REGISTER
+        # ========================================================
+
+        st.markdown(
+            '<div class="section-title">AUDIT / COMPLIANCE REGISTER</div>',
+            unsafe_allow_html=True,
+        )
+
+        if audit is None or audit.empty:
+            st.info("No audit records available.")
+        else:
+            audit_sno_col = find_col(
+                audit,
+                [
+                    "S.No.",
+                    "S.No",
+                    "Sr No",
+                    "Sr. No",
+                    "Serial No",
+                    "S No",
+                ],
+            )
+
+            audit_dept_col = find_col(
+                audit,
+                [
+                    "Department",
+                    "Dept",
+                    "Department Name",
+                ],
+            )
+
+            audit_date_col = find_col(
+                audit,
+                [
+                    "Audit Date",
+                    "Last Audit Date",
+                    "Date",
+                ],
+            )
+
+            audit_score_col = find_col(
+                audit,
+                [
+                    "Audit Score",
+                    "Score",
+                    "Audit Compliance",
+                    "Compliance",
+                    "Compliance %",
+                    "Percentage",
+                ],
+            )
+
+            # The live Google Sheet stores the uploaded audit files in the
+            # separate "Audit Report" column (column E).
+            audit_report_col = find_col(
+                audit,
+                [
+                    "Audit Report",
+                    "Audit Report Link",
+                    "Report",
+                ],
+            )
+
+            register_df = pd.DataFrame(index=audit.index)
+
+            if audit_sno_col:
+                register_df["S.No."] = audit[audit_sno_col].fillna("").astype(str).str.strip()
+            else:
+                register_df["S.No."] = range(1, len(audit) + 1)
+
+            if audit_dept_col:
+                register_df["Department"] = audit[audit_dept_col].fillna("").astype(str).str.strip()
+            else:
+                register_df["Department"] = ""
+
+            if audit_date_col:
+                register_df["Audit Date"] = audit[audit_date_col].fillna("").astype(str).str.strip()
+            else:
+                register_df["Audit Date"] = ""
+
+            if audit_score_col:
+                register_df["Audit Score"] = audit[audit_score_col].fillna("").astype(str).str.strip()
+            else:
+                register_df["Audit Score"] = ""
+
+            # IMPORTANT:
+            # The sheet screenshot shows the uploaded files under "Audit Report",
+            # not under "Compliance Report". Keep the displayed file name from
+            # the sheet and use the extracted live URL when one is available.
+            if audit_report_col:
+                register_df["Audit Report"] = (
+                    audit[audit_report_col]
+                    .fillna("")
                     .astype(str)
-                    .str.replace(
-                        "%",
-                        "",
-                        regex=False
+                    .str.strip()
+                )
+            else:
+                register_df["Audit Report"] = ""
+
+            if "__COMPLIANCE_REPORT_URL" in audit.columns:
+                register_df["__REPORT_URL"] = (
+                    audit["__COMPLIANCE_REPORT_URL"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["__REPORT_URL"] = ""
+
+            # --------------------------------------------------------
+            # AUDIT REPORT BUTTONS / FILE NAMES
+            # --------------------------------------------------------
+            rows_html = []
+
+            for _, row in register_df.iterrows():
+                report_name = str(row.get("Audit Report", "")).strip()
+                report_url = str(row.get("__REPORT_URL", "")).strip()
+
+                if report_url.startswith(("http://", "https://")):
+                    report_cell = (
+                        f'<a href="{report_url}" target="_blank" rel="noopener noreferrer" '
+                        'style="display:inline-block;padding:4px 10px;'
+                        'background:#07518b;color:#ffffff !important;border-radius:4px;'
+                        'text-decoration:none;font-weight:700;font-size:9px;">'
+                        'VIEW AUDIT REPORT ↗</a>'
+                    )
+                elif report_name and report_name.lower() not in {"nan", "none"}:
+                    # Rich-text links from Google Sheets can sometimes lose the URL
+                    # during export. Still show the actual report name instead of
+                    # incorrectly displaying "Not attached".
+                    report_cell = (
+                        f'<span style="color:#0067c5;font-weight:700;font-size:9px;">'
+                        f'{report_name}</span>'
+                    )
+                else:
+                    report_cell = '<span style="color:#9aa7b3;font-size:9px;">Not attached</span>'
+
+                rows_html.append(
+                    f"""
+                    <tr>
+                        <td>{row['S.No.']}</td>
+                        <td>{row['Department']}</td>
+                        <td>{row['Audit Date']}</td>
+                        <td>{row['Audit Score']}</td>
+                        <td>{report_cell}</td>
+                    </tr>
+                    """
+                )
+
+            # Use a real HTML component so the live SharePoint/Google-sheet
+            # hyperlink remains an actual clickable button.
+            audit_table_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                html, body {{
+                    margin:0; padding:0; background:transparent;
+                    font-family:Arial, Helvetica, sans-serif;
+                }}
+                .audit-register-wrap {{
+                    width:100%; max-height:400px; overflow-y:auto;
+                    border:1px solid #d5e0e8; border-radius:4px;
+                    background:#ffffff;
+                }}
+                table {{
+                    width:100%; border-collapse:collapse; table-layout:fixed;
+                    font-size:9px; color:#173f70;
+                }}
+                th {{
+                    position:sticky; top:0; z-index:2;
+                    background:#f3f7fa; color:#627689;
+                    font-weight:800; text-align:left;
+                    padding:5px 8px; border-bottom:1px solid #d5e0e8;
+                    line-height:1.1;
+                }}
+                td {{
+                    padding:5px 8px; border-bottom:1px solid #e1e8ee;
+                    line-height:1.1;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                }}
+                th:nth-child(1), td:nth-child(1) {{ width:8%; }}
+                th:nth-child(2), td:nth-child(2) {{ width:24%; }}
+                th:nth-child(3), td:nth-child(3) {{ width:18%; }}
+                th:nth-child(4), td:nth-child(4) {{ width:17%; }}
+                th:nth-child(5), td:nth-child(5) {{ width:33%; }}
+                .report-btn {{
+                    display:inline-block; padding:4px 10px;
+                    background:#07518b; color:#ffffff !important;
+                    border-radius:4px; text-decoration:none !important;
+                    font-weight:700; font-size:9px; cursor:pointer;
+                }}
+                .report-btn:hover {{ background:#063e70; }}
+            </style>
+            </head>
+            <body>
+                <div class="audit-register-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>S.No.</th>
+                                <th>Department</th>
+                                <th>Audit Date</th>
+                                <th>Audit Score</th>
+                                <th>Audit Report</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(rows_html)}
+                        </tbody>
+                    </table>
+                </div>
+            </body>
+            </html>
+            """
+
+            st.components.v1.html(
+                audit_table_html,
+                height=305,
+                scrolling=False,
+            )
+
+
+# ============================================================
+# 10 — INTERLOCK BYPASS
+# ============================================================
+
+with st.container(
+        border=True,
+        height=460
+    ):
+
+    show_module_title(
+        "",
+        "",
+        "INTERLOCK BYPASS"
+    )
+
+    # ------------------------------------------------------------
+    # PREPARE LIVE INTERLOCK REGISTER
+    # ------------------------------------------------------------
+
+    interlock_data = clean_dataframe(interlock)
+
+    sno_col = find_col(
+        interlock_data,
+        ["S.No.", "S No", "S.No", "Serial No", "Sr No", "Sr. No."]
+    )
+    department_col = find_col(
+        interlock_data,
+        ["Department", "Departments", "Dept", "Department Name"]
+    )
+    description_col = find_col(
+        interlock_data,
+        ["Interlock Description", "Interlock Details", "Description"]
+    )
+    bypassed_date_col = find_col(
+        interlock_data,
+        ["Date Bypassed", "Bypassed Date", "Date of Bypass"]
+    )
+    status_col = find_col(
+        interlock_data,
+        [
+            "Present Status / Action Required",
+            "Present Status",
+            "Status / Action Required",
+            "Status",
+        ]
+    )
+
+    if interlock_data.empty:
+        pending_interlock = pd.DataFrame()
+
+    else:
+        # Keep only actual register rows using S.No.
+        if sno_col:
+            sno_numeric = pd.to_numeric(
+                interlock_data[sno_col],
+                errors="coerce",
+            )
+            valid_rows = sno_numeric.notna()
+            interlock_data = interlock_data.loc[valid_rows].copy()
+
+            # Protect against accidental duplicate rows from the source.
+            interlock_data["__sno_numeric"] = sno_numeric.loc[valid_rows]
+            interlock_data = (
+                interlock_data
+                .drop_duplicates(subset=["__sno_numeric"], keep="first")
+                .drop(columns=["__sno_numeric"])
+            )
+
+        # Only records currently due for normalization are pending.
+        if status_col:
+            status_values = (
+                interlock_data[status_col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+
+            pending_mask = status_values.str.contains(
+                r"due\s*for\s*normalization|normalization\s*pending",
+                case=False,
+                regex=True,
+                na=False,
+            )
+            pending_interlock = interlock_data.loc[pending_mask].copy()
+        else:
+            pending_interlock = interlock_data.copy()
+
+    pending_count = len(pending_interlock)
+
+    # ------------------------------------------------------------
+    # KPI
+    # ------------------------------------------------------------
+    show_kpi_card(
+        "NORMALIZATION PENDING",
+        f"{pending_count:,}",
+    )
+
+    # ------------------------------------------------------------
+    # CHART + REGISTER SIDE BY SIDE
+    # ------------------------------------------------------------
+    chart_col, register_col = st.columns([1.05, 1.95], gap="small")
+
+    with chart_col:
+        st.markdown(
+            '<div class="section-bar">'
+            'Pending for Normalization by Department'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        if pending_interlock.empty:
+            st.info("No interlock is pending for normalization.")
+
+        else:
+            if department_col:
+                department_values = (
+                    pending_interlock[department_col]
+                    .fillna("Unknown")
+                    .astype(str)
+                    .str.strip()
+                    .replace("", "Unknown")
+                )
+
+                department_counts = (
+                    pd.DataFrame({"Department": department_values})
+                    .groupby("Department", as_index=False)
+                    .size()
+                    .rename(columns={"size": "Pending"})
+                )
+            else:
+                department_counts = pd.DataFrame(
+                    {
+                        "Department": ["Unknown"],
+                        "Pending": [pending_count],
+                    }
+                )
+
+            fig_interlock = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=department_counts["Department"],
+                        values=department_counts["Pending"],
+                        hole=0.56,
+                        textinfo="value",
+                        textposition="inside",
+                        domain=dict(x=[0.00, 0.58], y=[0.00, 1.00]),
+                        insidetextorientation="horizontal",
+                    )
+                ]
+            )
+
+            fig_interlock.update_layout(
+                height=394,
+                margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor="white",
+                plot_bgcolor="white",
+                legend=dict(
+                    orientation="v",
+                    x=0.62,
+                    y=0.5,
+                    xanchor="left",
+                    yanchor="middle",
+                    font=dict(size=9),
+                ),
+                annotations=[
+                    dict(
+                        text=f"<b>{pending_count}</b><br>Pending",
+                        x=0.29,
+                        y=0.50,
+                        xref="paper",
+                        yref="paper",
+                        xanchor="center",
+                        yanchor="middle",
+                        showarrow=False,
+                        font=dict(size=16),
+                    )
+                ],
+            )
+
+            st.plotly_chart(
+                fig_interlock,
+                use_container_width=True,
+                config={"displayModeBar": False},
+                key="all_department_interlock_donut",
+            )
+
+    with register_col:
+        st.markdown(
+            '<div class="section-bar">'
+            'Interlock Bypass Register - Normalization Pending'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        if pending_interlock.empty:
+            st.info("No interlock bypass is pending for normalization.")
+
+        else:
+            register_df = pd.DataFrame(index=pending_interlock.index)
+
+            if sno_col:
+                register_df["S.No."] = pd.to_numeric(
+                    pending_interlock[sno_col],
+                    errors="coerce",
+                ).astype("Int64")
+            else:
+                register_df["S.No."] = range(1, len(pending_interlock) + 1)
+
+            if department_col:
+                register_df["Department"] = (
+                    pending_interlock[department_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["Department"] = ""
+
+            if description_col:
+                register_df["Interlock Description"] = (
+                    pending_interlock[description_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+            else:
+                register_df["Interlock Description"] = ""
+
+            if bypassed_date_col:
+                raw_dates = pd.to_datetime(
+                    pending_interlock[bypassed_date_col],
+                    errors="coerce",
+                    dayfirst=True,
+                )
+            else:
+                raw_dates = pd.Series(
+                    pd.NaT,
+                    index=pending_interlock.index,
+                )
+
+            today = pd.Timestamp(datetime.now(ZoneInfo("Asia/Kolkata")).date())
+            days_open = (today - raw_dates.dt.normalize()).dt.days
+
+            register_df["Date Bypassed"] = (
+                raw_dates.dt.strftime("%d-%b-%Y").fillna("-")
+            )
+            register_df["Days Open"] = days_open.fillna(0).astype(int)
+
+            register_df = register_df.sort_values(
+                "Days Open",
+                ascending=False,
+            )
+
+            st.dataframe(
+                register_df,
+                use_container_width=True,
+                hide_index=True,
+                height=394,
+                column_config={
+                    "S.No.": st.column_config.NumberColumn(
+                        "S.No.",
+                        format="%d",
                     ),
-                    errors="coerce"
-                ).dropna()
+                    "Department": st.column_config.TextColumn(
+                        "Department"
+                    ),
+                    "Interlock Description": st.column_config.TextColumn(
+                        "Interlock Description"
+                    ),
+                    "Date Bypassed": st.column_config.TextColumn(
+                        "Date Bypassed"
+                    ),
+                    "Days Open": st.column_config.NumberColumn(
+                        "Days Open",
+                        format="%d",
+                    ),
+                },
+            )
 
-                if not values.empty:
+# ============================================================
+# 11 — PSM CE
+# ============================================================
 
-                    value = float(
-                        values.iloc[-1]
+with st.container(border=True):
+
+    show_module_title(
+        "",
+        "",
+        "PSM CRITICAL EQUIPMENT NOTIFICATION"
+    )
+
+    psm_ce_data = clean_dataframe(psm_ce)
+
+    # Actual Google Sheet columns.
+    failed_col = find_col(
+        psm_ce_data,
+        [
+            "No. of PSM CE failed (Breakdown)",
+            "No. Of PSM CE Failed (Breakdown)",
+            "PSM CE Failed",
+            "PSM CE Failed (Breakdown)",
+        ],
+    )
+    mech_generated_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – Mechanical – Generated",
+            "Compliance of PSM CE MO - Mechanical - Generated",
+            "PSM CE MO Mechanical Generated",
+        ],
+    )
+    mech_completed_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – Mechanical – Completed",
+            "Compliance of PSM CE MO - Mechanical - Completed",
+            "PSM CE MO Mechanical Completed",
+        ],
+    )
+    ei_generated_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – E&I – Generated",
+            "Compliance of PSM CE MO - E&I - Generated",
+            "PSM CE MO E&I Generated",
+        ],
+    )
+    ei_completed_col = find_col(
+        psm_ce_data,
+        [
+            "Compliance of PSM CE MO – E&I – Completed",
+            "Compliance of PSM CE MO - E&I - Completed",
+            "PSM CE MO E&I Completed",
+        ],
+    )
+
+    def numeric_total(df, column):
+        if column is None or df.empty:
+            return 0
+        return int(
+            pd.to_numeric(df[column], errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+
+    total_psm_ce_failed = numeric_total(psm_ce_data, failed_col)
+    mech_generated = numeric_total(psm_ce_data, mech_generated_col)
+    mech_completed = numeric_total(psm_ce_data, mech_completed_col)
+    ei_generated = numeric_total(psm_ce_data, ei_generated_col)
+    ei_completed = numeric_total(psm_ce_data, ei_completed_col)
+
+    # Short dashboard labels.
+    show_metric_row([
+        ("TOTAL PSM CE FAILED", total_psm_ce_failed),
+        ("MECHANICAL-MAINTENANCE ORDER GENERATED", mech_generated),
+        ("MECHANICAL-MAINTENANCE ORDER COMPLETED", mech_completed),
+        ("E&I-MAINTENANCE ORDER GENERATED", ei_generated),
+        ("E&I-MAINTENANCE ORDER COMPLETED", ei_completed),
+    ])
+
+    # --------------------------------------------------------
+    # DEPARTMENT-WISE PSM CE COMPLETION PROGRESS
+    # --------------------------------------------------------
+    dept_col_progress = find_col(psm_ce_data, ["Department", "Dept"])
+    if not psm_ce_data.empty and dept_col_progress is not None:
+        progress_df = pd.DataFrame({
+            "Department": psm_ce_data[dept_col_progress].fillna("").astype(str).str.strip(),
+            "M Generated": pd.to_numeric(psm_ce_data[mech_generated_col], errors="coerce").fillna(0) if mech_generated_col else 0,
+            "M Completed": pd.to_numeric(psm_ce_data[mech_completed_col], errors="coerce").fillna(0) if mech_completed_col else 0,
+            "E&I Generated": pd.to_numeric(psm_ce_data[ei_generated_col], errors="coerce").fillna(0) if ei_generated_col else 0,
+            "E&I Completed": pd.to_numeric(psm_ce_data[ei_completed_col], errors="coerce").fillna(0) if ei_completed_col else 0,
+        })
+        progress_df = (
+            progress_df.groupby("Department", as_index=False)[
+                ["M Generated", "M Completed", "E&I Generated", "E&I Completed"]
+            ].sum()
+        )
+        progress_df = progress_df[progress_df["Department"].str.strip() != ""]
+
+        if not progress_df.empty:
+            st.markdown(
+                '<div class="section-bar">PSM CE Completion Progress by Department</div>',
+                unsafe_allow_html=True,
+            )
+
+            def progress_color(pct):
+                # Completion status: red < 50%, amber 50-79%, green >= 80%.
+                if pct < 50:
+                    return "#e53935"
+                if pct < 80:
+                    return "#f5a623"
+                return "#2e9d50"
+
+            progress_rows = []
+            for _, r in progress_df.iterrows():
+                m_gen = float(r["M Generated"])
+                m_comp = float(r["M Completed"])
+                ei_gen = float(r["E&I Generated"])
+                ei_comp = float(r["E&I Completed"])
+
+                m_pct = (100.0 if m_gen <= 0 and m_comp > 0 else
+                         0.0 if m_gen <= 0 else min(100.0, max(0.0, m_comp / m_gen * 100.0)))
+                ei_pct = (100.0 if ei_gen <= 0 and ei_comp > 0 else
+                          0.0 if ei_gen <= 0 else min(100.0, max(0.0, ei_comp / ei_gen * 100.0)))
+
+                m_color = progress_color(m_pct)
+                ei_color = progress_color(ei_pct)
+
+                progress_rows.append(
+                    f'<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;margin:5px 0;font-family:Arial,sans-serif;font-size:10px;color:#173f70;">'
+                    f'<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{r["Department"]}</div>'
+                    f'<div style="height:9px;background:#e8eef3;border-radius:8px;overflow:hidden;"><div style="width:{m_pct:.1f}%;height:100%;background:{m_color};border-radius:8px;"></div></div>'
+                    f'<div style="font-weight:700;text-align:right;color:{m_color};">M {m_pct:.0f}%</div>'
+                    f'<div style="height:9px;background:#e8eef3;border-radius:8px;overflow:hidden;"><div style="width:{ei_pct:.1f}%;height:100%;background:{ei_color};border-radius:8px;"></div></div>'
+                    f'<div style="font-weight:700;text-align:right;color:{ei_color};">E&I {ei_pct:.0f}%</div>'
+                    f'</div>'
+                )
+
+            progress_html = (
+                '<div style="background:#fff;border:1px solid #d5e0e8;border-radius:5px;padding:8px 12px;">'
+                '<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;'
+                'font-family:Arial,sans-serif;font-size:9px;font-weight:800;color:#627689;margin-bottom:6px;">'
+                '<div>Department</div><div>MECHANICAL MAINTENANCE ORDER</div><div></div><div>E&I MAINTENANCE ORDER</div><div></div>'
+                '</div>'
+                + ''.join(progress_rows)
+                + '</div>'
+            )
+            st.markdown(progress_html, unsafe_allow_html=True)
+
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# ROW 5 — BARRIER AUDIT + FAILURE DATA
+# ============================================================
+
+barrier_col, failure_col = st.columns(
+    [1, 1],
+    gap="small"
+)
+
+# ============================================================
+# 12 — BARRIER AUDIT
+# ============================================================
+
+with barrier_col:
+    with st.container(border=True, height=520):
+
+        show_module_title(
+            "",
+            "",
+            "(C4/C5)BARRIER AUDIT"
+        )
+
+        barrier_data = (
+            clean_dataframe(loaded.get("Barrier Audit"))
+            if loaded.get("Barrier Audit") is not None
+            else pd.DataFrame()
+        )
+
+        if barrier_data.empty:
+            st.info("No Barrier Audit data available.")
+
+        else:
+            # ----------------------------------------------------
+            # COLUMN DETECTION
+            # ----------------------------------------------------
+            month_col = find_col(
+                barrier_data,
+                ["Month"]
+            )
+
+            dept_col = find_col(
+                barrier_data,
+                ["Department", "Dept"]
+            )
+
+            plan_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Audit Conducted (Plan)",
+                    "Barrier Audit Conducted Plan",
+                ],
+            )
+
+            actual_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Audit Conducted (Actual)",
+                    "Barrier Audit Conducted Actual",
+                ],
+            )
+
+            assessed_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Health (C4/C5) (Number) Assessed",
+                    "Assessed",
+                ],
+            )
+
+            unacceptable_col = find_col(
+                barrier_data,
+                [
+                    "Barrier Health (C4/C5) (Number) Unacceptable",
+                    "Unacceptable Barrier",
+                    "Unacceptable",
+                ],
+            )
+
+            # ----------------------------------------------------
+            # APPLY EXISTING GLOBAL DEPARTMENT SELECTION
+            # No separate filter is created inside this module.
+            # ----------------------------------------------------
+            barrier_display = barrier_data.copy()
+
+
+            # ----------------------------------------------------
+            # TOTAL ASSESSED / UNACCEPTABLE
+            # ----------------------------------------------------
+            total_assessed = (
+                int(
+                    pd.to_numeric(
+                        barrier_display[assessed_col],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                if assessed_col and not barrier_display.empty
+                else 0
+            )
+
+            total_unacceptable = (
+                int(
+                    pd.to_numeric(
+                        barrier_display[unacceptable_col],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                if unacceptable_col and not barrier_display.empty
+                else 0
+            )
+
+            # ----------------------------------------------------
+            # KPI — BARRIER HEALTH
+            # ----------------------------------------------------
+            show_metric_row([
+                (
+                    "BARRIER HEALTH ASSESSED",
+                    total_assessed
+                ),
+                (
+                    "BARRIER HEALTH UNACCEPTABLE",
+                    total_unacceptable
+                ),
+            ])
+
+            # ====================================================
+            # GRAPH — BARRIER AUDIT CONDUCTED
+            # MONTH-WISE PLAN VS ACTUAL
+            # ====================================================
+            if month_col and not barrier_display.empty:
+
+                monthly_audit = pd.DataFrame()
+
+                monthly_audit["Month"] = (
+                    barrier_display[month_col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+
+                monthly_audit["Plan"] = (
+                    pd.to_numeric(
+                        barrier_display[plan_col],
+                        errors="coerce"
+                    ).fillna(0)
+                    if plan_col
+                    else 0
+                )
+
+                monthly_audit["Actual"] = (
+                    pd.to_numeric(
+                        barrier_display[actual_col],
+                        errors="coerce"
+                    ).fillna(0)
+                    if actual_col
+                    else 0
+                )
+
+                monthly_audit = monthly_audit[
+                    monthly_audit["Month"] != ""
+                ]
+
+                # Sum values month-wise
+                monthly_audit = (
+                    monthly_audit
+                    .groupby("Month", as_index=False)[
+                        ["Plan", "Actual"]
+                    ]
+                    .sum()
+                )
+
+                if not monthly_audit.empty:
+
+                    # Keep chronological month order where possible
+                    month_order = [
+                        "Jan-26", "Feb-26", "Mar-26",
+                        "Apr-26", "May-26", "Jun-26",
+                        "Jul-26", "Aug-26", "Sep-26",
+                        "Oct-26", "Nov-26", "Dec-26"
+                    ]
+
+                    monthly_audit["_sort"] = (
+                        monthly_audit["Month"]
+                        .apply(
+                            lambda x:
+                            month_order.index(x)
+                            if x in month_order
+                            else 999
+                        )
                     )
 
-                    if value <= 1:
-                        value *= 100
+                    monthly_audit = (
+                        monthly_audit
+                        .sort_values("_sort")
+                        .drop(columns="_sort")
+                    )
 
-                    st.metric(
-                        "AUDIT COMPLIANCE",
-                        f"{value:.0f}%"
+                    # ------------------------------------------------
+                    # PLOTLY BAR CHART
+                    # ------------------------------------------------
+                    fig_monthly = go.Figure()
+
+                    fig_monthly.add_trace(
+                        go.Bar(
+                            x=monthly_audit["Month"],
+                            y=monthly_audit["Plan"],
+                            name="Plan",
+                            marker_color="#4f97d1",
+                            text=monthly_audit["Plan"].astype(int),
+                            textposition="outside",
+                            cliponaxis=False,
+                        )
+                    )
+
+                    fig_monthly.add_trace(
+                        go.Bar(
+                            x=monthly_audit["Month"],
+                            y=monthly_audit["Actual"],
+                            name="Actual",
+                            marker_color="#f5c542",
+                            text=monthly_audit["Actual"].astype(int),
+                            textposition="outside",
+                            cliponaxis=False,
+                        )
+                    )
+
+                    fig_monthly.update_layout(
+                        title=dict(
+                            text="BARRIER AUDIT CONDUCTED (PLAN VS ACTUAL)",
+                            x=0,
+                            xanchor="left",
+                            font=dict(
+                                size=15,
+                                color="#173f70"
+                            ),
+                        ),
+
+                        barmode="group",
+
+                        height=300,
+
+                        margin=dict(
+                            l=45,
+                            r=20,
+                            t=55,
+                            b=50
+                        ),
+
+                        font=dict(
+                            size=9,
+                            color="#173f70"
+                        ),
+
+                        legend=dict(
+                            orientation="h",
+                            y=1.08,
+                            x=1,
+                            xanchor="right",
+                            yanchor="bottom",
+                            font=dict(size=9),
+                        ),
+
+                        xaxis=dict(
+                            title="Month",
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9),
+                            showgrid=False,
+                        ),
+
+                        yaxis=dict(
+                            title="Number of Audits",
+                            title_font=dict(size=10),
+                            tickfont=dict(size=9),
+                            rangemode="tozero",
+                            gridcolor="#e5edf4",
+                            dtick=5,
+                        ),
+
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                    )
+
+                    st.plotly_chart(
+                        fig_monthly,
+                        use_container_width=True,
+                        config={
+                            "displayModeBar": False
+                        },
                     )
 
                 else:
-
-                    st.metric(
-                        "AUDIT COMPLIANCE",
-                        "—"
+                    st.info(
+                        "No monthly Barrier Audit data available."
                     )
 
-            else:
 
-                st.metric(
-                    "AUDIT COMPLIANCE",
-                    "—"
-                )
+# ============================================================
+# 13 — FAILURE DATA
+# ============================================================
 
-        # ====================================================
-        # RIGHT SIDE
-        # ====================================================
+with failure_col:
+    with st.container(border=True, height=520):
 
-        with q2:
+        show_module_title(
+            "",
+            "",
+            "PSM CRITICAL EQUIPMENT/BARRIER (C4/C5)FAILURE DETAILS"
+        )
 
-            # ========================================================
-            # AUDIT LOGO + TITLE
-            # ========================================================
+        failure_df = clean_dataframe(failure_data)
 
-            logo_col, title_col = st.columns(
-                [0.30, 0.70],
-                gap="small"
+        if failure_df.empty:
+            st.info("No Failure Data available.")
+        else:
+            f_dept_col = find_col(failure_df, ["Department", "Dept"])
+            f_month_col = find_col(failure_df, ["Month"])
+            f_type_col = find_col(
+                failure_df,
+                ["PSM CE/Barrier", "PSM CE / Barrier", "PSM CE-Barriers"],
+            )
+            f_name_col = find_col(failure_df, ["Name"])
+            f_reason_col = find_col(
+                failure_df,
+                ["Reason of Failure", "Failure Reason"],
             )
 
-            with logo_col:
+            failure_register = pd.DataFrame(index=failure_df.index)
+            failure_register["Department"] = failure_df[f_dept_col] if f_dept_col else "-"
+            failure_register["Month"] = failure_df[f_month_col] if f_month_col else "-"
+            failure_register["PSM CE/Barrier"] = failure_df[f_type_col] if f_type_col else "-"
+            failure_register["Name"] = failure_df[f_name_col] if f_name_col else "-"
+            failure_register["Reason of Failure"] = failure_df[f_reason_col] if f_reason_col else "-"
 
-                st.markdown(
-                    """
-                    <div style="
-                        font-size:65px;
-                        line-height:1;
-                        text-align:center;
-                        padding-top:5px;
-                    ">
-                        📋
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+            # ----------------------------------------------------
+            # TOTAL FAILURE COUNTS — KEEP AT TOP
+            # ----------------------------------------------------
+            type_counts = {"PSM CE": 0, "Barrier": 0}
+            if f_type_col:
+                type_series = failure_df[f_type_col].astype(str).str.strip().str.lower()
+                type_counts["PSM CE"] = int((type_series == "psm ce").sum())
+                type_counts["Barrier"] = int((type_series == "barrier").sum())
+
+            total_psm_ce = type_counts["PSM CE"]
+            total_barrier = type_counts["Barrier"]
+            total_psm_col, total_barrier_col = st.columns(2, gap="xxsmall")
+
+            with total_psm_col:
+                show_kpi_card(
+                    "PSM CE",
+                    total_psm_ce
                 )
 
-            with title_col:
-
-                st.markdown(
-                    """
-                    <div style="
-                        font-size:13px;
-                        font-weight:700;
-                        color:#173f70;
-                        padding-top:25px;
-                        white-space:nowrap;
-                    ">
-                        View detailed Audit Compliance report
-                    </div>
-                    """,
-                    unsafe_allow_html=True
+            with total_barrier_col:
+                show_kpi_card(
+                    "BARRIER",
+                    total_barrier
                 )
-            # ========================================================
-            # UPLOAD PDF
-            # ========================================================
 
-            audit_upload = st.file_uploader(
-                "Upload Audit Compliance Report",
-                type=["pdf"],
-                key="audit_compliance_upload"
+            # ----------------------------------------------------
+            # GRAPHICAL REPRESENTATION — FAILURE COUNT
+            # ----------------------------------------------------
+            failure_chart_col_1, failure_chart_col_2 = st.columns([0.88, 1.12], gap="small")
+
+
+
+            def highlight_failure_type(value):
+                text = str(value).strip().lower()
+                if text == "psm ce":
+                    return "background-color: #dbeafe; color: #173f70; font-weight: 700;"
+                if text == "barrier":
+                    return "background-color: #fff1cc; color: #8a5a00; font-weight: 700;"
+                return ""
+
+            failure_styled = failure_register.style.map(
+                highlight_failure_type,
+                subset=["PSM CE/Barrier"],
             )
 
-            # ========================================================
-            # VIEW BUTTON
-            # ========================================================
+            st.markdown(
+                '<div class="section-bar">Failure Data Register</div>',
+                unsafe_allow_html=True,
+            )
 
-            if audit_upload is not None:
+            # Keep the table only as tall as its actual rows so there is no
+            # unnecessary blank area inside the Failure Data table.
+            failure_table_height = min(330, max(100, 38 * (len(failure_register) + 1) + 8))
 
-                st.caption(
-                    f"📄 {audit_upload.name}"
-                )
-
-                view_report = st.button(
-                    "VIEW AUDIT COMPLIANCE REPORT ↗",
-                    key="view_audit_report",
-                    type="primary",
-                    use_container_width=True
-                )
-
-                if view_report:
-                    import base64
-
-                    pdf_bytes = audit_upload.getvalue()
-
-                    pdf_base64 = (
-                        base64.b64encode(
-                            pdf_bytes
-                        ).decode("utf-8")
-                    )
-
-
-                    @st.dialog(
-                        "AUDIT COMPLIANCE REPORT",
-                        width="large"
-                    )
-                    def show_audit_report(
-                            pdf_data
-                    ):
-                        st.markdown(
-                            "### 📋 Audit Compliance Report"
-                        )
-
-                        st.markdown(
-                            f"""
-                            <iframe
-                                src="data:application/pdf;base64,{pdf_data}"
-                                width="100%"
-                                height="700px">
-                            </iframe>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-
-                    show_audit_report(
-                        pdf_base64
-                    )
-
-            else:
-
-                st.caption(
-                    "Upload the Audit Compliance PDF "
-                    "to enable the View option."
-                )
+            st.dataframe(
+                failure_styled,
+                use_container_width=True,
+                hide_index=True,
+                height=failure_table_height,
+                column_config={
+                    "Department": st.column_config.TextColumn("Department"),
+                    "Month": st.column_config.TextColumn("Month"),
+                    "PSM CE/Barrier": st.column_config.TextColumn("PSM CE/Barrier"),
+                    "Name": st.column_config.TextColumn("Name"),
+                    "Reason of Failure": st.column_config.TextColumn("Reason of Failure"),
+                },
+            )

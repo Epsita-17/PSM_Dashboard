@@ -64,8 +64,6 @@ st.markdown(
         visibility:hidden;
     }
 
-
-
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
     margin-top:-35px !important;
@@ -368,12 +366,11 @@ header_html = """
    MAIN HEADER 
    ============================================================ */ 
 
-.psm-header { 
-
-    position: relative; 
-
-    width: 100%; 
-
+.psm-header {
+    position: relative;
+    width: calc(100% + 20px);
+    margin-left: -10px;
+    margin-right: -10px;
     height: 90px; 
 
     overflow: hidden; 
@@ -647,7 +644,7 @@ header_html = """
 
     right: 16px; 
 
-    top: 0; 
+    top: 6px; 
 
     width: 15%; 
 
@@ -851,7 +848,7 @@ header_html = """
 
             <div class="main-title"> 
 
-                EXECUTIVE DASHBOARD 
+                EXECUTIVE 
 
                 <span class="main-title-orange"></span> 
 
