@@ -145,6 +145,7 @@ header_html = """
 
 .psm-header {
     position: relative;
+    z-index: 1;
     width: calc(100% + 10px);
     margin-left: -5px;
     height: 90px;
@@ -737,14 +738,11 @@ header_html = header_html.replace(
 
 
 # ============================================================
-# DISPLAY HEADER
+# DISPLAY HEADER - NORMAL HTML (NO IFRAME)
+# This allows the native Streamlit sidebar arrow to sit over the header.
 # ============================================================
 
-components.html(
-    header_html,
-    height=114,
-    scrolling=False
-)
+st.html(header_html)
 
 GOOGLE_SHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
 SHEET_NAME = "OP"
@@ -785,48 +783,239 @@ CATEGORY_LIGHT = {
 # ============================================================
 # GLOBAL CSS
 # ============================================================
-st.markdown(""" 
-<style> 
-html, body, [data-testid="stAppViewContainer"] { 
-    background: #ffffff !important; 
-    font-family: Arial, Helvetica, sans-serif !important; 
-    margin: 0 !important; 
-    padding: 0 !important; 
-} 
-[data-testid="stHeader"], [data-testid="stToolbar"], 
-[data-testid="stDecoration"] { display: none !important; } 
-[data-testid="stAppViewContainer"] > .main, 
-[data-testid="stAppViewBlockContainer"], 
-[data-testid="stMainBlockContainer"] { 
-    padding-top: 0 !important; 
-    margin-top: 0 !important; 
-} 
-.block-container { 
-    max-width: 100% !important; 
-    padding: 1px 8px 14px 8px !important; 
-} 
-[data-testid="stVerticalBlock"] { gap: 0.12rem !important; } 
+st.markdown("""
+<style>
 
-/* Use the same Arial-style font throughout every native Streamlit element */ 
-body, button, input, textarea, select, label, p, span, div, table, th, td, .stMarkdown, .stSelectbox { 
-    font-family: Arial, Helvetica, sans-serif !important; 
-} 
-[data-testid="stSelectbox"] label { 
-    color: #30435e !important; 
-    font-size: 12px !important; 
-    font-weight: 700 !important; 
-    margin-bottom: 2px !important; 
-} 
-[data-testid="stSelectbox"] > div > div { 
-    border: 1px solid #c9d7e7 !important; 
-    border-radius: 8px !important; 
-    background: #ffffff !important; 
-    min-height: 36px !important; 
-} 
+/* ============================================================
+   GLOBAL PAGE
+   ============================================================ */
+
+html,
+body,
+[data-testid="stAppViewContainer"] {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+
+/* ============================================================
+   NATIVE STREAMLIT HEADER
+   Keep it alive because the real sidebar controls belong to it.
+   ============================================================ */
+
+[data-testid="stHeader"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+
+    height: 40px !important;
+    min-height: 40px !important;
+
+    background: transparent !important;
+
+    z-index: 2147483646 !important;
+
+    pointer-events: none !important;
+}
+
+/* ============================================================
+   REAL SIDEBAR OPEN BUTTON
+   When sidebar is OPEN, show the collapse arrow inside header.
+   ============================================================ */
+
+[data-testid="stSidebarCollapseButton"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    position: fixed !important;
+
+    top: 48px !important;
+    left: 295px !important;
+
+    width: 34px !important;
+    height: 34px !important;
+
+    z-index: 2147483647 !important;
+
+    pointer-events: auto !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* ============================================================
+   REAL SIDEBAR EXPAND BUTTON
+   When sidebar is CLOSED, show the expand arrow inside header.
+   ============================================================ */
+
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    position: fixed !important;
+
+    top: 48px !important;
+    left: 18px !important;
+
+    width: 34px !important;
+    height: 34px !important;
+
+    z-index: 2147483647 !important;
+
+    pointer-events: auto !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* ============================================================
+   ACTUAL CLICKABLE BUTTON
+   ============================================================ */
+
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    width: 34px !important;
+    height: 34px !important;
+
+    padding: 0 !important;
+    margin: 0 !important;
+
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+/* ============================================================
+   STREAMLIT ICON FONT
+   IMPORTANT: do not force Arial on these spans.
+   ============================================================ */
+
+[data-testid="stSidebarCollapseButton"] span,
+[data-testid="collapsedControl"] span {
+    font-family:
+        "Material Symbols Rounded",
+        "Material Symbols Outlined",
+        "Material Icons",
+        sans-serif !important;
+
+    font-size: 24px !important;
+    line-height: 1 !important;
+
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* SVG fallback for Streamlit versions that use SVG icons */
+[data-testid="stSidebarCollapseButton"] svg,
+[data-testid="collapsedControl"] svg {
+    width: 24px !important;
+    height: 24px !important;
+
+    visibility: visible !important;
+    opacity: 1 !important;
+
+    color: #6b7f91 !important;
+    stroke: #6b7f91 !important;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+
+[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+}
+
+/* ============================================================
+   HIDE ONLY EXTRA STREAMLIT UI
+   DO NOT hide stHeader.
+   ============================================================ */
+
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+
+[data-testid="stAppViewContainer"] > .main,
+[data-testid="stAppViewBlockContainer"],
+[data-testid="stMainBlockContainer"] {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+.block-container {
+    max-width: 100% !important;
+    padding: 1px 8px 14px 8px !important;
+}
+
+[data-testid="stVerticalBlock"] {
+    gap: 0.12rem !important;
+}
+
+/* ============================================================
+   NORMAL STREAMLIT FONT
+   NOTE: span is intentionally excluded so the sidebar icon
+   font is not converted into text such as double_arrow_left.
+   ============================================================ */
+
+body,
+button,
+input,
+textarea,
+select,
+label,
+p,
+div,
+table,
+th,
+td,
+.stMarkdown,
+.stSelectbox {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+
+[data-testid="stSelectbox"] label {
+    color: #30435e !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    margin-bottom: 2px !important;
+}
+
+[data-testid="stSelectbox"] > div > div {
+    border: 1px solid #c9d7e7 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    min-height: 36px !important;
+}
+
 iframe {
     border: 0 !important;
-} 
-</style> 
+}
+
+</style>
 """, unsafe_allow_html=True)
 
 
