@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 
-
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -13,7 +12,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 
 # ============================================================
 # STREAMLIT PAGE CSS
@@ -40,7 +38,7 @@ body {
     padding-right: 1.2rem !important;
     max-width: 100% !important;
     margin-top: -20px !important;
-  
+
 }
 
 
@@ -51,7 +49,6 @@ footer {
 
 </style>
 """, unsafe_allow_html=True)
-
 
 # ============================================================
 # LOAD PSM WHEEL IMAGE
@@ -79,7 +76,6 @@ except FileNotFoundError:
 
     st.stop()
 
-
 # ============================================================
 # MONTHS
 # ============================================================
@@ -98,7 +94,6 @@ months = [
     "Feb-27",
     "Mar-27"
 ]
-
 
 # ============================================================
 # ROADMAP DATA
@@ -177,7 +172,6 @@ roadmap_data = {
 # ============================================================
 
 def create_roadmap_row(activity, activities):
-
     row = f"""
     <tr>
 
@@ -188,7 +182,6 @@ def create_roadmap_row(activity, activities):
 
     current_week = 1
 
-
     # --------------------------------------------------------
     # ACTIVITY BLOCKS
     # --------------------------------------------------------
@@ -197,13 +190,11 @@ def create_roadmap_row(activity, activities):
 
         # EMPTY CELLS BEFORE ACTIVITY
         while current_week < start:
-
             row += """
                 <td class="roadmap-week empty"></td>
             """
 
             current_week += 1
-
 
         # ----------------------------------------------------
         # MERGED ACTIVITY CELL
@@ -220,19 +211,16 @@ def create_roadmap_row(activity, activities):
 
         current_week += duration
 
-
     # --------------------------------------------------------
     # EMPTY CELLS AFTER ACTIVITY
     # --------------------------------------------------------
 
     while current_week <= 48:
-
         row += """
             <td class="roadmap-week empty"></td>
         """
 
         current_week += 1
-
 
     row += """
     </tr>
@@ -248,12 +236,94 @@ def create_roadmap_row(activity, activities):
 roadmap_rows = ""
 
 for activity, activities in roadmap_data.items():
-
     roadmap_rows += create_roadmap_row(
         activity,
         activities
     )
 
+# ============================================================
+# FY 25-26 ROADMAP DATA
+# Source: attached "PSM Journey Plan(FY 25-26)" PDF
+# ============================================================
+
+months_25 = [
+    "May-25", "Jun-25", "Jul-25", "Aug-25", "Sep-25",
+    "Oct-25", "Nov-25", "Dec-25", "Jan-26", "Feb-26", "Mar-26"
+]
+
+# 44 weeks: May-25 to Mar-26, 4 weeks per month.
+# Blue Plan blocks reproduced from the attached PDF.
+fy25_plan_data = {
+    "PT": [(3, 10, "1st PT")],
+    "PHA": [(17, 20, "1st PHA")],
+    "LOPA": [(29, 4, "")],
+    "BOW TIE": [(33, 4, "")],
+    "OP": [],
+    "MOC": [],
+    "PSSR": [],
+    "MIQA": [],
+    "Incident Investigation": [],
+    "Emergency Plan": [],
+}
+
+
+def create_fy25_roadmap_rows():
+    rows = ""
+
+    for activity, activities in fy25_plan_data.items():
+
+        # PLAN
+        rows += f"""
+        <tr>
+            <td class="activity-name-fy25" rowspan="2">{activity}</td>
+            <td class="plan-actual-cell-fy25">Plan</td>
+        """
+
+        current_week = 1
+
+        for start, duration, label in activities:
+            while current_week < start:
+                rows += '<td class="roadmap-week-fy25 empty"></td>'
+                current_week += 1
+
+            rows += f"""
+                <td class="roadmap-week-fy25 activity-fy25" colspan="{duration}">
+                    {label}
+                </td>
+            """
+            current_week += duration
+
+        while current_week <= 44:
+            rows += '<td class="roadmap-week-fy25 empty"></td>'
+            current_week += 1
+
+        rows += "</tr>"
+
+        # ACTUAL — blank because the attached PDF has no blue Actual blocks.
+        rows += """
+        <tr>
+            <td class="plan-actual-cell-fy25">Actual</td>
+        """
+        rows += '<td class="roadmap-week-fy25 empty"></td>' * 44
+        rows += "</tr>"
+
+    return rows
+
+
+fy25_roadmap_rows = create_fy25_roadmap_rows()
+
+fy25_month_header = ""
+for month in months_25:
+    fy25_month_header += f"""
+        <th class="month-header-fy25" colspan="4">{month}</th>
+    """
+
+fy25_week_header = ""
+for month in months_25:
+    for week in range(1, 5):
+        fy25_week_header += f"""
+            <th class="week-header-fy25">{week}</th>
+        """
 
 # ============================================================
 # MONTH HEADER
@@ -262,7 +332,6 @@ for activity, activities in roadmap_data.items():
 month_header = ""
 
 for month in months:
-
     month_header += f"""
         <th
             class="month-header"
@@ -271,7 +340,6 @@ for month in months:
             {month}
         </th>
     """
-
 
 # ============================================================
 # WEEK HEADER
@@ -282,13 +350,11 @@ week_header = ""
 for month in months:
 
     for week in range(1, 5):
-
         week_header += f"""
             <th class="week-header">
                 {week}
             </th>
         """
-
 
 # ============================================================
 # COMPLETE DASHBOARD HTML
@@ -839,6 +905,153 @@ body {{
 
 
 /* ============================================================
+   FY 25-26 ROADMAP
+   ============================================================ */
+
+.roadmap-section-fy25 {{
+
+    width: 100%;
+    background: #ffffff;
+    border: 2.5px solid #0876c9;
+    border-radius: 15px;
+    padding: 18px 20px 20px 20px;
+    margin: 0;
+    overflow: hidden;
+
+}}
+
+.roadmap-red-line-fy25 {{
+    width: 105px;
+    height: 5px;
+    background: #ff1717;
+    margin-bottom: 10px;
+}}
+
+.roadmap-title-fy25 {{
+    color: #123f82;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.15;
+    margin: 0;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #0876c9;
+}}
+
+.roadmap-table-fy25 {{
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin-top: 12px;
+}}
+
+.activities-header-fy25 {{
+    width: 12%;
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.plan-header-fy25 {{
+    width: 4%;
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.month-header-fy25 {{
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    height: 42px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+    white-space: nowrap;
+}}
+
+.week-header-fy25 {{
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    height: 25px;
+    font-size: 8px;
+    font-weight: 600;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.activity-name-fy25 {{
+    width: 12%;
+    height: 40px;
+    background: #ffffff;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0 2px;
+    white-space: nowrap;
+    overflow: hidden;
+}}
+
+.plan-actual-cell-fy25 {{
+    width: 4%;
+    height: 20px;
+    background: #ffffff;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 9px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.roadmap-week-fy25 {{
+    height: 20px;
+    border: 1px solid #000000;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    vertical-align: middle;
+    overflow: hidden;
+}}
+
+.roadmap-week-fy25.empty {{
+    background: #ffffff;
+}}
+
+.roadmap-week-fy25.activity-fy25 {{
+    background: #17617e;
+    color: #ffffff;
+    border: 1px solid #000000;
+    font-size: 9px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+
+/* ============================================================
    1400px AND BELOW
    ============================================================ */
 
@@ -1172,12 +1385,52 @@ body {{
 </div>
 
 
+<!-- ============================================================
+     SECTION 4 - ROADMAP FY25-26
+============================================================= -->
+
+<div class="section-gap"></div>
+
+<div class="roadmap-section-fy25">
+
+    <div class="roadmap-red-line-fy25"></div>
+
+    <div class="roadmap-title-fy25">
+        Roadmap (FY25-26)
+    </div>
+
+    <table class="roadmap-table-fy25">
+
+        <tr>
+
+            <th class="activities-header-fy25" rowspan="2">
+                Activities
+            </th>
+
+            <th class="plan-header-fy25" rowspan="2">
+                Status
+            </th>
+
+            {fy25_month_header}
+
+        </tr>
+
+        <tr>
+            {fy25_week_header}
+        </tr>
+
+        {fy25_roadmap_rows}
+
+    </table>
+
+</div>
+
+
 </body>
 
 </html>
 
 """
-
 
 # ============================================================
 # RENDER COMPLETE DASHBOARD
@@ -1185,6 +1438,7 @@ body {{
 
 components.html(
     dashboard_html,
-    height=1800,
+    height=3100,
     scrolling=False
 )
+
