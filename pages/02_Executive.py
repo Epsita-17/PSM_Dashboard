@@ -2392,14 +2392,12 @@ tr_process_col = find_col(training_df, ["Process"])
 tr_total_cols = [
     find_col(training_df, ["Total Employees (L08 & Above)"]),
     find_col(training_df, ["Total Employees (Below L08)"]),
-    find_col(training_df, ["Total Associates"]),
-    find_col(training_df, ["Total Contractual Workers"]),
+
 ]
 tr_done_cols = [
     find_col(training_df, ["Completed Training (L08 & Above)"]),
     find_col(training_df, ["Completed Training (Below L08)"]),
-    find_col(training_df, ["Completed Training (Associates)"]),
-    find_col(training_df, ["Completed Training (Contracts)"]),
+
 ]
 if not training_df.empty and all(tr_total_cols) and all(tr_done_cols):
     total_people = sum(exec_num(training_df[c]).sum() for c in tr_total_cols)
@@ -2960,14 +2958,12 @@ if not matrix_training.empty:
     tr_total_cols_m = [
         find_col(matrix_training, ["Total Employees (L08 & Above)"]),
         find_col(matrix_training, ["Total Employees (Below L08)"]),
-        find_col(matrix_training, ["Total Associates"]),
-        find_col(matrix_training, ["Total Contractual Workers"]),
+
     ]
     tr_done_cols_m = [
         find_col(matrix_training, ["Completed Training (L08 & Above)"]),
         find_col(matrix_training, ["Completed Training (Below L08)"]),
-        find_col(matrix_training, ["Completed Training (Associates)"]),
-        find_col(matrix_training, ["Completed Training (Contracts)"]),
+
     ]
     if all(tr_total_cols_m) and all(tr_done_cols_m):
         total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
@@ -3123,7 +3119,7 @@ matrix_rows = [
     ),
     (
         6,
-        "PSM training completion",
+        "PSM training completion (On Roll employee L08 and above)",
         ">95%",
         training_actual,
         "pct",
