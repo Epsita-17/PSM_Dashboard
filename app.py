@@ -663,8 +663,8 @@ jsw_safety_standards_page = st.Page(
 # ============================================================
 
 reports_page = st.Page(
-    str(BASE_DIR / "pages" / "16_Document Repository.py"),
-    title="DOCUMENT REPOSITORY",
+    str(BASE_DIR / "pages" / "16_Document Reprosotory.py"),
+    title="DOCUMENT REPROSOTORY",
     icon="📄"
 )
 
