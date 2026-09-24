@@ -1,4 +1,4 @@
-﻿import io
+import io
 import re
 import base64
 from pathlib import Path
@@ -3293,7 +3293,7 @@ matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
 # Render the matrix as a real HTML document so table tags are not shown as text.
 components.html(
     matrix_html,
-    height=445,
+    height=500,
     scrolling=False
 )
 
