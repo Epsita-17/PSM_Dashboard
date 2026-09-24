@@ -1,4 +1,3 @@
-
 import io
 import re
 import base64
@@ -13,6 +12,7 @@ from openpyxl import load_workbook
 import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
+
 
 # ============================================================
 # PAGE CONFIG
@@ -49,54 +49,6 @@ SHEETS = {
     "Audit Compliance": "1790395364",
 }
 
-# =========================================================
-# HIDE STREAMLIT DEFAULT UI
-# =========================================================
-
-st.markdown("""
-<style>
-
-/* Hide Streamlit default menu */
-#MainMenu {
-    visibility: hidden !important;
-    display: none !important;
-}
-
-/* Hide Streamlit footer */
-footer {
-    visibility: hidden !important;
-    display: none !important;
-}
-
-
-/* Show Streamlit toolbar */
-[data-testid="stToolbar"] {
-    visibility: visible !important;
-    display: flex !important;
-}
-
-/* Show Deploy button */
-[data-testid="stAppDeployButton"] {
-    visibility: visible !important;
-    display: flex !important;
-    opacity: 1 !important;
-}
-
-
-/* Hide Streamlit decoration */
-[data-testid="stDecoration"] {
-    visibility: hidden !important;
-    display: none !important;
-}
-
-/* Hide status widget */
-[data-testid="stStatusWidget"] {
-    visibility: hidden !important;
-    display: none !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
 # ============================================================
 # STYLE
 # ============================================================
@@ -105,18 +57,16 @@ st.markdown(
     <style>
 
     .stApp {
-        background:#f3f8fc;
+        background:#eef5fa;
     }
 
     #MainMenu, footer {
         visibility:hidden;
     }
 
-
-
 .block-container {
     padding:0rem 0.35rem 0rem 0.35rem !important;
-    margin-top:-50px !important;
+    margin-top:-35px !important;
     margin-bottom:0px !important;
     max-width:100%;
 }
@@ -137,12 +87,13 @@ section.main {
 }
 
    div[data-testid="stMetric"] {
-    background:#ffffff;
-    border:1px solid #cbddea;
-    border-radius:7px;
-    padding:6px 6px !important;
-    min-height:72px;
+    background:linear-gradient(180deg,#ffffff 0%,#f9fcff 100%);
+    border:1px solid #c9ddea;
+    border-radius:10px;
+    padding:10px 10px !important;
+    min-height:82px;
     overflow:visible !important;
+    box-shadow:0 2px 8px rgba(28,73,105,.06);
 }
 
     div[data-testid="stMetricLabel"] {
@@ -170,9 +121,10 @@ div[data-testid="stMetricLabel"] p {
     line-height:1.1 !important;
 }
     div[data-testid="stMetricValue"] {
-        color:#123f77 !important;
-        font-size:24px !important;
-        font-weight:900 !important;
+        color:#124a82 !important;
+        font-size:28px !important;
+        font-weight:950 !important;
+        line-height:1.05 !important;
     }
 
     .module-card {
@@ -192,13 +144,15 @@ div[data-testid="stMetricLabel"] p {
     }
 
     .section-bar {
-        background:#07518b;
+        background:#07558f;
         color:#ffffff;
-        border-radius:4px;
-        padding:6px 8px;
+        border-radius:7px;
+        padding:9px 11px;
         font-size:10px;
-        font-weight:900;
-        margin:4px 0 6px 0;
+        font-weight:950;
+        margin:5px 0 7px 0;
+        letter-spacing:.15px;
+        box-shadow:0 1px 4px rgba(7,81,139,.12);
     }
 
     .live-bar {
@@ -894,7 +848,7 @@ header_html = """
 
             <div class="main-title"> 
 
-                APEX COMMITTEE
+                EXECUTIVE 
 
                 <span class="main-title-orange"></span> 
 
@@ -1011,10 +965,6 @@ components.html(
     scrolling=False
 )
 
-st.markdown(
-    "<div style='height:12px;'></div>",
-    unsafe_allow_html=True
-)
 # ============================================================
 # MOVE DEPARTMENT SECTION UP
 # ============================================================
@@ -1041,6 +991,7 @@ div[data-testid="stSelectbox"] > div {
 
 </style>
 """, unsafe_allow_html=True)
+
 # HELPERS
 # ============================================================
 def norm(value):
@@ -2086,500 +2037,1569 @@ failure_data = loaded["Failure Data"]
 
 # ============================================================
 # COMMON DEPARTMENT SELECTOR
-# ============================================================
-
-ALL_DEPARTMENTS = [
-    "All Departments",
-    "Blast Furnace",
-    "Coke Oven",
-    "SMS-1",
-    "SMS-2",
-    "DRI",
-    "Central Utility",
-    "CRM",
-    "WRM",
-    "CPP",
-    "Sinter",
-    "Tube Mill",
-    "CSP",
-    "Pellet & Beneficiation",
-    "LCP",
-]
-
-selected_department = st.selectbox(
-    "Department Status",
-    ALL_DEPARTMENTS,
-    index=0,
-    key="global_department_selector",
-)
-# ============================================================
-# APPLY GLOBAL DEPARTMENT FILTER
-# ============================================================
-
-pt = filter_selected_department(
-    pt,
-    selected_department
-)
-
-pha = filter_selected_department(
-    pha,
-    selected_department
-)
-
-rec = filter_selected_department(
-    rec,
-    selected_department
-)
-
-moc = filter_selected_department(
-    moc,
-    selected_department
-)
-
-pssr = filter_selected_department(
-    pssr,
-    selected_department
-)
-
-training = filter_selected_department(
-    training,
-    selected_department
-)
-
-soc = filter_selected_department(
-    soc,
-    selected_department
-)
-
-incident = filter_selected_department(
-    incident,
-    selected_department
-)
-
-interlock = filter_selected_department(
-    interlock,
-    selected_department
-)
-
-# Apply the same department selector to PSM CE so that KPI values
-# and department-wise progress show the selected department only.
-psm_ce = filter_selected_department(
-    psm_ce,
-    selected_department
-)
-
-# IMPORTANT: APEX KPIs must also follow the global department selector.
-# Previously Barrier Audit and Audit Compliance were left unfiltered,
-# which made their values appear fixed when the department was changed.
-barrier_audit = filter_selected_department(
-    loaded.get("Barrier Audit"),
-    selected_department
-)
-
-audit = filter_selected_department(
-    audit,
-    selected_department
-)
 
 # ============================================================
-# LIVE DATA BAR
-# ============================================================
-module_count = sum(
-    1 for df in loaded.values()
-    if df is not None and not df.empty
-)
-
-st.markdown(
-    f"""
-    <div class="live-bar">
-        <b>LIVE DATA: Google Sheet → All Departments</b>
-        &nbsp; | &nbsp;
-        Refresh: 5 minutes
-        &nbsp; | &nbsp;
-        Modules with data: <b>{module_count}</b>
-        &nbsp; | &nbsp;
-        Last load: <b>{datetime.now().strftime("%d-%b-%Y %H:%M:%S")}</b>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ============================================================
-# APEX COMMITTEE DASHBOARD
+# EXECUTIVE DASHBOARD — MANAGEMENT VIEW
 # ============================================================
 
 st.markdown("""
 <style>
-.apex-hero{background:linear-gradient(135deg,#061a2d 0%,#073f78 55%,#0b6fa4 100%);border-radius:12px;padding:18px 22px;margin:4px 0 10px;box-shadow:0 5px 18px rgba(5,35,60,.20)}
-.apex-title{color:#fff;font-size:28px;font-weight:900;letter-spacing:1px;line-height:1.05}
-.apex-sub{color:#c7e4f5;font-size:10px;font-weight:800;letter-spacing:2.5px;margin-top:6px}
-.apex-live{color:#9de7bb;font-size:9px;font-weight:800;margin-top:9px}
-.apex-section{background:linear-gradient(90deg,#073f78,#0b6096);color:#fff;border-radius:7px;padding:7px 11px;font-size:10px;font-weight:900;letter-spacing:.7px;margin:9px 0 6px}
-.apex-kpi{background:#fff;border:1px solid #d5e2ec;border-radius:9px;padding:10px 10px 9px;min-height:86px;box-shadow:0 2px 9px rgba(17,57,84,.08)}
-.apex-kpi-label{color:#64788b;font-size:8px;font-weight:900;line-height:1.15;min-height:20px}
-.apex-kpi-value{color:#073f78;font-size:25px;font-weight:900;margin-top:3px;line-height:1.1}
-.apex-kpi-note{color:#8293a2;font-size:7px;margin-top:3px;line-height:1.15}
-.apex-panel{background:#fff;border:1px solid #d5e2ec;border-radius:9px;padding:10px;box-shadow:0 2px 9px rgba(17,57,84,.07);height:100%}
-.apex-panel-title{color:#073f78;font-size:10px;font-weight:900;letter-spacing:.4px;margin-bottom:4px}
-.apex-att{border-radius:6px;padding:7px 9px;margin:5px 0;border-left:4px solid #d71920;background:#fff1f1}
-.apex-att.warn{border-left-color:#e5a400;background:#fff8e5}
-.apex-att.good{border-left-color:#279650;background:#eef9f1}
-.apex-att-label{color:#627689;font-size:8px;font-weight:900}
-.apex-att-value{color:#173f70;font-size:17px;font-weight:900;margin-top:2px}
-.apex-footer{background:#061f35;color:#c7dce9;border-radius:7px;padding:8px;text-align:center;font-size:8px;font-weight:800;letter-spacing:.6px;margin-top:10px}
+/* ---------- EXECUTIVE THEME ---------- */
+.exec-strip{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 14px; margin:0 0 8px 0;
+    background:linear-gradient(90deg,#06233d,#0a4d7c);
+    border-radius:8px; color:#fff;
+    box-shadow:0 3px 10px rgba(0,45,80,.12);
+}
+.exec-strip .title{font-size:15px;font-weight:900;letter-spacing:.4px}
+.exec-strip .sub{font-size:9px;opacity:.82;margin-top:2px}
+.exec-strip .badge{
+    background:#f28c00;color:#fff;padding:5px 10px;border-radius:20px;
+    font-size:9px;font-weight:900;letter-spacing:.5px;
+}
+.exec-kpi{
+    width:100% !important;
+    height:138px !important;
+    min-height:100px !important;
+    max-height:100px !important;
+    box-sizing:border-box !important;
+    background:#fff;border:1px solid #d6e3ed;border-radius:10px;
+    padding:12px 12px 10px 12px;
+    box-shadow:0 3px 12px rgba(15,60,90,.07);
+    position:relative; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:flex-start;
+}
+.exec-kpi:before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:#0b5b8e;
+}
+.exec-kpi.orange:before{background:#f28c00}
+.exec-kpi.red:before{background:#d71920}
+.exec-kpi.green:before{background:#2e9d50}
+.exec-kpi .label{font-size:9px;font-weight:900;color:#607588;letter-spacing:.5px}
+.exec-kpi .value{font-size:27px;font-weight:950;color:#123f77;line-height:1.05;margin-top:6px}
+.exec-kpi .hint{font-size:8px;color:#8797a5;margin-top:5px}
+.exec-panel-title{
+    display:flex;align-items:center;justify-content:space-between;
+    color:#0b4a82;font-size:12px;font-weight:950;
+    background:#f7fbfe;
+    border:1px solid #d6e3ed;
+    border-radius:8px;
+    padding:8px 10px;
+    margin:0 0 8px 0;
+    box-sizing:border-box;
+    width:100%;
+    letter-spacing:.15px;
+}
+.exec-panel-title:before{
+    content:"";
+    width:10px;height:10px;border-radius:50%;
+    background:linear-gradient(135deg,#ef5360,#b91f3b);
+    margin-right:7px;
+    flex:0 0 10px;
+    box-shadow:0 1px 3px rgba(185,31,59,.22);
+}
+.exec-panel-title > div{flex:1}
+.exec-panel-title span{font-size:8px;color:#7c8f9f;font-weight:800}
+.exec-health{
+    padding:8px 10px;border-radius:8px;background:#f5f9fc;
+    border:1px solid #dce7ef;margin-bottom:6px;
+}
+.exec-health .name{font-size:9px;font-weight:900;color:#173f70}
+.exec-health .pct{font-size:11px;font-weight:950;color:#173f70}
+.exec-bar{height:8px;background:#e5edf3;border-radius:8px;overflow:hidden;margin-top:5px}
+.exec-bar > div{height:100%;border-radius:8px}
+.exec-note{
+    font-size:8px;color:#728494;margin-top:3px;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]{
+    background:linear-gradient(180deg,#f8fcff 0%,#f3f9fd 100%) !important;
+    border:1px solid #cbddea !important;
+    border-radius:12px !important;
+    box-shadow:0 2px 10px rgba(25,70,100,.05) !important;
+    padding:10px 10px 8px 10px !important;
+}
+
+div[data-testid="stVerticalBlockBorderWrapper"] > div{
+    padding:0 !important;
+}
+
+/* ---------- STRICT 50:50 EXECUTIVE GRID ---------- */
+/* Every two-panel row uses exactly equal column widths and equal outer margins. */
+div[data-testid="stHorizontalBlock"]{
+    width:100% !important;
+    display:flex !important;
+    align-items:stretch !important;
+    gap:10px !important;
+}
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]{
+    flex:1 1 0 !important;
+    width:0 !important;
+    max-width:none !important;
+    min-width:0 !important;
+    display:flex !important;
+    align-items:stretch !important;
+}
+
+/* ---------- EQUAL KPI CARD DIMENSIONS ---------- */
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:has(.exec-kpi){
+    flex:1 1 0 !important;
+    width:0 !important;
+    min-width:0 !important;
+    max-width:none !important;
+}
+div[data-testid="stHorizontalBlock"]:has(.exec-kpi){
+    align-items:stretch !important;
+    gap:10px !important;
+}
+div[data-testid="stHorizontalBlock"]:has(.exec-kpi) > div[data-testid="column"] > div{
+    width:100% !important;
+    height:138px !important;
+}
+
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div{
+    width:100% !important;
+    min-width:0 !important;
+}
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] div[data-testid="stVerticalBlockBorderWrapper"]{
+    width:100% !important;
+    height:100% !important;
+    min-height:0 !important;
+    box-sizing:border-box !important;
+}
+
+/* Header stays inside its own 50:50 panel with equal left/right inset. */
+.exec-panel-title{
+    box-sizing:border-box !important;
+    width:100% !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+}
+
+/* Do not let Plotly/dataframe elements create horizontal overflow. */
+div[data-testid="stHorizontalBlock"] .stPlotlyChart,
+div[data-testid="stHorizontalBlock"] [data-testid="stDataFrame"]{
+    width:100% !important;
+    max-width:100% !important;
+}
+
+
+/* Keep the management-attention chart compact so the panel height is driven by content. */
+.exec-management-chart .stPlotlyChart{
+    margin-bottom:0 !important;
+}
+
+div[data-testid="stSelectbox"] label{
+    font-size:9px !important;font-weight:900 !important;color:#173f70 !important;
+}
+div[data-testid="stSelectbox"] > div > div{
+    min-height:32px !important;border-radius:7px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# EXECUTIVE DEPARTMENT LIST
+# ============================================================
+ALL_DEPARTMENTS = [
+    "All Departments",
+    "Blast Furnace",
+    "Coke Oven",
+    "CRM",
+    "WRM",
+    "CPP",
+    "CU",
+    "DRI",
+    "LCP",
+    "Pellet and Beneficiation",
+    "Sinter",
+    "SMS-1",
+    "SMS-2",
+    "Tube Mill",
+    "CSP",
+]
+
+# ---------- DATA FILTER ----------
+selected_department = st.selectbox(
+    "VIEW DEPARTMENT",
+    ALL_DEPARTMENTS,
+    index=0,
+    key="executive_department_selector",
+)
+
+# Keep the executive page independent from the detailed page's filtered objects.
+exec_data = {}
+for name, df in loaded.items():
+    if name in {"PSM CE ", "Barrier Audit", "Failure Data", "Audit Compliance"}:
+        exec_data[name] = df.copy() if df is not None else pd.DataFrame()
+    else:
+        exec_data[name] = filter_selected_department(df, selected_department)
+
+def exec_df(name):
+    df = exec_data.get(name)
+    return clean_dataframe(df) if df is not None else pd.DataFrame()
+
+def exec_num(series):
+    return pd.to_numeric(
+        series.astype(str).str.replace(",", "", regex=False).str.replace("%", "", regex=False),
+        errors="coerce"
+    ).fillna(0)
+
+def module_summary(df, status_names=None):
+    x = status_counts(df, status_names)
+    total = x["total"]
+    done = x["completed"] + x["closed"]
+    open_count = x["open"] + x["ongoing"] + x["pending"]
+    overdue = x["overdue"]
+    pct = (done / total * 100) if total else 0
+    return total, done, open_count, overdue, pct
+
+def kpi_card(label, value, hint="", tone="blue"):
+    st.markdown(
+        f"""<div class="exec-kpi {tone}">
+            <div class="label">{label}</div>
+            <div class="value">{value}</div>
+            <div class="hint">{hint}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+def panel_title(title, subtitle=""):
+    st.markdown(
+        f"""<div class="exec-panel-title">
+            <div>{title}</div><span>{subtitle}</span>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+def pct_color(p):
+    """Completion percentage colour scale for the Executive dashboard."""
+    try:
+        p = float(p)
+    except Exception:
+        p = 0.0
+
+    if p >= 90:
+        return "#16a34a"      # Green      90-100%
+    elif p >= 70:
+        return "#65a30d"      # Lime Green 70-89%
+    elif p >= 50:
+        return "#f59e0b"      # Amber      50-69%
+    elif p >= 25:
+        return "#f97316"      # Orange     25-49%
+    else:
+        return "#dc2626"      # Red        0-24%
+
+
+def attention_color(value):
+    """Management attention colour scale based on number of items."""
+    try:
+        value = float(value)
+    except Exception:
+        value = 0.0
+
+    if value >= 50:
+        return "#dc2626"      # Critical: 50+
+    elif value >= 20:
+        return "#f97316"      # High: 20-49
+    elif value >= 5:
+        return "#facc15"      # Medium: 5-19
+    elif value >= 1:
+        return "#16a34a"      # Low: 1-4
+    else:
+        return "#9ca3af"      # None: 0
+
+# ---------- EXECUTIVE KPI CALCULATIONS ----------
+pt_df = exec_df("PT")
+pha_df = exec_df("PHA")
+rec_df = exec_df("PHA Recommendation")
+moc_df = exec_df("MOC")
+pssr_df = exec_df("PSSR")
+training_df = exec_df("Training")
+soc_df = exec_df("SOC-SOL")
+incident_df = exec_df("PS Incident")
+interlock_df = exec_df("Interlock ")
+psmce_df = exec_df("PSM CE ")
+barrier_df = exec_df("Barrier Audit")
+failure_df = exec_df("Failure Data")
+audit_df = exec_df("Audit Compliance")
+
+# Action-based modules
+action_modules = [
+    (pt_df, None), (pha_df, None), (rec_df, [
+        "Status (Open/Close)", "Status Open Close", "Open/Close Status",
+        "Recommendation Status", "Status"
+    ]), (moc_df, None), (pssr_df, [
+        "Overdue/Pending/Completed", "Overdue / Pending / Completed",
+        "Overdue Pending Completed", "Status", "Current Status"
+    ])
+]
+total_actions = done_actions = open_actions = overdue_actions = 0
+for df, candidates in action_modules:
+    a,b,c,d,_ = module_summary(df, candidates)
+    total_actions += a
+    done_actions += b
+    open_actions += c
+    overdue_actions += d
+
+# Incident KPIs
+incident_dept_col = incident_df.columns[1] if len(incident_df.columns) >= 2 else find_col(
+    incident_df, ["Department", "Dept"]
+)
+total_incidents = 0
+if incident_dept_col and not incident_df.empty:
+    vals = incident_df[incident_dept_col].fillna("").astype(str).str.strip()
+    total_incidents = int(vals.replace(["", "-", "nan", "None"], pd.NA).notna().sum())
+
+# Interlock pending
+int_status_col = find_col(interlock_df, [
+    "Present Status / Action Required", "Present Status",
+    "Status / Action Required", "Status"
+])
+pending_interlocks = 0
+if int_status_col and not interlock_df.empty:
+    s = interlock_df[int_status_col].fillna("").astype(str).str.lower()
+    pending_interlocks = int(
+        s.str.contains(r"due\s*for\s*normalization|normalization\s*pending", regex=True, na=False).sum()
+    )
+
+# Barrier health
+barrier_assessed_col = find_col(barrier_df, [
+    "Barrier Health (C4/C5) (Number) Assessed", "Assessed"
+])
+barrier_unacceptable_col = find_col(barrier_df, [
+    "Barrier Health (C4/C5) (Number) Unacceptable",
+    "Unacceptable Barrier", "Unacceptable"
+])
+barrier_assessed = int(exec_num(barrier_df[barrier_assessed_col]).sum()) if barrier_assessed_col and not barrier_df.empty else 0
+barr_unacceptable = int(exec_num(barrier_df[barrier_unacceptable_col]).sum()) if barrier_unacceptable_col and not barrier_df.empty else 0
+
+# Audit
+audit_date_col = find_col(audit_df, ["Audit Date", "Last Audit Date", "Date"])
+audit_done = 0
+audit_pending = 0
+if audit_date_col and not audit_df.empty:
+    audit_dates = pd.to_datetime(audit_df[audit_date_col], errors="coerce")
+    audit_done = int(audit_dates.notna().sum())
+    audit_pending = int(audit_dates.isna().sum())
+elif not audit_df.empty:
+    audit_pending = len(audit_df)
+
+# Training completion
+training_completion = 0.0
+tr_process_col = find_col(training_df, ["Process"])
+tr_total_cols = [
+    find_col(training_df, ["Total Employees (L08 & Above)"]),
+    find_col(training_df, ["Total Employees (Below L08)"]),
+    find_col(training_df, ["Total Associates"]),
+    find_col(training_df, ["Total Contractual Workers"]),
+]
+tr_done_cols = [
+    find_col(training_df, ["Completed Training (L08 & Above)"]),
+    find_col(training_df, ["Completed Training (Below L08)"]),
+    find_col(training_df, ["Completed Training (Associates)"]),
+    find_col(training_df, ["Completed Training (Contracts)"]),
+]
+if not training_df.empty and all(tr_total_cols) and all(tr_done_cols):
+    total_people = sum(exec_num(training_df[c]).sum() for c in tr_total_cols)
+    done_people = sum(exec_num(training_df[c]).sum() for c in tr_done_cols)
+    training_completion = (done_people / total_people * 100) if total_people else 0
+
+# PSM CE completion
+psmce_dept_col = find_col(psmce_df, ["Department", "Dept"])
+mech_gen = find_col(psmce_df, [
+    "Compliance of PSM CE MO – Mechanical – Generated",
+    "Compliance of PSM CE MO - Mechanical - Generated",
+    "PSM CE MO Mechanical Generated"
+])
+mech_comp = find_col(psmce_df, [
+    "Compliance of PSM CE MO – Mechanical – Completed",
+    "Compliance of PSM CE MO - Mechanical - Completed",
+    "PSM CE MO Mechanical Completed"
+])
+ei_gen = find_col(psmce_df, [
+    "Compliance of PSM CE MO – E&I – Generated",
+    "Compliance of PSM CE MO - E&I - Generated",
+    "PSM CE MO E&I Generated"
+])
+ei_comp = find_col(psmce_df, [
+    "Compliance of PSM CE MO – E&I – Completed",
+    "Compliance of PSM CE MO - E&I - Completed",
+    "PSM CE MO E&I Completed"
+])
+psmce_gen = (int(exec_num(psmce_df[mech_gen]).sum()) if mech_gen else 0) + (int(exec_num(psmce_df[ei_gen]).sum()) if ei_gen else 0)
+psmce_done = (int(exec_num(psmce_df[mech_comp]).sum()) if mech_comp else 0) + (int(exec_num(psmce_df[ei_comp]).sum()) if ei_comp else 0)
+psmce_completion = (psmce_done / psmce_gen * 100) if psmce_gen else 0
+
+# Overall action closure — deliberately based only on action-oriented modules in this source.
+overall_closure = (done_actions / total_actions * 100) if total_actions else 0
+
+# ---------- KPI ROW ----------
+k1,k2,k3,k4,k5,k6,k7,k8 = st.columns(8, gap="small")
+with k1: kpi_card("ACTION REGISTER", f"{total_actions:,}", "PT + PHA + PHA Rec. + MOC + PSSR")
+with k2: kpi_card("CLOSED / COMPLETE", f"{done_actions:,}", f"{overall_closure:.0f}% closure", "green")
+with k3: kpi_card("OPEN / ONGOING", f"{open_actions:,}", "Requires management follow-up", "orange")
+with k4: kpi_card("OVERDUE", f"{overdue_actions:,}", "Priority attention", "red")
+with k5: kpi_card("PROCESS INCIDENTS", f"{total_incidents:,}", "Recorded process-safety incidents", "red")
+with k6: kpi_card("INTERLOCK PENDING", f"{pending_interlocks:,}", "Normalization pending", "orange")
+with k7: kpi_card("BARR. UNACCEPT", f"{barr_unacceptable:,}", f"{barrier_assessed:,} assessed", "red")
+with k8: kpi_card("AUDIT PENDING", f"{audit_pending:,}", f"{audit_done:,} completed", "orange")
+
+st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+# ---------- ROW: PERFORMANCE + MANAGEMENT ATTENTION ----------
+left, right = st.columns([1, 1], gap="small")
+
+with left:
+    with st.container(border=True):
+        panel_title("PSM MODULE PERFORMANCE", "completion / closure view")
+        module_rows = [
+            ("Process Technology", pt_df, None),
+            ("Process Hazard Analysis", pha_df, None),
+            ("PHA Recommendation", rec_df, [
+                "Status (Open/Close)", "Status Open Close", "Open/Close Status",
+                "Recommendation Status", "Status"
+            ]),
+            ("Management of Change", moc_df, None),
+            ("PSSR", pssr_df, [
+                "Overdue/Pending/Completed", "Overdue / Pending / Completed",
+                "Overdue Pending Completed", "Status", "Current Status"
+            ]),
+            ("Training", None, None),
+            ("PSM CE", None, None),
+            ("Audit / Compliance", None, None),
+        ]
+
+        perf = []
+        for name, df, cand in module_rows:
+            if name == "Training":
+                p = training_completion
+                total = None
+            elif name == "PSM CE":
+                p = psmce_completion
+                total = psmce_gen
+            elif name == "Audit / Compliance":
+                total = audit_done + audit_pending
+                p = (audit_done / total * 100) if total else 0
+            else:
+                total, done, _, _, p = module_summary(df, cand)
+            perf.append((name, p, total))
+
+        for name, p, total in perf:
+            c = pct_color(p)
+            total_text = f"{total:,} records" if total is not None else ""
+            st.markdown(
+                f"""<div class="exec-health">
+                    <div style="display:flex;justify-content:space-between;">
+                        <div class="name">{name}</div>
+                        <div class="pct" style="color:{c};">{p:.0f}%</div>
+                    </div>
+                    <div class="exec-bar"><div style="width:{min(100,max(0,p)):.1f}%;background:{c};"></div></div>
+                    <div class="exec-note">{total_text}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+with right:
+    with st.container(border=True, height=605):
+        panel_title("MANAGEMENT ATTENTION", "items needing action")
+
+        attention = pd.DataFrame({
+            "Area": [
+                "Overdue actions",
+                "Open / ongoing actions",
+                "Process safety incidents",
+                "Interlock normalization",
+                "Unacceptable barriers",
+                "Pending audits",
+            ],
+            "Count": [
+                overdue_actions,
+                open_actions,
+                total_incidents,
+                pending_interlocks,
+                barr_unacceptable,
+                audit_pending,
+            ],
+        }).sort_values("Count", ascending=True)
+
+        fig = go.Figure(go.Bar(
+            x=attention["Count"],
+            y=attention["Area"],
+            orientation="h",
+            text=attention["Count"],
+            textposition="outside",
+            marker=dict(color=[attention_color(v) for v in attention["Count"]]),
+            hovertemplate="<b>%{y}</b><br>Count: %{x}<extra></extra>",
+        ))
+        fig.update_layout(
+            height=400,
+            margin=dict(l=8,r=45,t=8,b=18),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(size=9,color="#173f70"),
+            xaxis=dict(showgrid=True,gridcolor="#e5edf4",rangemode="tozero"),
+            yaxis=dict(showgrid=False),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.markdown(
+            '<div class="exec-note">Higher bars indicate greater management attention; values are calculated from the live source registers.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:5px;
+                        font-size:8px;font-weight:800;color:#627689;">
+                <span><b style="color:#dc2626;">●</b> Critical (≥50)</span>
+                <span><b style="color:#f97316;">●</b> High (20–49)</span>
+                <span><b style="color:#facc15;">●</b> Medium (5–19)</span>
+                <span><b style="color:#16a34a;">●</b> Low (1–4)</span>
+                <span><b style="color:#9ca3af;">●</b> None (0)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+# ---------- ROW: DEPARTMENT RISK / PERFORMANCE ----------
+c1, c2 = st.columns([1, 1], gap="small")
+
+with c1:
+    with st.container(border=True, height=340):
+        panel_title("DEPARTMENT-WISE SAFETY SIGNAL", "incident + interlock + barrier")
+
+        dept_names = [d for d in ALL_DEPARTMENTS if d != "All Departments"]
+        dept_rows = []
+        for dept in dept_names:
+            inc = len(filter_selected_department(loaded.get("PS Incident"), dept))
+            inte = len(filter_selected_department(loaded.get("Interlock "), dept))
+            # Barrier source may have its own department column.
+            barr = filter_selected_department(loaded.get("Barrier Audit"), dept)
+            bu = 0
+            if not barr.empty and barrier_unacceptable_col:
+                bu = int(exec_num(barr[barrier_unacceptable_col]).sum())
+            dept_rows.append([dept, inc, inte, bu, inc + inte + bu])
+
+        dept_df = pd.DataFrame(dept_rows, columns=["Department","Incidents","Interlocks","Unacceptable Barriers","Attention"])
+        dept_df = dept_df.sort_values(["Attention","Department"], ascending=[False,True]).head(12)
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(name="Incidents", x=dept_df["Department"], y=dept_df["Incidents"]))
+        fig.add_trace(go.Bar(name="Interlocks", x=dept_df["Department"], y=dept_df["Interlocks"]))
+        fig.add_trace(go.Bar(name="Unacceptable Barriers", x=dept_df["Department"], y=dept_df["Unacceptable Barriers"]))
+        fig.update_layout(
+            barmode="stack", height=250,
+            margin=dict(l=35,r=15,t=10,b=90),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(size=8,color="#173f70"),
+            legend=dict(orientation="h",y=1.08,x=0,font=dict(size=8)),
+            xaxis=dict(tickangle=-45,showgrid=False),
+            yaxis=dict(rangemode="tozero",showgrid=True,gridcolor="#e5edf4"),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+with c2:
+    with st.container(border=True):
+        panel_title("EXECUTIVE HEALTH GAUGES", "key compliance indicators")
+
+        gauges = [
+            ("Action Closure", overall_closure),
+            ("Training Completion", training_completion),
+            ("PSM CE Completion", psmce_completion),
+        ]
+        for name, val in gauges:
+            c = pct_color(val)
+            fig = go.Figure(go.Pie(
+                values=[min(100,max(0,val)), max(0,100-min(100,max(0,val)))],
+                labels=["Complete","Remaining"],
+                hole=.72,
+                textinfo="none",
+                marker=dict(colors=[c,"#e9eff4"]),
+                sort=False,
+            ))
+            fig.update_layout(
+                height=78, margin=dict(l=0,r=0,t=0,b=0),
+                showlegend=False, paper_bgcolor="rgba(0,0,0,0)",
+                annotations=[dict(text=f"<b>{val:.0f}%</b>",x=.5,y=.5,
+                                   showarrow=False,font=dict(size=18,color="#173f70"))],
+            )
+            gc1,gc2 = st.columns([.55,1.45], gap="small")
+            with gc1:
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                    key=f"executive_health_gauge_{name}"
+                )
+            with gc2:
+                st.markdown(
+                    f"""<div style="padding-top:12px">
+                        <div style="font-size:10px;font-weight:900;color:#173f70">{name}</div>
+                        <div style="font-size:8px;color:#7b8d9b;margin-top:4px">
+                        {"Target / healthy level: 90%+" if name != "Action Closure" else "Based on action-oriented modules in the source data"}
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+# ---------- ROW: TREND + CRITICAL REGISTERS ----------
+t1, t2 = st.columns([1, 1], gap="small")
+
+with t1:
+    with st.container(border=True, height=375):
+        panel_title("SOC / SOL DEVIATION TREND", "month-wise")
+
+        if not soc_df.empty:
+            month_col = find_col(soc_df, ["Month"])
+            soc_col = find_col(soc_df, ["SOC Deviation","SOC Deviation Nos.","SOC Deviation No.","SOC"])
+            sol_col = find_col(soc_df, ["SOL Deviation","SOL Deviation Nos.","SOL Deviation No.","SOL"])
+            if month_col and soc_col and sol_col:
+                temp = pd.DataFrame({
+                    "Month": soc_df[month_col].astype(str).str.strip(),
+                    "SOC": exec_num(soc_df[soc_col]),
+                    "SOL": exec_num(soc_df[sol_col]),
+                })
+                temp = temp.groupby("Month", as_index=False)[["SOC","SOL"]].sum()
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=temp["Month"],y=temp["SOC"],mode="lines+markers+text",
+                                         text=[str(int(v)) if v else "" for v in temp["SOC"]],
+                                         textposition="top center",name="SOC Deviation",line=dict(width=3)))
+                fig.add_trace(go.Scatter(x=temp["Month"],y=temp["SOL"],mode="lines+markers+text",
+                                         text=[str(int(v)) if v else "" for v in temp["SOL"]],
+                                         textposition="top center",name="SOL Deviation",line=dict(width=3)))
+                fig.update_layout(
+                    height=250, margin=dict(l=40,r=20,t=10,b=50),
+                    plot_bgcolor="rgba(0,0,0,0)",paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(size=8,color="#173f70"),
+                    xaxis=dict(showgrid=False,tickangle=-35),
+                    yaxis=dict(rangemode="tozero",showgrid=True,gridcolor="#e5edf4"),
+                    legend=dict(orientation="h",y=1.08,x=0,font=dict(size=8)),
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
+            else:
+                st.info("SOC / SOL columns not available.")
+        else:
+            st.info("No SOC / SOL data available.")
+
+with t2:
+    with st.container(border=True):
+        panel_title("CRITICAL OPEN REGISTERS", "top priorities")
+
+        critical_rows = []
+        if not pssr_df.empty:
+            x = status_counts(pssr_df, [
+                "Overdue/Pending/Completed","Overdue / Pending / Completed",
+                "Overdue Pending Completed","Status","Current Status"
+            ])
+            critical_rows.append(("PSSR overdue", x["overdue"]))
+            critical_rows.append(("PSSR pending", x["pending"]))
+        if not rec_df.empty:
+            x = status_counts(rec_df, [
+                "Status (Open/Close)","Status Open Close","Open/Close Status",
+                "Recommendation Status","Status"
+            ])
+            critical_rows.append(("PHA recommendations open", x["open"]))
+        if not moc_df.empty:
+            x = status_counts(moc_df)
+            critical_rows.append(("MOC open", x["open"]))
+        critical_rows.extend([
+            ("Interlock normalization pending", pending_interlocks),
+            ("Unacceptable barriers", barr_unacceptable),
+            ("Audit pending", audit_pending),
+        ])
+
+        critical_df = pd.DataFrame(critical_rows, columns=["Register","Open"]).sort_values("Open",ascending=False)
+        critical_df = critical_df[critical_df["Open"] > 0].head(8)
+
+        if critical_df.empty:
+            st.success("No critical open register items detected.")
+        else:
+            st.dataframe(
+                critical_df,
+                use_container_width=True,
+                hide_index=True,
+                height=300,
+                column_config={
+                    "Register": st.column_config.TextColumn("Register"),
+                    "Open": st.column_config.NumberColumn("Open",format="%d"),
+                }
+            )
+
+
+# ============================================================
+# PSM LEADING vs LAGGING INDICATORS MATRIX
+# ============================================================
+# This section is self-contained. It uses the existing executive
+# data/filter logic above and does not replace any existing dashboard section.
+# ============================================================
+
+st.markdown("""
+<style>
+.psm-matrix-wrap{
+    background:#ffffff;
+    border:1px solid #cbdce8;
+    border-radius:10px;
+    padding:10px 10px 8px 10px;
+    margin:8px 0 10px 0;
+    box-shadow:0 2px 8px rgba(15,60,90,.06);
+}
+.psm-matrix-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:linear-gradient(90deg,#073f78,#0b6096);
+    color:#ffffff;
+    border-radius:7px;
+    padding:9px 12px;
+    margin-bottom:8px;
+    font-size:12px;
+    font-weight:950;
+    letter-spacing:.2px;
+}
+.psm-matrix-sub{
+    color:#5f7385;
+    font-size:9px;
+    margin:3px 2px 8px 2px;
+}
+.psm-matrix-link{
+    display:inline-block;
+    background:#073f78;
+    color:#ffffff !important;
+    padding:6px 10px;
+    border-radius:5px;
+    text-decoration:none !important;
+    font-size:9px;
+    font-weight:900;
+}
+.psm-matrix-table{
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+    font-size:9px;
+    color:#173f70;
+}
+.psm-matrix-table th{
+    background:#dcecf3;
+    color:#173f70;
+    font-weight:950;
+    text-align:left;
+    padding:7px 6px;
+    border:1px solid #b7c8d3;
+}
+.psm-matrix-table td{
+    background:#ffffff;
+    padding:6px;
+    border:1px solid #d3dee6;
+    vertical-align:middle;
+}
+.psm-matrix-table th:nth-child(1),
+.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
+.psm-matrix-table th:nth-child(2),
+.psm-matrix-table td:nth-child(2){width:34%;}
+.psm-matrix-table th:nth-child(3),
+.psm-matrix-table td:nth-child(3){width:12%;}
+.psm-matrix-table th:nth-child(4),
+.psm-matrix-table td:nth-child(4){width:13%;}
+.psm-matrix-table th:nth-child(5),
+.psm-matrix-table td:nth-child(5){width:16%;}
+.psm-matrix-table th:nth-child(6),
+.psm-matrix-table td:nth-child(6){width:20%;}
+.matrix-ok{color:#159447;font-weight:900;}
+.matrix-watch{color:#e5a400;font-weight:900;}
+.matrix-critical{color:#d71920;font-weight:900;}
+.matrix-na{color:#8a99a8;font-weight:800;}
+.matrix-note{
+    font-size:8px;
+    color:#738595;
+    margin-top:6px;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ============================================================
-# RAW DATA FOR EXECUTIVE COMPARISON
-# Keep the existing selected-department data untouched above;
-# use loaded/raw sheets for the department ranking below.
-# ============================================================
-raw_pt = loaded.get("PT")
-raw_pha = loaded.get("PHA")
-raw_pssr = loaded.get("PSSR")
-raw_moc = loaded.get("MOC")
-raw_incident = loaded.get("PS Incident")
-raw_interlock = loaded.get("Interlock ")
-raw_barrier = loaded.get("Barrier Audit")
-raw_audit = loaded.get("Audit Compliance")
+def _matrix_status_pct(df, status_names=None):
+    """Closure percentage from the existing status logic."""
+    if df is None or df.empty:
+        return None
+    total, done, _, _, pct = module_summary(df, status_names)
+    return pct if total else None
 
-# ------------------------------------------------------------
-# STATUS HELPERS
-# ------------------------------------------------------------
-def safe_status(df, candidates=None):
-    return status_counts(df, candidates)
 
-# ============================================================
-# CURRENT FILTER KPI CALCULATIONS
-# ============================================================
-pha_s = safe_status(pha)
-pt_s = safe_status(pt)
+def _matrix_status_count(df, candidates):
+    """Count rows matching active/open/pending wording in a status field."""
+    if df is None or df.empty:
+        return None
+    status_col = find_col(df, candidates)
+    if not status_col:
+        return None
+    s = df[status_col].fillna("").astype(str).str.strip().str.lower()
+    valid = s.replace({"nan": "", "none": "", "-": ""})
+    valid = valid[valid != ""]
+    if valid.empty:
+        return 0
+    return int(
+        valid.str.contains(
+            r"active|bypass|due\s*for\s*normalization|normalization\s*pending|pending|open",
+            regex=True,
+            na=False,
+        ).sum()
+    )
 
-pssr_s = safe_status(
-    pssr,
+
+def _matrix_yes_count(df, candidates):
+    """Count affirmative records from a source column."""
+    if df is None or df.empty:
+        return None
+    col = find_col(df, candidates)
+    if not col:
+        return None
+
+    s = df[col].fillna("").astype(str).str.strip().str.lower()
+    return int(
+        s.str.fullmatch(
+            r"yes|y|true|1|active|occurred|applicable|non[- ]?compliant",
+            case=False,
+            na=False,
+        ).sum()
+    )
+
+
+def _matrix_zero_or_pct(actual, target_type="zero"):
+    """Return status for zero-target count KPIs or percentage KPIs."""
+    if actual is None:
+        return "N/A", "matrix-na"
+    if target_type == "zero":
+        return ("ON TRACK", "matrix-ok") if float(actual) == 0 else ("CRITICAL", "matrix-critical")
+    if float(actual) >= 95:
+        return "ON TRACK", "matrix-ok"
+    if float(actual) >= 80:
+        return "WATCH", "matrix-watch"
+    return "CRITICAL", "matrix-critical"
+
+
+# Use the same selected-department filter for every matrix source.
+# This avoids showing fixed All-Department values when the executive filter changes.
+matrix_pt = filter_selected_department(pt, selected_department)
+matrix_pha = filter_selected_department(pha, selected_department)
+matrix_rec = filter_selected_department(rec, selected_department)
+matrix_moc = filter_selected_department(moc, selected_department)
+matrix_pssr = filter_selected_department(pssr, selected_department)
+matrix_training = filter_selected_department(training, selected_department)
+matrix_incident = filter_selected_department(incident, selected_department)
+matrix_interlock = filter_selected_department(interlock, selected_department)
+matrix_barrier = filter_selected_department(loaded.get("Barrier Audit"), selected_department)
+matrix_failure = filter_selected_department(failure_data, selected_department)
+matrix_audit = filter_selected_department(audit, selected_department)
+
+
+# ---- 1. PHA recommendation closure ----
+pha_rec_actual = _matrix_status_pct(
+    matrix_rec,
     [
-        "Overdue/Pending/Completed",
-        "Overdue / Pending / Completed",
+        "Status (Open/Close)",
+        "Status Open Close",
+        "Open/Close Status",
+        "Recommendation Status",
         "Status",
-        "Current Status",
     ],
 )
 
-moc_s = safe_status(
-    moc,
+# ---- 2. MOC closure compliance ----
+moc_actual = _matrix_status_pct(
+    matrix_moc,
     [
         "Status (Open/Close)",
+        "Status (Open / Close)",
         "Status",
         "Current Status",
         "MOC Status",
     ],
 )
 
-# ------------------------------------------------------------
-# INCIDENT
-# ------------------------------------------------------------
-incident_total = 0
-incident_completed = 0
-incident_pending = 0
+# ---- 3. Interlock bypass active count ----
+interlock_active = _matrix_status_count(
+    matrix_interlock,
+    [
+        "Present Status / Action Required",
+        "Present Status",
+        "Status / Action Required",
+        "Status",
+    ],
+)
 
-if incident is not None and not incident.empty:
-    incident_total = len(incident)
-    inv_col = find_col(
-        incident,
-        ["Investigation status", "Investigation Status", "Investigation", "Status"],
+# ---- 4. Alarm bypass active count ----
+# The current executive source does not load the Alarm tab, so do not
+# substitute Interlock data. Show N/A unless an Alarm field exists.
+alarm_active = None
+
+# ---- 5. Bow-Tie barrier verification ----
+barrier_assessed_col_m = find_col(
+    matrix_barrier,
+    ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
+)
+barrier_unacceptable_col_m = find_col(
+    matrix_barrier,
+    [
+        "Barrier Health (C4/C5) (Number) Unacceptable",
+        "Unacceptable Barrier",
+        "Unacceptable",
+    ]
+)
+if barrier_assessed_col_m and barrier_unacceptable_col_m and not matrix_barrier.empty:
+    assessed_m = float(exec_num(matrix_barrier[barrier_assessed_col_m]).sum())
+    unacceptable_m = float(exec_num(matrix_barrier[barrier_unacceptable_col_m]).sum())
+    barrier_actual = ((assessed_m - unacceptable_m) / assessed_m * 100) if assessed_m else None
+else:
+    barrier_actual = None
+
+# ---- 6. PSM training completion ----
+training_actual = None
+if not matrix_training.empty:
+    tr_total_cols_m = [
+        find_col(matrix_training, ["Total Employees (L08 & Above)"]),
+        find_col(matrix_training, ["Total Employees (Below L08)"]),
+        find_col(matrix_training, ["Total Associates"]),
+        find_col(matrix_training, ["Total Contractual Workers"]),
+    ]
+    tr_done_cols_m = [
+        find_col(matrix_training, ["Completed Training (L08 & Above)"]),
+        find_col(matrix_training, ["Completed Training (Below L08)"]),
+        find_col(matrix_training, ["Completed Training (Associates)"]),
+        find_col(matrix_training, ["Completed Training (Contracts)"]),
+    ]
+    if all(tr_total_cols_m) and all(tr_done_cols_m):
+        total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
+        done_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_done_cols_m)
+        training_actual = (done_people_m / total_people_m * 100) if total_people_m else None
+
+# ---- 7. PSM audit observation closure ----
+audit_actual = None
+if not matrix_audit.empty:
+    audit_status_col_m = find_col(
+        matrix_audit,
+        [
+            "Status",
+            "Observation Status",
+            "Action Status",
+            "Closure Status",
+            "Compliance Status",
+        ],
     )
-    if inv_col:
-        inv = incident[inv_col].fillna("").astype(str).str.strip().str.lower()
-        incident_completed = int(inv.isin(["completed", "complete", "closed", "done"]).sum())
-        incident_pending = int(inv.isin(["pending", "ongoing", "open", "in progress", "in-progress"]).sum())
-
-# ------------------------------------------------------------
-# INTERLOCK
-# ------------------------------------------------------------
-interlock_pending = 0
-if interlock is not None and not interlock.empty:
-    il_status_col = find_col(
-        interlock,
-        ["Present Status / Action Required", "Present Status", "Status / Action Required", "Status"],
-    )
-    if il_status_col:
-        il_status = interlock[il_status_col].fillna("").astype(str).str.lower()
-        interlock_pending = int(il_status.str.contains(r"due\s*for\s*normalization|normalization\s*pending", regex=True, na=False).sum())
-
-# ------------------------------------------------------------
-# BARRIER
-# ------------------------------------------------------------
-barrier_assessed = 0
-barrier_unacceptable = 0
-barrier_df = clean_dataframe(barrier_audit)
-if not barrier_df.empty:
-    b_assessed = find_col(barrier_df, ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"])
-    b_unacceptable = find_col(barrier_df, ["Barrier Health (C4/C5) (Number) Unacceptable", "Unacceptable Barrier", "Unacceptable"])
-    if b_assessed:
-        barrier_assessed = int(pd.to_numeric(barrier_df[b_assessed], errors="coerce").fillna(0).sum())
-    if b_unacceptable:
-        barrier_unacceptable = int(pd.to_numeric(barrier_df[b_unacceptable], errors="coerce").fillna(0).sum())
-
-# ------------------------------------------------------------
-# AUDIT
-# ------------------------------------------------------------
-audit_done = 0
-audit_pending = 0
-if audit is not None and not audit.empty:
-    audit_date_col = find_col(audit, ["Audit Date", "Last Audit Date", "Date"])
-    if audit_date_col:
-        ad = pd.to_datetime(audit[audit_date_col], errors="coerce")
-        audit_done = int(ad.notna().sum())
-        audit_pending = int(ad.isna().sum())
+    if audit_status_col_m:
+        audit_actual = _matrix_status_pct(
+            matrix_audit,
+            ["Status", "Observation Status", "Action Status", "Closure Status", "Compliance Status"],
+        )
     else:
-        audit_pending = len(audit)
+        # Fall back to the same audit-date logic already used above.
+        audit_date_col_m = find_col(matrix_audit, ["Audit Date", "Last Audit Date", "Date"])
+        if audit_date_col_m:
+            dates_m = pd.to_datetime(matrix_audit[audit_date_col_m], errors="coerce")
+            audit_actual = (dates_m.notna().sum() / len(matrix_audit) * 100) if len(matrix_audit) else None
 
-# ============================================================
-# OVERALL PSM HEALTH
-# ============================================================
-score_parts = []
-if pha_s["total"] > 0:
-    score_parts.append(pha_s["completed"] / pha_s["total"] * 100)
-if pt_s["total"] > 0:
-    score_parts.append(pt_s["completed"] / pt_s["total"] * 100)
-if pssr_s["total"] > 0:
-    score_parts.append(pssr_s["completed"] / pssr_s["total"] * 100)
-if moc_s["total"] > 0:
-    score_parts.append(moc_s["closed"] / moc_s["total"] * 100)
-if incident_total > 0:
-    score_parts.append(incident_completed / incident_total * 100)
-if barrier_assessed > 0:
-    score_parts.append(max(0, (barrier_assessed - barrier_unacceptable) / barrier_assessed * 100))
+# ---- 8. Process Safety Incidents ----
+incident_actual = len(matrix_incident) if matrix_incident is not None and not matrix_incident.empty else 0
 
-overall_score = sum(score_parts) / len(score_parts) if score_parts else 0
-overall_score = max(0, min(100, overall_score))
+# ---- 9. Major equipment failure events ----
+failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
 
-# ============================================================
-# EXECUTIVE SCORECARD
-# ============================================================
-st.markdown('<div class="apex-section">EXECUTIVE SAFETY SCORECARD</div>', unsafe_allow_html=True)
+# ---- 10–14: derive only where the incident source has an explicit field ----
+def _incident_event_count(df, candidates):
+    if df is None or df.empty:
+        return None
+    col = find_col(df, candidates)
+    if not col:
+        return None
 
-kpis = [
-    ("OVERALL PSM HEALTH", f"{overall_score:.1f}%", "Integrated management health"),
-    ("PSSR OVERDUE", f"{pssr_s['overdue']:,}", "Immediate attention"),
-    ("OPEN MOC", f"{moc_s['open']:,}", "Changes requiring closure"),
-    ("PS INCIDENTS", f"{incident_total:,}", "Recorded process incidents"),
-    ("INVESTIGATION PENDING", f"{incident_pending:,}", "Incident closure"),
-    ("INTERLOCK PENDING", f"{interlock_pending:,}", "Normalization required"),
-    ("UNACCEPTABLE BARRIERS", f"{barrier_unacceptable:,}", "Critical barrier health"),
-    ("AUDIT PENDING", f"{audit_pending:,}", "Audit coverage gap"),
+    s = df[col].fillna("").astype(str).str.strip().str.lower()
+
+    # Numeric event-count fields
+    numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
+    if numeric.notna().any():
+        return int(numeric.fillna(0).sum())
+
+    return int(
+        s.str.fullmatch(
+            r"yes|y|true|1|occurred|applicable",
+            case=False,
+            na=False,
+        ).sum()
+    )
+
+
+loss_containment_actual = _incident_event_count(
+    matrix_incident,
+    [
+        "Loss of Containment",
+        "Loss of containment event",
+        "LOC",
+        "Containment Loss",
+    ],
+)
+
+fire_explosion_actual = _incident_event_count(
+    matrix_incident,
+    [
+        "Fire / Explosion",
+        "Fire/Explosion",
+        "Fire Explosion",
+        "Fire",
+        "Explosion",
+    ],
+)
+
+environmental_actual = _incident_event_count(
+    matrix_incident,
+    [
+        "Environmental Release",
+        "Environmental release event",
+        "Environment Release",
+        "Release to Environment",
+    ],
+)
+
+repeat_incident_actual = _incident_event_count(
+    matrix_incident,
+    [
+        "Repeat Incident",
+        "Repeat Incidents",
+        "Repeat",
+    ],
+)
+
+production_loss_actual = _incident_event_count(
+    matrix_incident,
+    [
+        "Production Loss due to PSM Incident",
+        "Production Loss",
+        "Production Loss (MT)",
+        "Production Loss Due to Incident",
+    ],
+)
+
+
+matrix_rows = [
+    (
+        1,
+        "PHA recommendation closure",
+        ">95%",
+        pha_rec_actual,
+        "pct",
+        "Monthly",
+    ),
+    (
+        2,
+        "MOC closure compliance",
+        "100%",
+        moc_actual,
+        "pct",
+        "Monthly",
+    ),
+    (
+        3,
+        "Interlock bypass active count",
+        "0",
+        interlock_active,
+        "zero",
+        "Weekly",
+    ),
+    (
+        4,
+        "Alarm bypass active count",
+        "0",
+        alarm_active,
+        "zero",
+        "Weekly",
+    ),
+    (
+        5,
+        "Bow-Tie barrier verification",
+        "100%",
+        barrier_actual,
+        "pct",
+        "Monthly",
+    ),
+    (
+        6,
+        "PSM training completion",
+        ">95%",
+        training_actual,
+        "pct",
+        "Monthly",
+    ),
+    (
+        7,
+        "PSM audit observation closure",
+        ">95%",
+        audit_actual,
+        "pct",
+        "Monthly",
+    ),
+    (
+        8,
+        "Process Safety Incidents",
+        "0",
+        incident_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        9,
+        "Major equipment failure events",
+        "0",
+        failure_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        10,
+        "Loss of containment events",
+        "0",
+        loss_containment_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        11,
+        "Fire / explosion events",
+        "0",
+        fire_explosion_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        12,
+        "Environmental release events",
+        "0",
+        environmental_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        13,
+        "Repeat incidents",
+        "0",
+        repeat_incident_actual,
+        "zero",
+        "Monthly",
+    ),
+    (
+        14,
+        "Production loss due to PSM incident",
+        "0",
+        production_loss_actual,
+        "zero",
+        "Monthly",
+    ),
 ]
 
-cols = st.columns(8, gap="small")
-for col, (label, value, note) in zip(cols, kpis):
-    with col:
-        st.markdown(
-            f'<div class="apex-kpi"><div class="apex-kpi-label">{label}</div><div class="apex-kpi-value">{value}</div><div class="apex-kpi-note">{note}</div></div>',
-            unsafe_allow_html=True,
-        )
+
+def _matrix_display(actual, kind):
+    if actual is None:
+        return "N/A", "N/A", "matrix-na"
+
+    if kind == "pct":
+        status, cls = _matrix_zero_or_pct(actual, "pct")
+        return f"{actual:.1f}%", status, cls
+
+    status, cls = _matrix_zero_or_pct(actual, "zero")
+    if isinstance(actual, float) and actual.is_integer():
+        actual = int(actual)
+    return f"{actual:,}", status, cls
+
+
+matrix_html = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body { margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }
+.psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;}
+.psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
+.psm-matrix-link{display:inline-block;background:#ffffff;color:#073f78 !important;padding:6px 10px;border-radius:5px;text-decoration:none !important;font-size:9px;font-weight:900;}
+.psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
+.psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
+.psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
+.psm-matrix-table td{background:#ffffff;padding:6px;border:1px solid #d3dee6;vertical-align:middle;}
+.psm-matrix-table th:nth-child(1),.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
+.psm-matrix-table th:nth-child(2),.psm-matrix-table td:nth-child(2){width:34%;}
+.psm-matrix-table th:nth-child(3),.psm-matrix-table td:nth-child(3){width:12%;}
+.psm-matrix-table th:nth-child(4),.psm-matrix-table td:nth-child(4){width:13%;}
+.psm-matrix-table th:nth-child(5),.psm-matrix-table td:nth-child(5){width:16%;}
+.psm-matrix-table th:nth-child(6),.psm-matrix-table td:nth-child(6){width:20%;}
+.matrix-ok{color:#159447;font-weight:900;}
+.matrix-watch{color:#e5a400;font-weight:900;}
+.matrix-critical{color:#d71920;font-weight:900;}
+.matrix-na{color:#8a99a8;font-weight:800;}
+.matrix-note{font-size:8px;color:#738595;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="psm-matrix-wrap">
+    <div class="psm-matrix-head">
+        <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
+        <a class="psm-matrix-link"
+           href="https://docs.google.com/spreadsheets/d/1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM/edit?gid=1071736559#gid=1071736559"
+           target="_blank">↗ OPEN PSM DATA — GOOGLE SHEETS</a>
+    </div>
+    <div class="psm-matrix-sub">
+        These indicators show how well the safety system is working before incidents occur.
+        &nbsp;|&nbsp; View Department: <b>__DEPARTMENT__</b>
+    </div>
+    <table class="psm-matrix-table">
+        <thead>
+            <tr>
+                <th>SL NO</th>
+                <th>KPI</th>
+                <th>TARGET</th>
+                <th>ACTUAL</th>
+                <th>STATUS</th>
+                <th>REVIEW FREQUENCY</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+
+for sno, kpi, target, actual, kind, frequency in matrix_rows:
+    actual_text, status_text, status_cls = _matrix_display(actual, kind)
+    matrix_html += f"""
+            <tr>
+                <td>{sno}</td>
+                <td>{kpi}</td>
+                <td>{target}</td>
+                <td><b>{actual_text}</b></td>
+                <td class="{status_cls}">{status_text}</td>
+                <td>{frequency}</td>
+            </tr>
+"""
+
+matrix_html += """
+        </tbody>
+    </table>
+    <div class="matrix-note">
+        Actual values follow the Executive Department filter. N/A is shown where the current source
+        does not contain a direct field for that KPI; no value is assumed or hard-coded.
+    </div>
+</div>
+</body>
+</html>
+"""
+
+matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
+
+# Render the matrix as a real HTML document so table tags are not shown as text.
+components.html(
+    matrix_html,
+    height=500,
+    scrolling=False
+)
+
 
 # ============================================================
-# EXECUTIVE MANAGEMENT VIEW
+# DEPARTMENT-WISE KPI & DATA PERFORMANCE RANKING
 # ============================================================
-st.markdown('<div class="apex-section">APEX MANAGEMENT VIEW</div>', unsafe_allow_html=True)
+# Ranking is based directly on the 14 KPIs in the approved matrix.
+# The matrix provides targets, but does not provide KPI weights.
+# Therefore available KPIs are equally weighted.
+# Missing source data is N/A and is NOT treated as 100%.
+# ============================================================
 
-left, center, right = st.columns([1.0, 1.45, 1.0], gap="small")
+st.markdown("""
+<style>
+.psm-rank-wrap{background:#fff;border:1px solid #cbdce8;border-radius:10px;padding:10px;margin:8px 0 10px;box-shadow:0 2px 8px rgba(15,60,90,.06);}
+.psm-rank-head{background:linear-gradient(90deg,#073f78,#0b6096);color:#fff;border-radius:7px;padding:10px 12px;font-size:12px;font-weight:950;}
+.psm-rank-note{color:#667b8d;font-size:9px;margin:7px 2px;line-height:1.45;}
+.psm-rank-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:#173f70;}
+.psm-rank-table th{background:#073f78;color:#fff;font-weight:950;padding:8px 6px;border:1px solid #073f78;}
+.psm-rank-table td{padding:8px 6px;border:1px solid #d3dee6;background:#fff;text-align:center;}
+.psm-rank-table td.dept{text-align:left;font-weight:800;}
+.rank-good{color:#159447;font-weight:900}.rank-watch{color:#e5a400;font-weight:900}.rank-critical{color:#d71920;font-weight:900}.rank-na{color:#8a99a8;font-weight:800;}
+</style>
+""", unsafe_allow_html=True)
 
-# ------------------------------------------------------------
-# HEALTH GAUGE
-# ------------------------------------------------------------
-with left:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">OVERALL PSM HEALTH</div>', unsafe_allow_html=True)
-    gauge_color = "#159447" if overall_score >= 80 else "#e5a400" if overall_score >= 60 else "#d71920"
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=overall_score,
-        number={"suffix": "%", "font": {"size": 30, "color": gauge_color}},
-        gauge={
-            "axis": {"range": [0, 100], "tickfont": {"size": 8}},
-            "bar": {"color": gauge_color, "thickness": 0.25},
-            "steps": [
-                {"range": [0, 60], "color": "#fdeaea"},
-                {"range": [60, 80], "color": "#fff4d6"},
-                {"range": [80, 100], "color": "#eaf7ef"},
-            ],
-            "threshold": {"line": {"color": "#173f70", "width": 3}, "thickness": 0.8, "value": 90},
-        },
-    ))
-    fig_gauge.update_layout(height=215, margin=dict(l=12, r=12, t=8, b=0), paper_bgcolor="white")
-    st.plotly_chart(fig_gauge, use_container_width=True, config={"displayModeBar": False}, key="apex_health_gauge")
-    state = "HEALTHY" if overall_score >= 80 else "WATCH" if overall_score >= 60 else "CRITICAL"
-    st.markdown(f'<div style="text-align:center;font-size:10px;font-weight:900;color:{gauge_color};">● {state}</div></div>', unsafe_allow_html=True)
+# Matrix targets exactly as shown in the supplied matrix.
+MATRIX_KPIS = [
+    ("PHA recommendation closure", 95.0, "pct"),
+    ("MOC closure compliance", 100.0, "pct"),
+    ("Interlock bypass active count", 0.0, "zero"),
+    ("Alarm bypass active count", 0.0, "zero"),
+    ("Bow-Tie barrier verification", 100.0, "pct"),
+    ("PSM training completion", 95.0, "pct"),
+    ("PSM audit observation closure", 95.0, "pct"),
+    ("Process Safety Incidents", 0.0, "zero"),
+    ("Major equipment failure events", 0.0, "zero"),
+    ("Loss of containment events", 0.0, "zero"),
+    ("Fire / explosion events", 0.0, "zero"),
+    ("Environmental release events", 0.0, "zero"),
+    ("Repeat incidents", 0.0, "zero"),
+    ("Production loss due to PSM incident", 0.0, "zero"),
+]
 
-# ------------------------------------------------------------
-# MODULE PERFORMANCE
-# ------------------------------------------------------------
-with center:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">CORE PSM MODULE PERFORMANCE</div>', unsafe_allow_html=True)
-    module_names = ["PT / PROCESS TECHNOLOGY", "PHA", "PSSR", "MOC", "INCIDENT INVESTIGATION", "BARRIER HEALTH"]
-    module_scores = [
-        pt_s["completed"] / pt_s["total"] * 100 if pt_s["total"] else 0,
-        pha_s["completed"] / pha_s["total"] * 100 if pha_s["total"] else 0,
-        pssr_s["completed"] / pssr_s["total"] * 100 if pssr_s["total"] else 0,
-        moc_s["closed"] / moc_s["total"] * 100 if moc_s["total"] else 0,
-        incident_completed / incident_total * 100 if incident_total else 0,
-        (barrier_assessed - barrier_unacceptable) / barrier_assessed * 100 if barrier_assessed else 0,
+def _dept_df(df, dept):
+    if df is None:
+        return pd.DataFrame()
+    return filter_selected_department(df, dept)
+
+def _pct_status(df, candidates):
+    if df is None or df.empty:
+        return None
+    return _matrix_status_pct(df, candidates)
+
+def _active_interlocks(df):
+    if df is None or df.empty:
+        return None
+    col = find_col(df, [
+        "Present Status / Action Required", "Present Status",
+        "Status / Action Required", "Status"
+    ])
+    if not col:
+        return None
+    s = df[col].fillna("").astype(str).str.lower()
+    return float(s.str.contains(
+        r"active|normalization\s*pending|due\s*for\s*normalization",
+        regex=True, na=False
+    ).sum())
+
+def _training_actual(df):
+    if df is None or df.empty:
+        return None
+
+    total_cols = [
+        find_col(df, ["Total Employees (L08 & Above)"]),
+        find_col(df, ["Total Employees (Below L08)"]),
+        find_col(df, ["Total Associates"]),
+        find_col(df, ["Total Contractual Workers"]),
     ]
-    fig_mod = go.Figure(go.Bar(
-        x=module_scores,
-        y=module_names,
-        orientation="h",
-        text=[
-            (
-                f"{x:.0f}%"
-                if total > 0
-                else "N/A"
-            )
-            for x, total in [
-                (module_scores[0], pt_s["total"]),
-                (module_scores[1], pha_s["total"]),
-                (module_scores[2], pssr_s["total"]),
-                (module_scores[3], moc_s["total"]),
-                (module_scores[4], incident_total),
-                (module_scores[5], barrier_assessed),
-            ]
-        ],
-        textposition="outside",
-        marker=dict(color=["#159447" if x >= 80 else "#e5a400" if x >= 60 else "#d71920" for x in module_scores]),
-    ))
-    fig_mod.update_layout(
-        height=270,
-        margin=dict(l=5, r=42, t=4, b=4),
-        xaxis=dict(range=[0, 110], ticksuffix="%", showgrid=True, gridcolor="#e4ebf1"),
-        yaxis=dict(autorange="reversed", tickfont=dict(size=8)),
-        paper_bgcolor="white", plot_bgcolor="white", showlegend=False,
-    )
-    st.plotly_chart(fig_mod, use_container_width=True, config={"displayModeBar": False}, key="apex_module_scores")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ------------------------------------------------------------
-# MANAGEMENT ATTENTION
-# ------------------------------------------------------------
-with right:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">MANAGEMENT ATTENTION</div>', unsafe_allow_html=True)
-    attention = [
-        ("PSSR OVERDUE", pssr_s["overdue"], "critical"),
-        ("OPEN MOC", moc_s["open"], "warn"),
-        ("INTERLOCK PENDING", interlock_pending, "critical"),
-        ("UNACCEPTABLE BARRIER", barrier_unacceptable, "critical"),
-        ("AUDIT PENDING", audit_pending, "warn"),
+    done_cols = [
+        find_col(df, ["Completed Training (L08 & Above)"]),
+        find_col(df, ["Completed Training (Below L08)"]),
+        find_col(df, ["Completed Training (Associates)"]),
+        find_col(df, ["Completed Training (Contracts)"]),
     ]
-    for label, value, cls in attention:
-        st.markdown(f'<div class="apex-att {cls if cls != "critical" else ""}"><div class="apex-att-label">{label}</div><div class="apex-att-value">{value:,}</div></div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# ============================================================
-# DEPARTMENT-WISE EXECUTIVE RANKING
-# ============================================================
-st.markdown('<div class="apex-section">DEPARTMENT-WISE PSM PERFORMANCE</div>', unsafe_allow_html=True)
+    if all(total_cols) and all(done_cols):
+        total = sum(float(exec_num(df[c]).sum()) for c in total_cols)
+        done = sum(float(exec_num(df[c]).sum()) for c in done_cols)
+        return done / total * 100 if total else None
 
-raw_sets = [raw_pt, raw_pha, raw_pssr, raw_moc, raw_incident]
-department_scores = []
+    return _pct_status(df, [
+        "Status", "Current Status", "Training Status", "Completion Status"
+    ])
 
-# Department ranking:
-# - All Departments -> show every department
-# - Individual department -> show only the selected department
+def _barrier_actual(df):
+    if df is None or df.empty:
+        return None
+    a = find_col(df, ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"])
+    u = find_col(df, [
+        "Barrier Health (C4/C5) (Number) Unacceptable",
+        "Unacceptable Barrier", "Unacceptable"
+    ])
+    if not a or not u:
+        return None
+    assessed = float(exec_num(df[a]).sum())
+    unacceptable = float(exec_num(df[u]).sum())
+    return (assessed - unacceptable) / assessed * 100 if assessed else None
+
+def _event_field_count(df, candidates):
+    # None = source/field unavailable; 0 = field exists and confirms zero events.
+    if df is None or df.empty:
+        return None
+    col = find_col(df, candidates)
+    if not col:
+        return None
+
+    s = df[col].fillna("").astype(str).str.strip()
+    numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
+    if numeric.notna().any():
+        return float(numeric.fillna(0).sum())
+
+    return float(s.str.lower().isin([
+        "yes", "y", "true", "1", "occurred", "applicable"
+    ]).sum())
+
+def _matrix_actuals(dept):
+    rec_d = _dept_df(rec, dept)
+    moc_d = _dept_df(moc, dept)
+    interlock_d = _dept_df(interlock, dept)
+    training_d = _dept_df(training, dept)
+    barrier_d = _dept_df(loaded.get("Barrier Audit"), dept)
+    audit_d = _dept_df(audit, dept)
+    incident_d = _dept_df(incident, dept)
+    failure_d = _dept_df(failure_data, dept)
+
+    # 1 PHA recommendation closure
+    v1 = _pct_status(rec_d, [
+        "Status (Open/Close)", "Status Open Close", "Open/Close Status",
+        "Recommendation Status", "Status"
+    ])
+
+    # 2 MOC closure compliance
+    v2 = _pct_status(moc_d, [
+        "Status (Open/Close)", "Status (Open / Close)", "Status",
+        "Current Status", "MOC Status"
+    ])
+
+    # 3 Interlock bypass active count
+    v3 = _active_interlocks(interlock_d)
+
+    # 4 Alarm bypass active count: no dedicated source field currently loaded
+    v4 = None
+
+    # 5 Bow-Tie barrier verification
+    v5 = _barrier_actual(barrier_d)
+
+    # 6 PSM training completion
+    v6 = _training_actual(training_d)
+
+    # 7 PSM audit observation closure
+    v7 = _pct_status(audit_d, [
+        "Status", "Observation Status", "Action Status",
+        "Closure Status", "Compliance Status"
+    ])
+
+    # 8 Process Safety Incidents
+    v8 = float(len(incident_d)) if not incident_d.empty else None
+
+    # 9 Major equipment failure events
+    v9 = float(len(failure_d)) if not failure_d.empty else None
+
+    # 10-14 use the PS Incident source only if the exact field exists
+    v10 = _event_field_count(incident_d, [
+        "Loss of Containment", "Loss of containment event", "LOC"
+    ])
+    v11 = _event_field_count(incident_d, [
+        "Fire / Explosion", "Fire/Explosion", "Fire Explosion", "Fire", "Explosion"
+    ])
+    v12 = _event_field_count(incident_d, [
+        "Environmental Release", "Environmental release event",
+        "Environment Release"
+    ])
+    v13 = _event_field_count(incident_d, [
+        "Repeat Incident", "Repeat Incidents", "Repeat"
+    ])
+    v14 = _event_field_count(incident_d, [
+        "Production Loss due to PSM Incident",
+        "Production Loss", "Production Loss (MT)"
+    ])
+
+    return [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
+
+def _score(actual, target, kind):
+    if actual is None:
+        return None
+    if kind == "zero":
+        return 100.0 if float(actual) == 0 else 0.0
+    return max(0.0, min(100.0, float(actual) / target * 100.0))
+
 ranking_departments = (
-    ALL_DEPARTMENTS[1:]
-    if selected_department == "All Departments"
+    ALL_DEPARTMENTS[1:] if selected_department == "All Departments"
     else [selected_department]
 )
 
-for department in ranking_departments:
-    scores = []
-    for dataset in raw_sets:
-        if dataset is None or dataset.empty:
-            continue
-        ddf = filter_selected_department(dataset, department)
-        if ddf.empty:
-            continue
-        if dataset is raw_incident:
-            inv_col = find_col(ddf, ["Investigation status", "Investigation Status", "Investigation", "Status"])
-            if inv_col:
-                total = len(ddf)
-                inv = ddf[inv_col].fillna("").astype(str).str.strip().str.lower()
-                done = int(inv.isin(["completed", "complete", "closed", "done"]).sum())
-                scores.append(done / total * 100 if total else 100)
-        else:
-            ss = safe_status(ddf)
-            if ss["total"]:
-                if dataset is raw_moc:
-                    scores.append(ss["closed"] / ss["total"] * 100)
-                else:
-                    scores.append(ss["completed"] / ss["total"] * 100)
-    if scores:
-        department_scores.append({"Department": department, "PSM Score": sum(scores) / len(scores)})
+ranking_rows = []
+for dept in ranking_departments:
+    actuals = _matrix_actuals(dept)
+    scores = [
+        _score(actual, target, kind)
+        for actual, (_, target, kind) in zip(actuals, MATRIX_KPIS)
+    ]
+    usable = [s for s in scores if s is not None]
+    overall = sum(usable) / len(usable) if usable else None
 
-department_df = pd.DataFrame(department_scores)
+    ranking_rows.append({
+        "Department": dept,
+        "Score": overall,
+        "KPI Count": len(usable),
+    })
 
-if not department_df.empty:
-    department_df = department_df.sort_values("PSM Score", ascending=False).reset_index(drop=True)
-    rank_cols = st.columns([0.9, 2.4, 1.2, 1.2], gap="small")
-    for c, h in zip(rank_cols, ["RANK", "DEPARTMENT", "PSM SCORE", "STATUS"]):
-        c.markdown(f'<div style="background:#073f78;color:#fff;padding:7px 8px;font-size:10px;font-weight:900;">{h}</div>', unsafe_allow_html=True)
-    for idx, row in department_df.iterrows():
-        score = float(row["PSM Score"])
-        cls = "#159447" if score >= 80 else "#e5a400" if score >= 60 else "#d71920"
-        status = "HEALTHY" if score >= 80 else "WATCH" if score >= 60 else "CRITICAL"
-        vals = [str(idx + 1), str(row["Department"]), f"{score:.1f}%", status]
-        row_cols = st.columns([0.9, 2.4, 1.2, 1.2], gap="small")
-        for j, (c, val) in enumerate(zip(row_cols, vals)):
-            extra = f"color:{cls};font-weight:900;" if j >= 2 else "color:#173f70;"
-            c.markdown(f'<div style="background:#fff;border-bottom:1px solid #e2e9ef;padding:8px 8px;font-size:12px;{extra}">{val}</div>', unsafe_allow_html=True)
+ranking_df = pd.DataFrame(ranking_rows)
+if not ranking_df.empty:
+    ranking_df = ranking_df.sort_values(
+        ["Score", "KPI Count"],
+        ascending=[False, False],
+        na_position="last"
+    ).reset_index(drop=True)
+    ranking_df["Rank"] = range(1, len(ranking_df) + 1)
+
+st.markdown('<div class="psm-rank-wrap">', unsafe_allow_html=True)
+st.markdown(
+    '<div class="psm-rank-head">DEPARTMENT-WISE KPI & DATA PERFORMANCE RANKING</div>',
+    unsafe_allow_html=True
+)
+st.markdown(
+    """
+    <div class="psm-rank-note">
+    Ranking is based on the 14 KPIs in the supplied matrix.
+    Percentage KPIs are scored against the matrix target. For zero-target
+    KPIs, confirmed zero = 100% and any confirmed event = 0%.
+    Missing source data is N/A and is excluded. The supplied matrix does not
+    define KPI weights, so available KPIs are equally weighted.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+if ranking_df.empty:
+    st.info("No department data available for ranking.")
 else:
-    st.info("Department-wise performance data is not available.")
+    rank_html = """
+    <table class="psm-rank-table">
+      <thead><tr>
+        <th style="width:7%">RANK</th>
+        <th style="width:33%;text-align:left">DEPARTMENT</th>
+        <th style="width:20%">PSM SCORE</th>
+        <th style="width:15%">KPIs USED</th>
+        <th style="width:25%">STATUS</th>
+      </tr></thead><tbody>
+    """
 
-# ============================================================
-# CRITICAL MODULE SNAPSHOT
-# ============================================================
-st.markdown('<div class="apex-section">CRITICAL MODULE SNAPSHOT</div>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3, gap="small")
+    for _, r in ranking_df.iterrows():
+        score = r["Score"]
+        if score is None or pd.isna(score):
+            score_text, status, cls = "N/A", "NO DATA", "rank-na"
+        else:
+            score_text = f"{score:.1f}%"
+            if score >= 80:
+                status, cls = "ON TRACK", "rank-good"
+            elif score >= 60:
+                status, cls = "WATCH", "rank-watch"
+            else:
+                status, cls = "CRITICAL", "rank-critical"
 
-with c1:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">PSSR GOVERNANCE</div>', unsafe_allow_html=True)
-    a, b, c = st.columns(3, gap="small")
-    a.metric("TOTAL", pssr_s["total"])
-    b.metric("COMPLETED", pssr_s["completed"])
-    c.metric("OVERDUE", pssr_s["overdue"])
-    st.markdown('</div>', unsafe_allow_html=True)
+        rank_html += f"""
+        <tr>
+          <td><b>{int(r["Rank"])}</b></td>
+          <td class="dept">{r["Department"]}</td>
+          <td class="{cls}">{score_text}</td>
+          <td>{int(r["KPI Count"])} / 14</td>
+          <td class="{cls}">{status}</td>
+        </tr>
+        """
 
-with c2:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">MANAGEMENT OF CHANGE</div>', unsafe_allow_html=True)
-    a, b = st.columns(2, gap="small")
-    a.metric("OPEN", moc_s["open"])
-    b.metric("CLOSED", moc_s["closed"])
-    st.markdown('</div>', unsafe_allow_html=True)
+    rank_html += "</tbody></table>"
 
-with c3:
-    st.markdown('<div class="apex-panel"><div class="apex-panel-title">PROCESS SAFETY INCIDENT</div>', unsafe_allow_html=True)
-    a, b = st.columns(2, gap="small")
-    a.metric("TOTAL", incident_total)
-    b.metric("PENDING", incident_pending)
-    st.markdown('</div>', unsafe_allow_html=True)
+    components.html(
+        f"""
+        <html><head><style>
+        body{{margin:0;background:transparent;font-family:Arial,sans-serif;}}
+        table{{width:100%;border-collapse:collapse;font-size:10px;color:#173f70;}}
+        th{{background:#073f78;color:#fff;padding:8px 6px;border:1px solid #073f78;font-weight:900;}}
+        td{{padding:8px 6px;border:1px solid #d3dee6;background:#fff;text-align:center;}}
+        td.dept{{text-align:left;font-weight:800;}}
+        .rank-good{{color:#159447;font-weight:900;}}
+        .rank-watch{{color:#e5a400;font-weight:900;}}
+        .rank-critical{{color:#d71920;font-weight:900;}}
+        .rank-na{{color:#8a99a8;font-weight:800;}}
+        </style></head><body>{rank_html}</body></html>
+        """,
+        height=max(80, 31 * (len(ranking_df) + 1)),
+        scrolling=False
+    )
 
-# ============================================================
-# APEX DECISION BOARD
-# ============================================================
-st.markdown('<div class="apex-section">APEX COMMITTEE DECISION BOARD</div>', unsafe_allow_html=True)
-d1, d2, d3, d4 = st.columns(4, gap="small")
-
-cards = [
-    (d1, "🔴", "IMMEDIATE ACTION", pssr_s["overdue"] + interlock_pending + barrier_unacceptable, "Critical safety exposure"),
-    (d2, "🟠", "MANAGEMENT FOLLOW-UP", moc_s["open"] + audit_pending, "Governance actions"),
-    (d3, "⚠️", "INVESTIGATION", incident_pending, "Incident closure"),
-    (d4, "🟢", "PSM HEALTH", f"{overall_score:.1f}%", "Current integrated score"),
-]
-
-for container, icon, title, value, note in cards:
-    with container:
-        st.markdown(f'<div class="apex-kpi" style="text-align:center;min-height:96px;"><div style="font-size:20px;">{icon}</div><div class="apex-kpi-label">{title}</div><div class="apex-kpi-value">{value}</div><div class="apex-kpi-note">{note}</div></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
 # PSM MODULE NAVIGATION
@@ -2880,13 +3900,14 @@ with nav8:
         label="PSM CE / BARRIER",
         icon="🛡️"
     )
-# ============================================================
-# FOOTER
-# ============================================================
-st.markdown('''
-<div class="apex-footer">
-APEX COMMITTEE • PROCESS SAFETY MANAGEMENT • EXECUTIVE GOVERNANCE VIEW • LIVE DATA FROM GOOGLE SHEETS
-</div>
-''', unsafe_allow_html=True)
-
+# ---------- FOOTER ----------
+st.markdown(
+    f"""<div class="footer">
+        PSM EXECUTIVE CONTROL CENTER &nbsp;|&nbsp;
+        View: <b>{selected_department}</b> &nbsp;|&nbsp;
+        Live source: Google Sheet &nbsp;|&nbsp;
+        Last refresh: {datetime.now().strftime("%d-%b-%Y %H:%M:%S")}
+    </div>""",
+    unsafe_allow_html=True,
+)
 
