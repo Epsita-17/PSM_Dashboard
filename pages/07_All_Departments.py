@@ -97,6 +97,7 @@ SPREADSHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
 # whole workbook. Each module is loaded from its own tab/GID.
 SHEETS = {
     "PT": "1997330551",
+    "PT Identified": "742532495",
     "PHA": "1151637695",
     "PHA Recommendation": "1114420199",
     "MOC": "1493447251",
@@ -2127,6 +2128,7 @@ for module_name in SHEETS:
     loaded[module_name] = load_module(module_name)
 
 pt = loaded["PT"]
+pt_identified = loaded["PT Identified"]
 pha = loaded["PHA"]
 rec = loaded["PHA Recommendation"]
 moc = loaded["MOC"]
@@ -2176,7 +2178,10 @@ pt = filter_selected_department(
     pt,
     selected_department
 )
-
+pt_identified = filter_selected_department(
+    pt_identified,
+    selected_department
+)
 pha = filter_selected_department(
     pha,
     selected_department
@@ -2273,7 +2278,26 @@ with a:
         # PT KPI
         x = status_counts(pt)
 
+        # ============================================================
+        # IDENTIFIED PT
+        # Source: Google Sheet GID 742532495
+        # ============================================================
+
+        if "PT Name" in pt_identified.columns:
+            identified_pt = (
+                pt_identified["PT Name"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .replace("", pd.NA)
+                .dropna()
+                .shape[0]
+            )
+        else:
+            identified_pt = 0
+
         show_metric_row([
+            ("IDENTIFIED PT", identified_pt),
             ("TOTAL", x["total"]),
             ("COMPLETED", x["completed"]),
             ("ONGOING", x["ongoing"]),
