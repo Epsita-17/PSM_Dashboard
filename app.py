@@ -529,7 +529,7 @@ projects_page = st.Page(
 pt_page = st.Page(
     str(BASE_DIR / "pages" / "09_PT.py"),
     title="PT",
-    icon="🔍"
+    icon="🛡️"
 )
 
 
@@ -540,7 +540,7 @@ pt_page = st.Page(
 pha_page = st.Page(
     str(BASE_DIR / "pages" / "10_PHA.py"),
     title="PHA",
-    icon="⚠️"
+    icon="🛡️"
 )
 
 
@@ -551,7 +551,7 @@ pha_page = st.Page(
 moc_page = st.Page(
     str(BASE_DIR / "pages" / "11_MOC.py"),
     title="MOC",
-    icon="🔄"
+    icon="🛡️"
 )
 
 
@@ -562,7 +562,7 @@ moc_page = st.Page(
 pssr_page = st.Page(
     str(BASE_DIR / "pages" / "12_PSSR.py"),
     title="PSSR",
-    icon="✅"
+    icon="🛡️"
 )
 
 
@@ -573,7 +573,7 @@ pssr_page = st.Page(
 training_page = st.Page(
     str(BASE_DIR / "pages" / "13_Training.py"),
     title="TRAINING",
-    icon="🎓"
+    icon="🛡️"
 )
 
 
@@ -584,7 +584,7 @@ training_page = st.Page(
 op_page = st.Page(
     str(BASE_DIR / "pages" / "15_OP.py"),
     title="OP",
-    icon="📋"
+    icon="🛡️"
 )
 
 
@@ -595,7 +595,7 @@ op_page = st.Page(
 psi_page = st.Page(
     str(BASE_DIR / "pages" / "14_PSI.py"),
     title="PROCESS SAFETY INCIDENT",
-    icon="🚨"
+    icon="🛡️"
 )
 
 # ------------------------------------------------------------
@@ -605,7 +605,7 @@ psi_page = st.Page(
 audit_page = st.Page(
     str(BASE_DIR / "pages" / "17_Audit.py"),
     title="AUDIT",
-    icon="📊"
+    icon="🛡️"
 )
 
 # ------------------------------------------------------------
@@ -614,7 +614,7 @@ audit_page = st.Page(
 incident_library_page = st.Page(
     str(BASE_DIR / "pages" / "18_Incident Library.py"),
     title="INCIDENT LIBRARY",
-    icon="📚"
+    icon="🛡️"
 )
 
 # ------------------------------------------------------------
@@ -624,7 +624,7 @@ incident_library_page = st.Page(
 alarm_interlock_management_page = st.Page(
     str(BASE_DIR / "pages" / "19_ALARM_&_INTERLOCK_MANAGEMENT.py"),
     title="ALARM & INTERLOCK MANAGEMENT",
-    icon="📚"
+    icon="🛡️"
 )
 
 # ------------------------------------------------------------
@@ -653,7 +653,7 @@ MIQA_page = st.Page(
 jsw_safety_standards_page = st.Page(
     str(BASE_DIR / "pages" / "22_JSW_Safety_Standards.py"),
     title="JSW SAFETY STANDARDS",
-    icon="📚"
+    icon="🛡️"
 )
 
 
