@@ -298,7 +298,7 @@ executive_page = st.Page(
 apex_page = st.Page(
     str(BASE_DIR / "pages" / "03_Apex_Committee.py"),
     title="APEX COMMITTEE",
-    icon="👥"
+    icon="📊"
 )
 
 
@@ -311,7 +311,7 @@ apex_page = st.Page(
 PSM_SC_Chairman_page = st.Page(
     str(BASE_DIR / "pages" / "05_PSM_SC_Chairman.py"),
     title="PSM SC CHAIRMAN",
-    icon="👔"
+    icon="📊"
 )
 
 
@@ -322,7 +322,7 @@ PSM_SC_Chairman_page = st.Page(
 psm_sc_convener_page = st.Page(
     str(BASE_DIR / "pages" / "06_PSM_SC_Convener_Dashboard.py"),
     title="PSM SC CONVENER",
-    icon="👤"
+    icon="📊"
 )
 
 
@@ -332,7 +332,7 @@ psm_sc_convener_page = st.Page(
 
 all_departments_page = st.Page(
     str(BASE_DIR / "pages" / "07_All_Departments.py"),
-    title="All Departments",
+    title="ALL DEPARTMENTS",
     icon="🏭"
 )
 
