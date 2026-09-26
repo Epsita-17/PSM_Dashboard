@@ -242,15 +242,10 @@ with st.sidebar:
     st.markdown(
         """
         <div class="psm-sidebar-title">
-            🛡️ PSM DASHBOARD
+            🛡️ PROCESS SAFETY MANAGEMENT
         </div>
-
         <div class="psm-sidebar-subtitle">
-            PROCESS SAFETY MANAGEMENT
-        </div>
-
-        <div class="psm-sidebar-subtitle">
-            DIGITAL VISION WALL
+                   DIGITAL VISION WALL
         </div>
         """,
         unsafe_allow_html=True
