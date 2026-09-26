@@ -2209,7 +2209,7 @@ ALL_DEPARTMENTS = [
     "CRM",
     "WRM",
     "CPP",
-    "CU",
+    "Central Utility",
     "DRI",
     "LCP",
     "Pellet and Beneficiation",
@@ -2725,573 +2725,580 @@ with t2:
                 }
             )
 
-
 # ============================================================
-# PSM LEADING vs LAGGING INDICATORS MATRIX
-# ============================================================
-# This section is self-contained. It uses the existing executive
-# data/filter logic above and does not replace any existing dashboard section.
+# TWO-COLUMN EXECUTIVE VIEW
 # ============================================================
 
-st.markdown("""
-<style>
-.psm-matrix-wrap{
-    background:#ffffff;
-    border:1px solid #cbdce8;
-    border-radius:10px;
-    padding:10px 10px 8px 10px;
-    margin:8px 0 10px 0;
-    box-shadow:0 2px 8px rgba(15,60,90,.06);
-}
-.psm-matrix-head{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    background:linear-gradient(90deg,#073f78,#0b6096);
-    color:#ffffff;
-    border-radius:7px;
-    padding:9px 12px;
-    margin-bottom:8px;
-    font-size:12px;
-    font-weight:950;
-    letter-spacing:.2px;
-}
-.psm-matrix-sub{
-    color:#5f7385;
-    font-size:9px;
-    margin:3px 2px 8px 2px;
-}
-.psm-matrix-link{
-    display:inline-block;
-    background:#073f78;
-    color:#ffffff !important;
-    padding:6px 10px;
-    border-radius:5px;
-    text-decoration:none !important;
-    font-size:9px;
-    font-weight:900;
-}
-.psm-matrix-table{
-    width:100%;
-    border-collapse:collapse;
-    table-layout:fixed;
-    font-size:9px;
-    color:#173f70;
-}
-.psm-matrix-table th{
-    background:#dcecf3;
-    color:#173f70;
-    font-weight:950;
-    text-align:left;
-    padding:7px 6px;
-    border:1px solid #b7c8d3;
-}
-.psm-matrix-table td{
-    background:#ffffff;
-    padding:6px;
-    border:1px solid #d3dee6;
-    vertical-align:middle;
-}
-.psm-matrix-table th:nth-child(1),
-.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
-.psm-matrix-table th:nth-child(2),
-.psm-matrix-table td:nth-child(2){width:34%;}
-.psm-matrix-table th:nth-child(3),
-.psm-matrix-table td:nth-child(3){width:12%;}
-.psm-matrix-table th:nth-child(4),
-.psm-matrix-table td:nth-child(4){width:13%;}
-.psm-matrix-table th:nth-child(5),
-.psm-matrix-table td:nth-child(5){width:16%;}
-.psm-matrix-table th:nth-child(6),
-.psm-matrix-table td:nth-child(6){width:20%;}
-.matrix-ok{color:#159447;font-weight:900;}
-.matrix-watch{color:#e5a400;font-weight:900;}
-.matrix-critical{color:#d71920;font-weight:900;}
-.matrix-na{color:#8a99a8;font-weight:800;}
-.matrix-note{
-    font-size:8px;
-    color:#738595;
-    margin-top:6px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-def _matrix_status_pct(df, status_names=None):
-    """Closure percentage from the existing status logic."""
-    if df is None or df.empty:
-        return None
-    total, done, _, _, pct = module_summary(df, status_names)
-    return pct if total else None
-
-
-def _matrix_status_count(df, candidates):
-    """Count rows matching active/open/pending wording in a status field."""
-    if df is None or df.empty:
-        return None
-    status_col = find_col(df, candidates)
-    if not status_col:
-        return None
-    s = df[status_col].fillna("").astype(str).str.strip().str.lower()
-    valid = s.replace({"nan": "", "none": "", "-": ""})
-    valid = valid[valid != ""]
-    if valid.empty:
-        return 0
-    return int(
-        valid.str.contains(
-            r"active|bypass|due\s*for\s*normalization|normalization\s*pending|pending|open",
-            regex=True,
-            na=False,
-        ).sum()
-    )
-
-
-def _matrix_yes_count(df, candidates):
-    """Count affirmative records from a source column."""
-    if df is None or df.empty:
-        return None
-    col = find_col(df, candidates)
-    if not col:
-        return None
-
-    s = df[col].fillna("").astype(str).str.strip().str.lower()
-    return int(
-        s.str.fullmatch(
-            r"yes|y|true|1|active|occurred|applicable|non[- ]?compliant",
-            case=False,
-            na=False,
-        ).sum()
-    )
-
-
-def _matrix_zero_or_pct(actual, target_type="zero"):
-    """Return status for zero-target count KPIs or percentage KPIs."""
-    if actual is None:
-        return "N/A", "matrix-na"
-    if target_type == "zero":
-        return ("ON TRACK", "matrix-ok") if float(actual) == 0 else ("CRITICAL", "matrix-critical")
-    if float(actual) >= 95:
-        return "ON TRACK", "matrix-ok"
-    if float(actual) >= 80:
-        return "WATCH", "matrix-watch"
-    return "CRITICAL", "matrix-critical"
-
-
-# Use the same selected-department filter for every matrix source.
-# This avoids showing fixed All-Department values when the executive filter changes.
-matrix_pt = filter_selected_department(pt, selected_department)
-matrix_pha = filter_selected_department(pha, selected_department)
-matrix_rec = filter_selected_department(rec, selected_department)
-matrix_moc = filter_selected_department(moc, selected_department)
-matrix_pssr = filter_selected_department(pssr, selected_department)
-matrix_training = filter_selected_department(training, selected_department)
-matrix_incident = filter_selected_department(incident, selected_department)
-matrix_interlock = filter_selected_department(interlock, selected_department)
-matrix_barrier = filter_selected_department(loaded.get("Barrier Audit"), selected_department)
-matrix_failure = filter_selected_department(failure_data, selected_department)
-matrix_audit = filter_selected_department(audit, selected_department)
-
-
-# ---- 1. PHA recommendation closure ----
-pha_rec_actual = _matrix_status_pct(
-    matrix_rec,
-    [
-        "Status (Open/Close)",
-        "Status Open Close",
-        "Open/Close Status",
-        "Recommendation Status",
-        "Status",
-    ],
+left_section, right_section = st.columns(
+    [1, 1],
+    gap="small"
 )
 
-# ---- 2. MOC closure compliance ----
-moc_actual = _matrix_status_pct(
-    matrix_moc,
-    [
-        "Status (Open/Close)",
-        "Status (Open / Close)",
-        "Status",
-        "Current Status",
-        "MOC Status",
-    ],
-)
+with left_section:
 
-# ---- 3. Interlock bypass active count ----
-interlock_active = _matrix_status_count(
-    matrix_interlock,
-    [
-        "Present Status / Action Required",
-        "Present Status",
-        "Status / Action Required",
-        "Status",
-    ],
-)
+    # ============================================================
+    # PSM LEADING vs LAGGING INDICATORS MATRIX
+    # ============================================================
+    # This section is self-contained. It uses the existing executive
+    # data/filter logic above and does not replace any existing dashboard section.
+    # ============================================================
 
-# ---- 4. Alarm bypass active count ----
-# The current executive source does not load the Alarm tab, so do not
-# substitute Interlock data. Show N/A unless an Alarm field exists.
-alarm_active = None
+    st.markdown("""
+    <style>
+    .psm-matrix-wrap{
+        background:#ffffff;
+        border:1px solid #cbdce8;
+        border-radius:10px;
+        padding:10px 10px 8px 10px;
+        margin:8px 0 4px 0;
+        box-shadow:0 2px 8px rgba(15,60,90,.06);
+    }
+    .psm-matrix-head{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        background:linear-gradient(90deg,#073f78,#0b6096);
+        color:#ffffff;
+        border-radius:7px;
+        padding:9px 12px;
+        margin-bottom:8px;
+        font-size:12px;
+        font-weight:950;
+        letter-spacing:.2px;
+    }
+    .psm-matrix-sub{
+        color:#5f7385;
+        font-size:9px;
+        margin:3px 2px 8px 2px;
+    }
+    .psm-matrix-link{
+        display:inline-block;
+        background:#073f78;
+        color:#ffffff !important;
+        padding:6px 10px;
+        border-radius:5px;
+        text-decoration:none !important;
+        font-size:9px;
+        font-weight:900;
+    }
+    .psm-matrix-table{
+        width:100%;
+        border-collapse:collapse;
+        table-layout:fixed;
+        font-size:9px;
+        color:#173f70;
+    }
+    .psm-matrix-table th{
+        background:#dcecf3;
+        color:#173f70;
+        font-weight:950;
+        text-align:left;
+        padding:7px 6px;
+        border:1px solid #b7c8d3;
+    }
+    .psm-matrix-table td{
+        background:#ffffff;
+        padding:6px;
+        border:1px solid #d3dee6;
+        vertical-align:middle;
+    }
+    .psm-matrix-table th:nth-child(1),
+    .psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
+    .psm-matrix-table th:nth-child(2),
+    .psm-matrix-table td:nth-child(2){width:34%;}
+    .psm-matrix-table th:nth-child(3),
+    .psm-matrix-table td:nth-child(3){width:12%;}
+    .psm-matrix-table th:nth-child(4),
+    .psm-matrix-table td:nth-child(4){width:13%;}
+    .psm-matrix-table th:nth-child(5),
+    .psm-matrix-table td:nth-child(5){width:16%;}
+    .psm-matrix-table th:nth-child(6),
+    .psm-matrix-table td:nth-child(6){width:20%;}
+    .matrix-ok{color:#159447;font-weight:900;}
+    .matrix-watch{color:#e5a400;font-weight:900;}
+    .matrix-critical{color:#d71920;font-weight:900;}
+    .matrix-na{color:#8a99a8;font-weight:800;}
+    .matrix-note{
+        font-size:8px;
+        color:#738595;
+        margin-top:6px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ---- 5. Bow-Tie barrier verification ----
-barrier_assessed_col_m = find_col(
-    matrix_barrier,
-    ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
-)
-barrier_unacceptable_col_m = find_col(
-    matrix_barrier,
-    [
-        "Barrier Health (C4/C5) (Number) Unacceptable",
-        "Unacceptable Barrier",
-        "Unacceptable",
-    ]
-)
-if barrier_assessed_col_m and barrier_unacceptable_col_m and not matrix_barrier.empty:
-    assessed_m = float(exec_num(matrix_barrier[barrier_assessed_col_m]).sum())
-    unacceptable_m = float(exec_num(matrix_barrier[barrier_unacceptable_col_m]).sum())
-    barrier_actual = ((assessed_m - unacceptable_m) / assessed_m * 100) if assessed_m else None
-else:
-    barrier_actual = None
 
-# ---- 6. PSM training completion ----
-training_actual = None
-if not matrix_training.empty:
-    tr_total_cols_m = [
-        find_col(matrix_training, ["Total Employees (L08 & Above)"]),
-        find_col(matrix_training, ["Total Employees (Below L08)"]),
+    def _matrix_status_pct(df, status_names=None):
+        """Closure percentage from the existing status logic."""
+        if df is None or df.empty:
+            return None
+        total, done, _, _, pct = module_summary(df, status_names)
+        return pct if total else None
 
-    ]
-    tr_done_cols_m = [
-        find_col(matrix_training, ["Completed Training (L08 & Above)"]),
-        find_col(matrix_training, ["Completed Training (Below L08)"]),
 
-    ]
-    if all(tr_total_cols_m) and all(tr_done_cols_m):
-        total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
-        done_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_done_cols_m)
-        training_actual = (done_people_m / total_people_m * 100) if total_people_m else None
+    def _matrix_status_count(df, candidates):
+        """Count rows matching active/open/pending wording in a status field."""
+        if df is None or df.empty:
+            return None
+        status_col = find_col(df, candidates)
+        if not status_col:
+            return None
+        s = df[status_col].fillna("").astype(str).str.strip().str.lower()
+        valid = s.replace({"nan": "", "none": "", "-": ""})
+        valid = valid[valid != ""]
+        if valid.empty:
+            return 0
+        return int(
+            valid.str.contains(
+                r"active|bypass|due\s*for\s*normalization|normalization\s*pending|pending|open",
+                regex=True,
+                na=False,
+            ).sum()
+        )
 
-# ---- 7. PSM audit observation closure ----
-audit_actual = None
-if not matrix_audit.empty:
-    audit_status_col_m = find_col(
-        matrix_audit,
+
+    def _matrix_yes_count(df, candidates):
+        """Count affirmative records from a source column."""
+        if df is None or df.empty:
+            return None
+        col = find_col(df, candidates)
+        if not col:
+            return None
+
+        s = df[col].fillna("").astype(str).str.strip().str.lower()
+        return int(
+            s.str.fullmatch(
+                r"yes|y|true|1|active|occurred|applicable|non[- ]?compliant",
+                case=False,
+                na=False,
+            ).sum()
+        )
+
+
+    def _matrix_zero_or_pct(actual, target_type="zero"):
+        """Return status for zero-target count KPIs or percentage KPIs."""
+        if actual is None:
+            return "N/A", "matrix-na"
+        if target_type == "zero":
+            return ("ON TRACK", "matrix-ok") if float(actual) == 0 else ("CRITICAL", "matrix-critical")
+        if float(actual) >= 95:
+            return "ON TRACK", "matrix-ok"
+        if float(actual) >= 80:
+            return "WATCH", "matrix-watch"
+        return "CRITICAL", "matrix-critical"
+
+
+    # Use the same selected-department filter for every matrix source.
+    # This avoids showing fixed All-Department values when the executive filter changes.
+    matrix_pt = filter_selected_department(pt, selected_department)
+    matrix_pha = filter_selected_department(pha, selected_department)
+    matrix_rec = filter_selected_department(rec, selected_department)
+    matrix_moc = filter_selected_department(moc, selected_department)
+    matrix_pssr = filter_selected_department(pssr, selected_department)
+    matrix_training = filter_selected_department(training, selected_department)
+    matrix_incident = filter_selected_department(incident, selected_department)
+    matrix_interlock = filter_selected_department(interlock, selected_department)
+    matrix_barrier = filter_selected_department(loaded.get("Barrier Audit"), selected_department)
+    matrix_failure = filter_selected_department(failure_data, selected_department)
+    matrix_audit = filter_selected_department(audit, selected_department)
+
+
+    # ---- 1. PHA recommendation closure ----
+    pha_rec_actual = _matrix_status_pct(
+        matrix_rec,
         [
+            "Status (Open/Close)",
+            "Status Open Close",
+            "Open/Close Status",
+            "Recommendation Status",
             "Status",
-            "Observation Status",
-            "Action Status",
-            "Closure Status",
-            "Compliance Status",
         ],
     )
-    if audit_status_col_m:
-        audit_actual = _matrix_status_pct(
-            matrix_audit,
-            ["Status", "Observation Status", "Action Status", "Closure Status", "Compliance Status"],
-        )
+
+    # ---- 2. MOC closure compliance ----
+    moc_actual = _matrix_status_pct(
+        matrix_moc,
+        [
+            "Status (Open/Close)",
+            "Status (Open / Close)",
+            "Status",
+            "Current Status",
+            "MOC Status",
+        ],
+    )
+
+    # ---- 3. Interlock bypass active count ----
+    interlock_active = _matrix_status_count(
+        matrix_interlock,
+        [
+            "Present Status / Action Required",
+            "Present Status",
+            "Status / Action Required",
+            "Status",
+        ],
+    )
+
+    # ---- 4. Alarm bypass active count ----
+    # The current executive source does not load the Alarm tab, so do not
+    # substitute Interlock data. Show N/A unless an Alarm field exists.
+    alarm_active = None
+
+    # ---- 5. Bow-Tie barrier verification ----
+    barrier_assessed_col_m = find_col(
+        matrix_barrier,
+        ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
+    )
+    barrier_unacceptable_col_m = find_col(
+        matrix_barrier,
+        [
+            "Barrier Health (C4/C5) (Number) Unacceptable",
+            "Unacceptable Barrier",
+            "Unacceptable",
+        ]
+    )
+    if barrier_assessed_col_m and barrier_unacceptable_col_m and not matrix_barrier.empty:
+        assessed_m = float(exec_num(matrix_barrier[barrier_assessed_col_m]).sum())
+        unacceptable_m = float(exec_num(matrix_barrier[barrier_unacceptable_col_m]).sum())
+        barrier_actual = ((assessed_m - unacceptable_m) / assessed_m * 100) if assessed_m else None
     else:
-        # Fall back to the same audit-date logic already used above.
-        audit_date_col_m = find_col(matrix_audit, ["Audit Date", "Last Audit Date", "Date"])
-        if audit_date_col_m:
-            dates_m = pd.to_datetime(matrix_audit[audit_date_col_m], errors="coerce")
-            audit_actual = (dates_m.notna().sum() / len(matrix_audit) * 100) if len(matrix_audit) else None
+        barrier_actual = None
 
-# ---- 8. Process Safety Incidents ----
-incident_actual = len(matrix_incident) if matrix_incident is not None and not matrix_incident.empty else 0
+    # ---- 6. PSM training completion ----
+    training_actual = None
+    if not matrix_training.empty:
+        tr_total_cols_m = [
+            find_col(matrix_training, ["Total Employees (L08 & Above)"]),
+            find_col(matrix_training, ["Total Employees (Below L08)"]),
 
-# ---- 9. Major equipment failure events ----
-failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
+        ]
+        tr_done_cols_m = [
+            find_col(matrix_training, ["Completed Training (L08 & Above)"]),
+            find_col(matrix_training, ["Completed Training (Below L08)"]),
 
-# ---- 10–14: derive only where the incident source has an explicit field ----
-def _incident_event_count(df, candidates):
-    if df is None or df.empty:
-        return None
-    col = find_col(df, candidates)
-    if not col:
-        return None
+        ]
+        if all(tr_total_cols_m) and all(tr_done_cols_m):
+            total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
+            done_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_done_cols_m)
+            training_actual = (done_people_m / total_people_m * 100) if total_people_m else None
 
-    s = df[col].fillna("").astype(str).str.strip().str.lower()
+    # ---- 7. PSM audit observation closure ----
+    audit_actual = None
+    if not matrix_audit.empty:
+        audit_status_col_m = find_col(
+            matrix_audit,
+            [
+                "Status",
+                "Observation Status",
+                "Action Status",
+                "Closure Status",
+                "Compliance Status",
+            ],
+        )
+        if audit_status_col_m:
+            audit_actual = _matrix_status_pct(
+                matrix_audit,
+                ["Status", "Observation Status", "Action Status", "Closure Status", "Compliance Status"],
+            )
+        else:
+            # Fall back to the same audit-date logic already used above.
+            audit_date_col_m = find_col(matrix_audit, ["Audit Date", "Last Audit Date", "Date"])
+            if audit_date_col_m:
+                dates_m = pd.to_datetime(matrix_audit[audit_date_col_m], errors="coerce")
+                audit_actual = (dates_m.notna().sum() / len(matrix_audit) * 100) if len(matrix_audit) else None
 
-    # Numeric event-count fields
-    numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
-    if numeric.notna().any():
-        return int(numeric.fillna(0).sum())
+    # ---- 8. Process Safety Incidents ----
+    incident_actual = len(matrix_incident) if matrix_incident is not None and not matrix_incident.empty else 0
 
-    return int(
-        s.str.fullmatch(
-            r"yes|y|true|1|occurred|applicable",
-            case=False,
-            na=False,
-        ).sum()
+    # ---- 9. Major equipment failure events ----
+    failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
+
+    # ---- 10–14: derive only where the incident source has an explicit field ----
+    def _incident_event_count(df, candidates):
+        if df is None or df.empty:
+            return None
+        col = find_col(df, candidates)
+        if not col:
+            return None
+
+        s = df[col].fillna("").astype(str).str.strip().str.lower()
+
+        # Numeric event-count fields
+        numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
+        if numeric.notna().any():
+            return int(numeric.fillna(0).sum())
+
+        return int(
+            s.str.fullmatch(
+                r"yes|y|true|1|occurred|applicable",
+                case=False,
+                na=False,
+            ).sum()
+        )
+
+
+    loss_containment_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Loss of Containment",
+            "Loss of containment event",
+            "LOC",
+            "Containment Loss",
+        ],
+    )
+
+    fire_explosion_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Fire / Explosion",
+            "Fire/Explosion",
+            "Fire Explosion",
+            "Fire",
+            "Explosion",
+        ],
+    )
+
+    environmental_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Environmental Release",
+            "Environmental release event",
+            "Environment Release",
+            "Release to Environment",
+        ],
+    )
+
+    repeat_incident_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Repeat Incident",
+            "Repeat Incidents",
+            "Repeat",
+        ],
+    )
+
+    production_loss_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Production Loss due to PSM Incident",
+            "Production Loss",
+            "Production Loss (MT)",
+            "Production Loss Due to Incident",
+        ],
     )
 
 
-loss_containment_actual = _incident_event_count(
-    matrix_incident,
-    [
-        "Loss of Containment",
-        "Loss of containment event",
-        "LOC",
-        "Containment Loss",
-    ],
-)
-
-fire_explosion_actual = _incident_event_count(
-    matrix_incident,
-    [
-        "Fire / Explosion",
-        "Fire/Explosion",
-        "Fire Explosion",
-        "Fire",
-        "Explosion",
-    ],
-)
-
-environmental_actual = _incident_event_count(
-    matrix_incident,
-    [
-        "Environmental Release",
-        "Environmental release event",
-        "Environment Release",
-        "Release to Environment",
-    ],
-)
-
-repeat_incident_actual = _incident_event_count(
-    matrix_incident,
-    [
-        "Repeat Incident",
-        "Repeat Incidents",
-        "Repeat",
-    ],
-)
-
-production_loss_actual = _incident_event_count(
-    matrix_incident,
-    [
-        "Production Loss due to PSM Incident",
-        "Production Loss",
-        "Production Loss (MT)",
-        "Production Loss Due to Incident",
-    ],
-)
-
-
-matrix_rows = [
-    (
-        1,
-        "PHA recommendation closure",
-        ">95%",
-        pha_rec_actual,
-        "pct",
-        "Monthly",
-    ),
-    (
-        2,
-        "MOC closure compliance",
-        "100%",
-        moc_actual,
-        "pct",
-        "Monthly",
-    ),
-    (
-        3,
-        "Interlock bypass active count",
-        "0",
-        interlock_active,
-        "zero",
-        "Weekly",
-    ),
-    (
-        4,
-        "Alarm bypass active count",
-        "0",
-        alarm_active,
-        "zero",
-        "Weekly",
-    ),
-    (
-        5,
-        "Bow-Tie barrier verification",
-        "100%",
-        barrier_actual,
-        "pct",
-        "Monthly",
-    ),
-    (
-        6,
-        "PSM training completion (On Roll employee L08 and above)",
-        ">95%",
-        training_actual,
-        "pct",
-        "Monthly",
-    ),
-    (
-        7,
-        "PSM audit observation closure",
-        ">95%",
-        audit_actual,
-        "pct",
-        "Monthly",
-    ),
-    (
-        8,
-        "Process Safety Incidents",
-        "0",
-        incident_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        9,
-        "Major equipment failure events",
-        "0",
-        failure_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        10,
-        "Loss of containment events",
-        "0",
-        loss_containment_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        11,
-        "Fire / explosion events",
-        "0",
-        fire_explosion_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        12,
-        "Environmental release events",
-        "0",
-        environmental_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        13,
-        "Repeat incidents",
-        "0",
-        repeat_incident_actual,
-        "zero",
-        "Monthly",
-    ),
-    (
-        14,
-        "Production loss due to PSM incident",
-        "0",
-        production_loss_actual,
-        "zero",
-        "Monthly",
-    ),
-]
+    matrix_rows = [
+        (
+            1,
+            "PHA recommendation closure",
+            ">95%",
+            pha_rec_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            2,
+            "MOC closure compliance",
+            "100%",
+            moc_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            3,
+            "Interlock bypass active count",
+            "0",
+            interlock_active,
+            "zero",
+            "Weekly",
+        ),
+        (
+            4,
+            "Alarm bypass active count",
+            "0",
+            alarm_active,
+            "zero",
+            "Weekly",
+        ),
+        (
+            5,
+            "Bow-Tie barrier verification",
+            "100%",
+            barrier_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            6,
+            "PSM training completion (On Roll employee L08 and above)",
+            ">95%",
+            training_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            7,
+            "PSM audit observation closure",
+            ">95%",
+            audit_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            8,
+            "Process Safety Incidents",
+            "0",
+            incident_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            9,
+            "Major equipment failure events",
+            "0",
+            failure_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            10,
+            "Loss of containment events",
+            "0",
+            loss_containment_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            11,
+            "Fire / explosion events",
+            "0",
+            fire_explosion_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            12,
+            "Environmental release events",
+            "0",
+            environmental_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            13,
+            "Repeat incidents",
+            "0",
+            repeat_incident_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            14,
+            "Production loss due to PSM incident",
+            "0",
+            production_loss_actual,
+            "zero",
+            "Monthly",
+        ),
+    ]
 
 
-def _matrix_display(actual, kind):
-    if actual is None:
-        return "N/A", "N/A", "matrix-na"
+    def _matrix_display(actual, kind):
+        if actual is None:
+            return "N/A", "N/A", "matrix-na"
 
-    if kind == "pct":
-        status, cls = _matrix_zero_or_pct(actual, "pct")
-        return f"{actual:.1f}%", status, cls
+        if kind == "pct":
+            status, cls = _matrix_zero_or_pct(actual, "pct")
+            return f"{actual:.1f}%", status, cls
 
-    status, cls = _matrix_zero_or_pct(actual, "zero")
-    if isinstance(actual, float) and actual.is_integer():
-        actual = int(actual)
-    return f"{actual:,}", status, cls
+        status, cls = _matrix_zero_or_pct(actual, "zero")
+        if isinstance(actual, float) and actual.is_integer():
+            actual = int(actual)
+        return f"{actual:,}", status, cls
 
 
-matrix_html = """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-html, body { margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }
-.psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;}
-.psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
-.psm-matrix-link{display:inline-block;background:#ffffff;color:#073f78 !important;padding:6px 10px;border-radius:5px;text-decoration:none !important;font-size:9px;font-weight:900;}
-.psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
-.psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
-.psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
-.psm-matrix-table td{background:#ffffff;padding:6px;border:1px solid #d3dee6;vertical-align:middle;}
-.psm-matrix-table th:nth-child(1),.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
-.psm-matrix-table th:nth-child(2),.psm-matrix-table td:nth-child(2){width:34%;}
-.psm-matrix-table th:nth-child(3),.psm-matrix-table td:nth-child(3){width:12%;}
-.psm-matrix-table th:nth-child(4),.psm-matrix-table td:nth-child(4){width:13%;}
-.psm-matrix-table th:nth-child(5),.psm-matrix-table td:nth-child(5){width:16%;}
-.psm-matrix-table th:nth-child(6),.psm-matrix-table td:nth-child(6){width:20%;}
-.matrix-ok{color:#159447;font-weight:900;}
-.matrix-watch{color:#e5a400;font-weight:900;}
-.matrix-critical{color:#d71920;font-weight:900;}
-.matrix-na{color:#8a99a8;font-weight:800;}
-.matrix-note{font-size:8px;color:#738595;margin-top:6px;}
-</style>
-</head>
-<body>
-<div class="psm-matrix-wrap">
-    <div class="psm-matrix-head">
-        <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
-        <a class="psm-matrix-link"
-           href="https://docs.google.com/spreadsheets/d/1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM/edit?gid=1071736559#gid=1071736559"
-           target="_blank">↗ OPEN PSM DATA — GOOGLE SHEETS</a>
+    matrix_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <style>
+    html, body { margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }
+    .psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;}
+    .psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
+    .psm-matrix-link{display:inline-block;background:#ffffff;color:#073f78 !important;padding:6px 10px;border-radius:5px;text-decoration:none !important;font-size:9px;font-weight:900;}
+    .psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
+    .psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
+    .psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
+    .psm-matrix-table td{background:#ffffff;padding:6px;border:1px solid #d3dee6;vertical-align:middle;}
+    .psm-matrix-table th:nth-child(1),.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
+    .psm-matrix-table th:nth-child(2),.psm-matrix-table td:nth-child(2){width:34%;}
+    .psm-matrix-table th:nth-child(3),.psm-matrix-table td:nth-child(3){width:12%;}
+    .psm-matrix-table th:nth-child(4),.psm-matrix-table td:nth-child(4){width:13%;}
+    .psm-matrix-table th:nth-child(5),.psm-matrix-table td:nth-child(5){width:16%;}
+    .psm-matrix-table th:nth-child(6),.psm-matrix-table td:nth-child(6){width:20%;}
+    .matrix-ok{color:#159447;font-weight:900;}
+    .matrix-watch{color:#e5a400;font-weight:900;}
+    .matrix-critical{color:#d71920;font-weight:900;}
+    .matrix-na{color:#8a99a8;font-weight:800;}
+    .matrix-note{font-size:8px;color:#738595;margin-top:6px;}
+    </style>
+    </head>
+    <body>
+    <div class="psm-matrix-wrap">
+        <div class="psm-matrix-head">
+            <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
+            <a class="psm-matrix-link"
+               href="https://docs.google.com/spreadsheets/d/1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM/edit?gid=1071736559#gid=1071736559"
+               target="_blank">↗ OPEN PSM DATA — GOOGLE SHEETS</a>
+        </div>
+        <table class="psm-matrix-table">
+            <thead>
+                <tr>
+                    <th>SL NO</th>
+                    <th>KPI</th>
+                    <th>TARGET</th>
+                    <th>ACTUAL</th>
+                    <th>STATUS</th>
+                    <th>REVIEW FREQUENCY</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+
+    for sno, kpi, target, actual, kind, frequency in matrix_rows:
+        actual_text, status_text, status_cls = _matrix_display(actual, kind)
+        matrix_html += f"""
+                <tr>
+                    <td>{sno}</td>
+                    <td>{kpi}</td>
+                    <td>{target}</td>
+                    <td class="{status_cls}"><b>{actual_text}</b></td>
+                    <td class="{status_cls}">{status_text}</td>
+                    <td>{frequency}</td>
+                </tr>
+    """
+
+    matrix_html += """
+            </tbody>
+        </table>
+        <div class="matrix-note">
+            Actual values follow the Executive Department filter. N/A is shown where the current source
+            does not contain a direct field for that KPI; no value is assumed or hard-coded.
+        </div>
     </div>
-    <div class="psm-matrix-sub">
-        These indicators show how well the safety system is working before incidents occur.
-        &nbsp;|&nbsp; View Department: <b>__DEPARTMENT__</b>
-    </div>
-    <table class="psm-matrix-table">
-        <thead>
-            <tr>
-                <th>SL NO</th>
-                <th>KPI</th>
-                <th>TARGET</th>
-                <th>ACTUAL</th>
-                <th>STATUS</th>
-                <th>REVIEW FREQUENCY</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
+    </body>
+    </html>
+    """
 
-for sno, kpi, target, actual, kind, frequency in matrix_rows:
-    actual_text, status_text, status_cls = _matrix_display(actual, kind)
-    matrix_html += f"""
-            <tr>
-                <td>{sno}</td>
-                <td>{kpi}</td>
-                <td>{target}</td>
-                <td><b>{actual_text}</b></td>
-                <td class="{status_cls}">{status_text}</td>
-                <td>{frequency}</td>
-            </tr>
-"""
+    matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
 
-matrix_html += """
-        </tbody>
-    </table>
-    <div class="matrix-note">
-        Actual values follow the Executive Department filter. N/A is shown where the current source
-        does not contain a direct field for that KPI; no value is assumed or hard-coded.
-    </div>
-</div>
-</body>
-</html>
-"""
+    # Render the matrix as a real HTML document so table tags are not shown as text.
+    components.html(
+        matrix_html,
+        height=500,
+        scrolling=False
+    )
 
-matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
-
-# Render the matrix as a real HTML document so table tags are not shown as text.
-components.html(
-    matrix_html,
-    height=500,
-    scrolling=False
-)
 
 
 # ============================================================
@@ -3520,82 +3527,134 @@ if not ranking_df.empty:
     ).reset_index(drop=True)
     ranking_df["Rank"] = range(1, len(ranking_df) + 1)
 
-st.markdown('<div class="psm-rank-wrap">', unsafe_allow_html=True)
-st.markdown(
-    '<div class="psm-rank-head">DEPARTMENT-WISE KPI & DATA PERFORMANCE RANKING</div>',
-    unsafe_allow_html=True
-)
-st.markdown(
-    """
-    <div class="psm-rank-note">
-    Ranking is based on the 14 KPIs in the supplied matrix.
-    Percentage KPIs are scored against the matrix target. For zero-target
-    KPIs, confirmed zero = 100% and any confirmed event = 0%.
-    Missing source data is N/A and is excluded. The supplied matrix does not
-    define KPI weights, so available KPIs are equally weighted.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+with right_section:
 
-if ranking_df.empty:
-    st.info("No department data available for ranking.")
-else:
-    rank_html = """
-    <table class="psm-rank-table">
-      <thead><tr>
-        <th style="width:7%">RANK</th>
-        <th style="width:33%;text-align:left">DEPARTMENT</th>
-        <th style="width:20%">PSM SCORE</th>
-        <th style="width:15%">KPIs USED</th>
-        <th style="width:25%">STATUS</th>
-      </tr></thead><tbody>
-    """
-
-    for _, r in ranking_df.iterrows():
-        score = r["Score"]
-        if score is None or pd.isna(score):
-            score_text, status, cls = "N/A", "NO DATA", "rank-na"
-        else:
-            score_text = f"{score:.1f}%"
-            if score >= 80:
-                status, cls = "ON TRACK", "rank-good"
-            elif score >= 60:
-                status, cls = "WATCH", "rank-watch"
-            else:
-                status, cls = "CRITICAL", "rank-critical"
-
-        rank_html += f"""
-        <tr>
-          <td><b>{int(r["Rank"])}</b></td>
-          <td class="dept">{r["Department"]}</td>
-          <td class="{cls}">{score_text}</td>
-          <td>{int(r["KPI Count"])} / 14</td>
-          <td class="{cls}">{status}</td>
-        </tr>
+    if ranking_df.empty:
+        rank_table_html = """<div style="padding:20px;text-align:center;color:#738595;font-size:10px;">No department data available for ranking.</div>"""
+    else:
+        rank_table_html = """
+        <table class="psm-rank-table">
+          <thead><tr>
+            <th style="width:7%">RANK</th>
+            <th style="width:33%;text-align:left">DEPARTMENT</th>
+            <th style="width:20%">PSM SCORE</th>
+            <th style="width:15%">KPIs USED</th>
+            <th style="width:25%">STATUS</th>
+          </tr></thead><tbody>
         """
 
-    rank_html += "</tbody></table>"
+        for _, r in ranking_df.iterrows():
+            score = r["Score"]
+            if score is None or pd.isna(score):
+                score_text, status, cls = "N/A", "NO DATA", "rank-na"
+            else:
+                score_text = f"{score:.1f}%"
+                if score >= 80:
+                    status, cls = "ON TRACK", "rank-good"
+                elif score >= 60:
+                    status, cls = "WATCH", "rank-watch"
+                else:
+                    status, cls = "CRITICAL", "rank-critical"
+
+            rank_table_html += f"""
+            <tr>
+              <td><b>{int(r["Rank"])}</b></td>
+              <td class="dept">{r["Department"]}</td>
+              <td class="{cls}">{score_text}</td>
+              <td>{int(r["KPI Count"])} / 14</td>
+              <td class="{cls}">{status}</td>
+            </tr>
+            """
+
+        rank_table_html += "</tbody></table>"
+
+    ranking_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <style>
+    html, body {{ margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }}
+    .psm-rank-wrap{{
+        width:100%;
+        height:500px;
+        box-sizing:border-box;
+        background:#ffffff;
+        border:1px solid #cbdce8;
+        border-radius:10px;
+        padding:10px 10px 8px 10px;
+        margin:16px 0 0 0;
+        box-shadow:0 2px 8px rgba(15,60,90,.06);
+        overflow:hidden;
+    }}
+    .psm-rank-scroll{{
+        height:430px;
+        overflow-y:auto;
+        overflow-x:hidden;
+        box-sizing:border-box;
+        padding-right:2px;
+    }}
+    .psm-rank-scroll::-webkit-scrollbar{{
+        width:7px;
+    }}
+    .psm-rank-scroll::-webkit-scrollbar-track{{
+        background:#eef4f8;
+        border-radius:6px;
+    }}
+    .psm-rank-scroll::-webkit-scrollbar-thumb{{
+        background:#8fa8bb;
+        border-radius:6px;
+    }}
+    .psm-rank-head{{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        box-sizing:border-box;
+        width:100%;
+        height:30px;
+        min-height:30px;
+        max-height:30px;
+        background:linear-gradient(90deg,#073f78,#0b6096);
+        color:#ffffff;
+        border-radius:7px;
+        padding:9px 12px;
+        margin:0 0 8px 0;
+        font-size:12px;
+        font-weight:950;
+        letter-spacing:.2px;
+    }}
+    .psm-rank-note{{
+        color:#5f7385;
+        font-size:8px;
+        margin:3px 2px 6px 2px;
+        line-height:1.25;
+    }}
+    .psm-rank-table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}}
+    .psm-rank-table th{{background:#073f78;color:#ffffff;font-weight:950;padding:6px 5px;border:1px solid #073f78;height:24px;}}
+    .psm-rank-table td{{padding:5px 5px;border:1px solid #d3dee6;background:#ffffff;text-align:center;height:22px;}}
+    .psm-rank-table td.dept{{text-align:left;font-weight:800;}}
+    .rank-good{{color:#159447;font-weight:900;}}
+    .rank-watch{{color:#e5a400;font-weight:900;}}
+    .rank-critical{{color:#d71920;font-weight:900;}}
+    .rank-na{{color:#8a99a8;font-weight:800;}}
+    </style>
+    </head>
+    <body>
+      <div class="psm-rank-wrap">
+        <div class="psm-rank-head">DEPARTMENT-WISE KPI &amp; DATA PERFORMANCE RANKING</div>
+        <div class="psm-rank-scroll">
+          {rank_table_html}
+        </div>
+      </div>
+    </body>
+    </html>
+    """
 
     components.html(
-        f"""
-        <html><head><style>
-        body{{margin:0;background:transparent;font-family:Arial,sans-serif;}}
-        table{{width:100%;border-collapse:collapse;font-size:10px;color:#173f70;}}
-        th{{background:#073f78;color:#fff;padding:8px 6px;border:1px solid #073f78;font-weight:900;}}
-        td{{padding:8px 6px;border:1px solid #d3dee6;background:#fff;text-align:center;}}
-        td.dept{{text-align:left;font-weight:800;}}
-        .rank-good{{color:#159447;font-weight:900;}}
-        .rank-watch{{color:#e5a400;font-weight:900;}}
-        .rank-critical{{color:#d71920;font-weight:900;}}
-        .rank-na{{color:#8a99a8;font-weight:800;}}
-        </style></head><body>{rank_html}</body></html>
-        """,
-        height=max(80, 31 * (len(ranking_df) + 1)),
+        ranking_html,
+        height=500,
         scrolling=False
     )
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
 # PSM MODULE NAVIGATION
@@ -3824,6 +3883,56 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+st.markdown("""
+<style>
+
+/* ============================================================
+   MODULE NAVIGATION — ZERO GAP
+   ============================================================ */
+
+/* Remove gap between all 8 columns */
+[data-testid="stHorizontalBlock"] {
+    gap: 0px !important;
+    column-gap: 0px !important;
+}
+
+/* Remove column padding */
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    padding-left: 0px !important;
+    padding-right: 0px !important;
+    margin-left: 0px !important;
+    margin-right: 0px !important;
+}
+
+/* Same fixed size for every button */
+[data-testid="stPageLink"] {
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
+
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+
+    margin: 0px !important;
+    padding: 0px !important;
+
+    box-sizing: border-box !important;
+}
+
+/* Link fills the card */
+[data-testid="stPageLink"] a {
+    width: 150px !important;
+    height: 56px !important;
+
+    margin: 0px !important;
+    padding: 0px 8px !important;
+
+    box-sizing: border-box !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # ============================================================
 # MODULE NAVIGATION
 # ============================================================
@@ -3906,4 +4015,3 @@ st.markdown(
     </div>""",
     unsafe_allow_html=True,
 )
-
