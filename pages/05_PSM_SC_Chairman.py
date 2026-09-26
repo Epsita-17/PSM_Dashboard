@@ -112,10 +112,6 @@ st.markdown(
         background:#f3f8fc;
     }
 
-    #MainMenu, footer {
-        visibility:hidden;
-    }
-
 
 
 .block-container {
@@ -141,42 +137,71 @@ section.main {
 }
 
    div[data-testid="stMetric"] {
-    background:#ffffff;
-    border:1px solid #cbddea;
-    border-radius:7px;
-    padding:6px 6px !important;
-    min-height:72px;
-    overflow:visible !important;
-}
+        background:#ffffff;
+        border:1px solid #cbddea;
+        border-radius:7px;
+        padding:6px 6px !important;
+        min-height:72px;
+        overflow:visible !important;
+    }
 
-    div[data-testid="stMetricLabel"] {
-    font-size:9px !important;
-    font-weight:800 !important;
-    color:#20384f !important;
-    white-space:nowrap !important;
-    overflow:visible !important;
-    text-overflow:clip !important;
-    line-height:1.1 !important;
-}
-div[data-testid="stMetricLabel"],
-div[data-testid="stMetricLabel"] > div,
-div[data-testid="stMetricLabel"] p {
-    overflow:visible !important;
-    text-overflow:clip !important;
-    white-space:nowrap !important;
-    max-width:none !important;
-}
+    /* ============================================================
+       CUSTOM KPI CARDS
+       Uses HTML instead of st.metric so labels never become ...
+       ============================================================ */
 
-div[data-testid="stMetricLabel"] p {
-    margin:0 !important;
-    padding:0 !important;
-    font-size:8px !important;
-    line-height:1.1 !important;
-}
-    div[data-testid="stMetricValue"] {
+    .custom-kpi {
+        width:100% !important;
+        height:72px !important;
+        min-height:72px !important;
+        box-sizing:border-box !important;
+
+        background:#ffffff !important;
+        border:1px solid #cbddea !important;
+        border-radius:7px !important;
+
+        padding:7px 8px 5px 8px !important;
+        margin:0 !important;
+
+        display:flex !important;
+        flex-direction:column !important;
+        justify-content:space-between !important;
+        align-items:flex-start !important;
+
+        overflow:visible !important;
+    }
+
+    .custom-kpi-label {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+
+        color:#285775 !important;
+        font-size:11px !important;
+        font-weight:700 !important;
+        line-height:1.15 !important;
+        text-align:left !important;
+
+        white-space:normal !important;
+        overflow:visible !important;
+        text-overflow:clip !important;
+        word-break:normal !important;
+        overflow-wrap:anywhere !important;
+    }
+
+    .custom-kpi-value {
+        width:100% !important;
+        margin:0 !important;
+        padding:0 !important;
+
         color:#123f77 !important;
-        font-size:24px !important;
+        font-size:27px !important;
         font-weight:900 !important;
+        line-height:1 !important;
+        text-align:left !important;
+
+        white-space:nowrap !important;
+        overflow:visible !important;
     }
 
     .module-card {
@@ -420,7 +445,6 @@ header_html = """
     position: relative;
     width: calc(100% + 20px);
     margin-left: -10px;
-    margin-right: -10px;
     height: 90px;
 
     overflow: hidden; 
@@ -834,7 +858,7 @@ header_html = """
 
     width: 100%; 
 
-    height: 4px; 
+    height: 7px; 
 
     background: #f28c00; 
 
@@ -909,7 +933,7 @@ header_html = """
 
             <div class="subtitle"> 
 
-                PSM DIGITAL DASHBOARD
+                PSM DIGITAL DASHBOARD 
 
             </div> 
 
@@ -918,13 +942,13 @@ header_html = """
 
             <div class="tagline"> 
 
-                GOVERNANCE 
+                PEOPLE 
+                &nbsp; | &nbsp; 
+                PROCESS 
                 &nbsp; | &nbsp; 
                 RISK 
                 &nbsp; | &nbsp; 
                 COMPLIANCE 
-                &nbsp; | &nbsp; 
-                ASSURANCE 
 
             </div> 
 
@@ -1019,6 +1043,33 @@ st.markdown(
     "<div style='height:12px;'></div>",
     unsafe_allow_html=True
 )
+# ============================================================
+# MOVE DEPARTMENT SECTION UP
+# ============================================================
+
+st.markdown("""
+<style>
+
+/* Move ONLY the department selector upward.
+   Do NOT move or resize the header. */
+div[data-testid="stSelectbox"] {
+    margin-top: -55px !important;
+}
+
+/* Keep department label close to selector */
+div[data-testid="stSelectbox"] label {
+    margin-top: 0px !important;
+    padding-top: 0px !important;
+}
+
+/* Remove extra spacing inside selector */
+div[data-testid="stSelectbox"] > div {
+    margin-top: 0px !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 # HELPERS
 # ============================================================
 def norm(value):
@@ -1987,38 +2038,6 @@ def show_moc_register(df):
     )
 
 
-# ============================================================
-# MODULE PAGE LINKS
-# ============================================================
-
-MODULE_PAGE_LINKS = {
-    "PROCESS TECHNOLOGY (PT)": "pages/09_PT.py",
-    "PROCESS HAZARD ANALYSIS (PHA)": "pages/10_PHA.py",
-    "PHA RECOMMENDATION": "pages/10_PHA.py",
-    "MOC": "pages/11_MOC.py",
-    "PRE-STARTUP SAFETY REVIEW (PSSR)": "pages/12_PSSR.py",
-    "PROCESS SAFETY INCIDENT": "pages/14_PSI.py",
-    "TRAINING": "pages/13_Training.py",
-    "INTERLOCK BYPASS": "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
-    "PSM CE": "pages/20_PSM CE & BARRIER HEALTH.py",
-}
-
-
-def show_module_title(number, icon, title):
-    page = MODULE_PAGE_LINKS.get(title)
-
-    if page:
-        st.page_link(
-            page,
-            label=f"🔴 {number} {icon} {title}",
-        )
-    else:
-        st.markdown(
-            f'<div class="module-title">🔴 {number} {icon} {title}</div>',
-            unsafe_allow_html=True,
-        )
-
-
 def show_metric_row(items):
     cols = st.columns(len(items), gap="small")
     for c, (label, value) in zip(cols, items):
@@ -2244,18 +2263,223 @@ cols=st.columns(8,gap="small")
 for col,(label,val,note,kind) in zip(cols,kpis):
     with col: st.markdown(f'<div class="kpi {kind}"><div class="kpi-label">{label}</div><div class="kpi-value">{val}</div><div class="kpi-note">{note}</div></div>',unsafe_allow_html=True)
 
-st.markdown('<div class="section-head"><div class="left">PSM GOVERNANCE MODULE PULSE</div><div class="right">SOURCE-BACKED • NO FIXED KPI VALUES</div></div>',unsafe_allow_html=True)
-modules=[("PT","PROCESS TECHNOLOGY"),("PHA","PROCESS HAZARD ANALYSIS"),("PHA Recommendation","PHA RECOMMENDATION"),("MOC","MANAGEMENT OF CHANGE"),("PSSR","PRE-STARTUP SAFETY REVIEW"),("PS Incident","PROCESS SAFETY INCIDENT"),("Training","TRAINING"),("SOC-SOL","SOC / SOL DEVIATION"),("Audit Compliance","AUDIT / COMPLIANCE"),("Interlock ","INTERLOCK BYPASS"),("PSM CE ","PSM CE NOTIFICATION"),("Barrier Audit","BARRIER AUDIT"),("Failure Data","C4/C5 FAILURE DATA")]
-for start in range(0,len(modules),4):
-    row=st.columns(4,gap="small")
-    for col,(key,label) in zip(row,modules[start:start+4]):
-        df=D.get(key,pd.DataFrame()); c=_source_status_counts(df); total=c["total"]
-        if key=="PS Incident": headline=_fmt(total); note="Actual incident records"; pct=None
-        elif key=="PSM CE ": headline=_fmt(psmce_failed); note="Actual PSM CE failed / breakdown"; pct=None
+st.markdown(
+    '<div class="section-head">'
+    '<div class="left">PSM GOVERNANCE MODULE PULSE</div>'
+    '<div class="right">SOURCE-BACKED • NO FIXED KPI VALUES</div>'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+# ============================================================
+# CLICKABLE PSM GOVERNANCE MODULE CARDS
+# Uses Streamlit native navigation — NOT direct URLs.
+# ============================================================
+
+MODULE_PAGES = {
+    "PT": "pages/09_PT.py",
+    "PHA": "pages/10_PHA.py",
+    "PHA Recommendation": "pages/10_PHA.py",
+    "MOC": "pages/11_MOC.py",
+    "PSSR": "pages/12_PSSR.py",
+    "PS Incident": "pages/14_PSI.py",
+    "Training": "pages/13_Training.py",
+    "Interlock": "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
+    "PSM CE": "pages/20_PSM CE & BARRIER HEALTH.py",
+}
+
+modules = [
+    ("PT", "PROCESS TECHNOLOGY"),
+    ("PHA", "PROCESS HAZARD ANALYSIS"),
+    ("PHA Recommendation", "PHA RECOMMENDATION"),
+    ("MOC", "MANAGEMENT OF CHANGE"),
+    ("PSSR", "PRE-STARTUP SAFETY REVIEW"),
+    ("PS Incident", "PROCESS SAFETY INCIDENT"),
+    ("Training", "TRAINING"),
+    ("SOC-SOL", "SOC / SOL DEVIATION"),
+    ("Audit Compliance", "AUDIT / COMPLIANCE"),
+    ("Interlock ", "INTERLOCK BYPASS"),
+    ("PSM CE ", "PSM CE NOTIFICATION"),
+    ("Barrier Audit", "BARRIER AUDIT"),
+    ("Failure Data", "C4/C5 FAILURE DATA"),
+]
+
+st.markdown(
+    """
+    <style>
+
+    /* ================================
+       SMALL & COLORFUL MODULE CARDS
+       ================================ */
+
+    .module-card {
+        position: relative;
+        height: 88px;
+        box-sizing: border-box;
+
+        background: linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #f2f8ff 100%
+        );
+
+        border: 1px solid #b9d4ea;
+        border-left: 5px solid #1677b8;
+
+        border-radius: 8px;
+
+        padding: 6px 8px;
+        margin-bottom: 3px;
+
+        box-shadow: 0 2px 6px rgba(20,65,95,0.08);
+
+        overflow: hidden;
+    }
+
+    .module-card-title {
+        color: #07518b;
+        font-size: 13px;       /* INCREASED */
+        font-weight: 900;
+        line-height: 1.1;
+        padding-right: 40px;
+    }
+
+    .module-card-number {
+        position: absolute;
+        top: 6px;
+        right: 7px;
+
+        color: #71879a;
+        font-size: 10px;       /* INCREASED */
+        font-weight: 900;
+    }
+
+    .module-card-value {
+        color: #123f77;
+        font-size: 23px;       /* INCREASED */
+        font-weight: 900;
+        line-height: 1;
+
+        margin-top: 4px;
+    }
+
+    .module-card-meta {
+        color: #64798a;
+        font-size: 10px;       /* INCREASED */
+        line-height: 1.1;
+        margin-top: 3px;
+    }
+
+    .module-card-bar {
+        width: 100%;
+        height: 5px;
+
+        background: #e1eaf2;
+        border-radius: 5px;
+
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .module-card-fill {
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            #1677b8,
+            #28a6d6
+        );
+
+        border-radius: 5px;
+    }
+
+    /* Click area */
+    .module-click-target {
+        margin-top: -92px !important;
+        margin-bottom: 3px !important;
+
+        height: 88px !important;
+
+        position: relative !important;
+        z-index: 20 !important;
+    }
+
+    .module-click-target button {
+        width: 100% !important;
+        height: 88px !important;
+        min-height: 88px !important;
+
+        padding: 0 !important;
+        margin: 0 !important;
+
+        background: transparent !important;
+        border: 0 !important;
+
+        color: transparent !important;
+        box-shadow: none !important;
+
+        cursor: pointer !important;
+        opacity: 0 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+for start in range(0, len(modules), 4):
+    row = st.columns(4, gap="small")
+    for col, (key, label) in zip(row, modules[start:start + 4]):
+        clean_key = key.strip()
+        df = D.get(key, pd.DataFrame())
+        c = _source_status_counts(df)
+        total = c["total"]
+
+        if key == "PS Incident":
+            headline = _fmt(total)
+            note = "Actual incident records"
+            pct = None
+        elif key == "PSM CE ":
+            headline = _fmt(psmce_failed)
+            note = "Actual PSM CE failed / breakdown"
+            pct = None
         else:
-            headline=_fmt(total); note=f'Completed: {_fmt(c["completed"])} • Open: {_fmt(c["open"])}'; pct=_pct(c["completed"],total)
-        bar="" if pct is None else f'<div class="bar-bg"><div class="bar-fill" style="width:{pct:.1f}%"></div></div><div class="module-meta">{pct:.1f}% completed (derived)</div>'
-        with col: st.markdown(f'<div class="module-card"><div class="module-top"><div class="module-name">{label}</div><div class="module-number">{key.strip()}</div></div><div class="module-value">{headline}</div><div class="module-meta">{note}</div>{bar}</div>',unsafe_allow_html=True)
+            headline = _fmt(total)
+            note = f'Completed: {_fmt(c["completed"])} • Open: {_fmt(c["open"])}'
+            pct = _pct(c["completed"], total)
+
+        if pct is None:
+            bar = ""
+        else:
+            bar = (
+                f'<div class="module-card-bar">'
+                f'<div class="module-card-fill" style="width:{pct:.1f}%"></div>'
+                f'</div>'
+                f'<div class="module-card-meta">{pct:.1f}% completed (derived)</div>'
+            )
+
+        card_html = (
+            f'<div class="module-card">'
+            f'<div class="module-card-title">{label}</div>'
+            f'<div class="module-card-number">{clean_key}</div>'
+            f'<div class="module-card-value">{headline}</div>'
+            f'<div class="module-card-meta">{note}</div>'
+            f'{bar}'
+            f'</div>'
+        )
+
+        with col:
+            st.markdown(card_html, unsafe_allow_html=True)
+            page_path = MODULE_PAGES.get(clean_key)
+            if page_path:
+                st.markdown('<div class="module-click-target">', unsafe_allow_html=True)
+                clicked = st.button(
+                    "open",
+                    key=f"module_click_{clean_key.replace(' ', '_')}",
+                    use_container_width=True,
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+                if clicked:
+                    st.switch_page(page_path)
 
 st.markdown('<div class="section-head"><div class="left">DEPARTMENT ACTION WATCHLIST</div><div class="right">RANKED USING ACTUAL STATUS FIELDS</div></div>',unsafe_allow_html=True)
 rows=[]
@@ -2303,373 +2527,3 @@ if audit_df is not None and not audit_df.empty:
             with a3: st.metric("AUDIT RECORDS SCORED",f"{len(scores):,}")
 
 st.markdown(f'<div style="text-align:center;padding:12px;color:#7890a0;font-size:9px;font-weight:800;letter-spacing:1px;">PSM SUB COMMITTEE CHAIRMAN DASHBOARD • GOOGLE SHEET SOURCE • LAST REFRESH {datetime.now().strftime("%d-%b-%Y %H:%M:%S")} • VIEW: {selected_department.upper()}</div>',unsafe_allow_html=True)
-
-# ============================================================
-# PSM MODULE NAVIGATION
-# ============================================================
-
-st.markdown("""
-<style>
-
-/* =========================================================
-   PSM NAVIGATION HEADER
-   ========================================================= */
-
-.psm-nav-title {
-    width: 100%;
-    box-sizing: border-box;
-
-    background: linear-gradient(
-        90deg,
-        #073f78 0%,
-        #07518b 55%,
-        #0b6096 100%
-    );
-
-    color: #ffffff;
-
-    border-radius: 9px;
-
-    padding: 10px 16px;
-
-    margin: 6px 0 9px 0;
-
-    min-height: 46px;
-
-    font-size: 12px;
-    font-weight: 900;
-
-    letter-spacing: 0.5px;
-
-    box-shadow:
-        0 3px 9px rgba(15, 60, 95, 0.16);
-
-    line-height: 26px;
-}
-
-
-/* Instruction text */
-
-.psm-nav-title .nav-instruction {
-    float: right;
-
-    color: rgba(255, 255, 255, 0.82);
-
-    font-size: 8px;
-
-    font-weight: 700;
-
-    letter-spacing: 0.3px;
-
-    line-height: 26px;
-}
-
-/* =========================================================
-   PAGE LINK CARD
-   ========================================================= */
-
-div[data-testid="stPageLink"] {
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-
-div[data-testid="stPageLink"] a {
-    position: relative !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-
-    justify-content: flex-start !important;
-
-    width: 100% !important;
-
-    min-height: 58px !important;
-
-    box-sizing: border-box !important;
-
-    padding: 9px 10px 9px 13px !important;
-
-    background: #ffffff !important;
-
-    border: 1px solid #d5e2ec !important;
-
-    border-radius: 9px !important;
-
-    color: #073f78 !important;
-
-    text-decoration: none !important;
-
-    box-shadow:
-        0 2px 7px rgba(20, 65, 95, 0.08) !important;
-
-    transition:
-        transform 0.18s ease,
-        box-shadow 0.18s ease,
-        border-color 0.18s ease,
-        background 0.18s ease !important;
-
-    overflow: hidden !important;
-}
-
-
-/* =========================================================
-   BLUE ACCENT STRIPE
-   ========================================================= */
-
-div[data-testid="stPageLink"] a::before {
-
-    content: "";
-
-    position: absolute;
-
-    left: 0;
-    top: 0;
-    bottom: 0;
-
-    width: 4px;
-
-    background: #1261a0;
-
-    border-radius: 9px 0 0 9px;
-}
-
-
-/* =========================================================
-   HOVER EFFECT
-   ========================================================= */
-
-div[data-testid="stPageLink"] a:hover {
-
-    transform: translateY(-3px) !important;
-
-    background: #f8fbfe !important;
-
-    border-color: #8eb6d2 !important;
-
-    box-shadow:
-        0 7px 15px rgba(18, 63, 100, 0.15) !important;
-}
-
-
-/* =========================================================
-   PAGE LINK TEXT
-   ========================================================= */
-
-div[data-testid="stPageLink"] a p {
-
-    margin: 0 !important;
-
-    padding: 0 !important;
-
-    color: #173f70 !important;
-
-    font-size: 9px !important;
-
-    font-weight: 900 !important;
-
-    letter-spacing: 0.1px !important;
-
-    white-space: nowrap !important;
-}
-
-
-/* =========================================================
-   ICON
-   ========================================================= */
-
-div[data-testid="stPageLink"] a svg {
-
-    width: 18px !important;
-
-    height: 18px !important;
-
-    margin-right: 6px !important;
-
-    flex-shrink: 0 !important;
-}
-
-
-/* =========================================================
-   REMOVE STREAMLIT EXCESS SPACING
-   ========================================================= */
-
-div[data-testid="stPageLink"] + div {
-    margin-top: 0 !important;
-}
-
-
-/* =========================================================
-   COLUMN SPACING
-   ========================================================= */
-
-div[data-testid="column"] {
-    padding-left: 3px !important;
-    padding-right: 3px !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# ============================================================
-# NAVIGATION HEADER
-# ============================================================
-
-st.markdown(
-    """
-    <div class="psm-nav-title">
-        🔴 &nbsp; PSM MODULE NAVIGATION
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <span class="nav-instruction">
-            CLICK A MODULE FOR DETAILED VIEW
-        </span>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-# ============================================================
-# MODULE NAVIGATION
-# ============================================================
-
-nav1, nav2, nav3, nav4, nav5, nav6, nav7, nav8 = st.columns(
-    8,
-    gap="small"
-)
-
-
-with nav1:
-    st.page_link(
-        "pages/09_PT.py",
-        label="PT",
-        icon="📋"
-    )
-
-
-with nav2:
-    st.page_link(
-        "pages/10_PHA.py",
-        label="PHA",
-        icon="⚠️"
-    )
-
-
-with nav3:
-    st.page_link(
-        "pages/11_MOC.py",
-        label="MOC",
-        icon="🔄"
-    )
-
-
-with nav4:
-    st.page_link(
-        "pages/12_PSSR.py",
-        label="PSSR",
-        icon="🚀"
-    )
-
-
-with nav5:
-    st.page_link(
-        "pages/13_Training.py",
-        label="TRAINING",
-        icon="🎓"
-    )
-
-
-with nav6:
-    st.page_link(
-        "pages/14_PSI.py",
-        label="PS INCIDENT",
-        icon="🚨"
-    )
-
-
-with nav7:
-    st.page_link(
-        "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
-        label="INTERLOCK",
-        icon="⚙️"
-    )
-
-
-with nav8:
-    st.page_link(
-        "pages/20_PSM CE & BARRIER HEALTH.py",
-        label="PSM CE / BARRIER",
-        icon="🛡️"
-    )
-
-
-# ============================================================
-# DEPARTMENT STATUS - NO GAP BELOW HEADER
-# ============================================================
-
-st.markdown("""
-<style>
-
-/* Move complete Department Status section upward */
-div[data-testid="stSelectbox"] {
-    margin-top: -58px !important;
-    margin-bottom: 0px !important;
-    padding-top: 0px !important;
-    padding-bottom: 0px !important;
-}
-
-/* Department Status label */
-div[data-testid="stSelectbox"] label {
-    margin-top: 0px !important;
-    margin-bottom: 4px !important;
-    padding: 0px !important;
-
-    color: #587086 !important;
-    font-size: 15px !important;
-    font-weight: 500 !important;
-    line-height: 1.2 !important;
-}
-
-/* Selectbox container */
-div[data-testid="stSelectbox"] > div {
-    margin-top: 0px !important;
-    padding-top: 0px !important;
-}
-
-/* Dropdown */
-div[data-baseweb="select"] {
-    margin-top: 0px !important;
-}
-
-/* Dropdown box */
-div[data-baseweb="select"] > div {
-    height: 58px !important;
-    min-height: 58px !important;
-
-    background: #ffffff !important;
-    border: 1px solid #d2dfe8 !important;
-    border-radius: 12px !important;
-
-    box-shadow: 0 4px 14px rgba(15,55,85,0.08) !important;
-}
-
-/* Dropdown text */
-div[data-baseweb="select"] span {
-    font-size: 16px !important;
-    color: #394957 !important;
-}
-
-/* Dropdown arrow */
-div[data-baseweb="select"] svg {
-    width: 20px !important;
-    height: 20px !important;
-}
-
-/* Remove Streamlit bottom spacing */
-div[data-testid="stSelectbox"] {
-    margin-bottom: -5px !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
