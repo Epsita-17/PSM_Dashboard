@@ -1949,9 +1949,10 @@ with b:
                 "ID"
             ],
             [
+                "Name of PHA",
+                "PHA Name",
                 "PHA Description",
-                "Description",
-                "PHA Name"
+                "Description"
             ],
             [
                 "Status",
