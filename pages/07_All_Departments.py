@@ -2781,7 +2781,6 @@ with left_section:
         html, body { margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }
         .psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;}
         .psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
-        .psm-matrix-link{display:inline-block;background:#ffffff;color:#073f78 !important;padding:6px 10px;border-radius:5px;text-decoration:none !important;font-size:9px;font-weight:900;}
         .psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
         .psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
         .psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
@@ -2803,9 +2802,7 @@ with left_section:
         <div class="psm-matrix-wrap">
             <div class="psm-matrix-head">
                 <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
-                <a class="psm-matrix-link"
-                   href="https://docs.google.com/spreadsheets/d/1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM/edit?gid=1071736559#gid=1071736559"
-                   target="_blank">↗ OPEN PSM DATA — GOOGLE SHEETS</a>
+               
             </div>
             <table class="psm-matrix-table">
                 <thead>
