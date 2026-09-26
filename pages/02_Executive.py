@@ -13,7 +13,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
 
-
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -992,6 +991,7 @@ div[data-testid="stSelectbox"] > div {
 </style>
 """, unsafe_allow_html=True)
 
+
 # HELPERS
 # ============================================================
 def norm(value):
@@ -1279,8 +1279,8 @@ def load_interlock_sheet():
                     for i in valid_columns
                 ]
                 if any(
-                    value is not None and str(value).strip() != ""
-                    for value in values
+                        value is not None and str(value).strip() != ""
+                        for value in values
                 ):
                     records.append(values)
 
@@ -1492,7 +1492,6 @@ def load_audit_with_links(gid):
     return df
 
 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def load_psm_ce_sheet():
     """
@@ -1588,14 +1587,14 @@ def load_psm_ce_sheet():
                 )
 
                 if (
-                    has_slno
-                    and has_month
-                    and has_department
-                    and has_failed
-                    and has_mech_generated
-                    and has_mech_completed
-                    and has_ei_generated
-                    and has_ei_completed
+                        has_slno
+                        and has_month
+                        and has_department
+                        and has_failed
+                        and has_mech_generated
+                        and has_mech_completed
+                        and has_ei_generated
+                        and has_ei_completed
                 ):
                     header_found = row_number
                     break
@@ -1627,8 +1626,8 @@ def load_psm_ce_sheet():
                     for i in valid_columns
                 ]
                 if any(
-                    value is not None and str(value).strip() != ""
-                    for value in values
+                        value is not None and str(value).strip() != ""
+                        for value in values
                 ):
                     records.append(values)
 
@@ -1640,6 +1639,7 @@ def load_psm_ce_sheet():
         return pd.DataFrame()
 
     return pd.DataFrame()
+
 
 def load_module(name):
     """Load the complete module data for all departments."""
@@ -2236,15 +2236,18 @@ for name, df in loaded.items():
     else:
         exec_data[name] = filter_selected_department(df, selected_department)
 
+
 def exec_df(name):
     df = exec_data.get(name)
     return clean_dataframe(df) if df is not None else pd.DataFrame()
+
 
 def exec_num(series):
     return pd.to_numeric(
         series.astype(str).str.replace(",", "", regex=False).str.replace("%", "", regex=False),
         errors="coerce"
     ).fillna(0)
+
 
 def module_summary(df, status_names=None):
     x = status_counts(df, status_names)
@@ -2254,6 +2257,7 @@ def module_summary(df, status_names=None):
     overdue = x["overdue"]
     pct = (done / total * 100) if total else 0
     return total, done, open_count, overdue, pct
+
 
 def kpi_card(label, value, hint="", tone="blue"):
     st.markdown(
@@ -2265,6 +2269,7 @@ def kpi_card(label, value, hint="", tone="blue"):
         unsafe_allow_html=True,
     )
 
+
 def panel_title(title, subtitle=""):
     st.markdown(
         f"""<div class="exec-panel-title">
@@ -2272,6 +2277,7 @@ def panel_title(title, subtitle=""):
         </div>""",
         unsafe_allow_html=True,
     )
+
 
 def pct_color(p):
     """Completion percentage colour scale for the Executive dashboard."""
@@ -2281,15 +2287,15 @@ def pct_color(p):
         p = 0.0
 
     if p >= 90:
-        return "#16a34a"      # Green      90-100%
+        return "#16a34a"  # Green      90-100%
     elif p >= 70:
-        return "#65a30d"      # Lime Green 70-89%
+        return "#65a30d"  # Lime Green 70-89%
     elif p >= 50:
-        return "#f59e0b"      # Amber      50-69%
+        return "#f59e0b"  # Amber      50-69%
     elif p >= 25:
-        return "#f97316"      # Orange     25-49%
+        return "#f97316"  # Orange     25-49%
     else:
-        return "#dc2626"      # Red        0-24%
+        return "#dc2626"  # Red        0-24%
 
 
 def attention_color(value):
@@ -2300,15 +2306,16 @@ def attention_color(value):
         value = 0.0
 
     if value >= 50:
-        return "#dc2626"      # Critical: 50+
+        return "#dc2626"  # Critical: 50+
     elif value >= 20:
-        return "#f97316"      # High: 20-49
+        return "#f97316"  # High: 20-49
     elif value >= 5:
-        return "#facc15"      # Medium: 5-19
+        return "#facc15"  # Medium: 5-19
     elif value >= 1:
-        return "#16a34a"      # Low: 1-4
+        return "#16a34a"  # Low: 1-4
     else:
-        return "#9ca3af"      # None: 0
+        return "#9ca3af"  # None: 0
+
 
 # ---------- EXECUTIVE KPI CALCULATIONS ----------
 pt_df = exec_df("PT")
@@ -2337,7 +2344,7 @@ action_modules = [
 ]
 total_actions = done_actions = open_actions = overdue_actions = 0
 for df, candidates in action_modules:
-    a,b,c,d,_ = module_summary(df, candidates)
+    a, b, c, d, _ = module_summary(df, candidates)
     total_actions += a
     done_actions += b
     open_actions += c
@@ -2372,8 +2379,10 @@ barrier_unacceptable_col = find_col(barrier_df, [
     "Barrier Health (C4/C5) (Number) Unacceptable",
     "Unacceptable Barrier", "Unacceptable"
 ])
-barrier_assessed = int(exec_num(barrier_df[barrier_assessed_col]).sum()) if barrier_assessed_col and not barrier_df.empty else 0
-barr_unacceptable = int(exec_num(barrier_df[barrier_unacceptable_col]).sum()) if barrier_unacceptable_col and not barrier_df.empty else 0
+barrier_assessed = int(
+    exec_num(barrier_df[barrier_assessed_col]).sum()) if barrier_assessed_col and not barrier_df.empty else 0
+barr_unacceptable = int(
+    exec_num(barrier_df[barrier_unacceptable_col]).sum()) if barrier_unacceptable_col and not barrier_df.empty else 0
 
 # Audit
 audit_date_col = find_col(audit_df, ["Audit Date", "Last Audit Date", "Date"])
@@ -2426,15 +2435,17 @@ ei_comp = find_col(psmce_df, [
     "Compliance of PSM CE MO - E&I - Completed",
     "PSM CE MO E&I Completed"
 ])
-psmce_gen = (int(exec_num(psmce_df[mech_gen]).sum()) if mech_gen else 0) + (int(exec_num(psmce_df[ei_gen]).sum()) if ei_gen else 0)
-psmce_done = (int(exec_num(psmce_df[mech_comp]).sum()) if mech_comp else 0) + (int(exec_num(psmce_df[ei_comp]).sum()) if ei_comp else 0)
+psmce_gen = (int(exec_num(psmce_df[mech_gen]).sum()) if mech_gen else 0) + (
+    int(exec_num(psmce_df[ei_gen]).sum()) if ei_gen else 0)
+psmce_done = (int(exec_num(psmce_df[mech_comp]).sum()) if mech_comp else 0) + (
+    int(exec_num(psmce_df[ei_comp]).sum()) if ei_comp else 0)
 psmce_completion = (psmce_done / psmce_gen * 100) if psmce_gen else 0
 
 # Overall action closure — deliberately based only on action-oriented modules in this source.
 overall_closure = (done_actions / total_actions * 100) if total_actions else 0
 
 # ---------- KPI ROW ----------
-k1,k2,k3,k4,k5,k6,k7,k8 = st.columns(8, gap="small")
+k1, k2, k3, k4, k5, k6, k7, k8 = st.columns(8, gap="small")
 with k1: kpi_card("ACTION REGISTER", f"{total_actions:,}", "PT + PHA + PHA Rec. + MOC + PSSR")
 with k2: kpi_card("CLOSED / COMPLETE", f"{done_actions:,}", f"{overall_closure:.0f}% closure", "green")
 with k3: kpi_card("OPEN / ONGOING", f"{open_actions:,}", "Requires management follow-up", "orange")
@@ -2493,7 +2504,7 @@ with left:
                         <div class="name">{name}</div>
                         <div class="pct" style="color:{c};">{p:.0f}%</div>
                     </div>
-                    <div class="exec-bar"><div style="width:{min(100,max(0,p)):.1f}%;background:{c};"></div></div>
+                    <div class="exec-bar"><div style="width:{min(100, max(0, p)):.1f}%;background:{c};"></div></div>
                     <div class="exec-note">{total_text}</div>
                 </div>""",
                 unsafe_allow_html=True,
@@ -2533,15 +2544,15 @@ with right:
         ))
         fig.update_layout(
             height=400,
-            margin=dict(l=8,r=45,t=8,b=18),
+            margin=dict(l=8, r=45, t=8, b=18),
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(size=9,color="#173f70"),
-            xaxis=dict(showgrid=True,gridcolor="#e5edf4",rangemode="tozero"),
+            font=dict(size=9, color="#173f70"),
+            xaxis=dict(showgrid=True, gridcolor="#e5edf4", rangemode="tozero"),
             yaxis=dict(showgrid=False),
             showlegend=False,
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.markdown(
             '<div class="exec-note">Higher bars indicate greater management attention; values are calculated from the live source registers.</div>',
             unsafe_allow_html=True,
@@ -2579,8 +2590,9 @@ with c1:
                 bu = int(exec_num(barr[barrier_unacceptable_col]).sum())
             dept_rows.append([dept, inc, inte, bu, inc + inte + bu])
 
-        dept_df = pd.DataFrame(dept_rows, columns=["Department","Incidents","Interlocks","Unacceptable Barriers","Attention"])
-        dept_df = dept_df.sort_values(["Attention","Department"], ascending=[False,True]).head(12)
+        dept_df = pd.DataFrame(dept_rows,
+                               columns=["Department", "Incidents", "Interlocks", "Unacceptable Barriers", "Attention"])
+        dept_df = dept_df.sort_values(["Attention", "Department"], ascending=[False, True]).head(12)
 
         fig = go.Figure()
         fig.add_trace(go.Bar(name="Incidents", x=dept_df["Department"], y=dept_df["Incidents"]))
@@ -2588,14 +2600,14 @@ with c1:
         fig.add_trace(go.Bar(name="Unacceptable Barriers", x=dept_df["Department"], y=dept_df["Unacceptable Barriers"]))
         fig.update_layout(
             barmode="stack", height=250,
-            margin=dict(l=35,r=15,t=10,b=90),
+            margin=dict(l=35, r=15, t=10, b=90),
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(size=8,color="#173f70"),
-            legend=dict(orientation="h",y=1.08,x=0,font=dict(size=8)),
-            xaxis=dict(tickangle=-45,showgrid=False),
-            yaxis=dict(rangemode="tozero",showgrid=True,gridcolor="#e5edf4"),
+            font=dict(size=8, color="#173f70"),
+            legend=dict(orientation="h", y=1.08, x=0, font=dict(size=8)),
+            xaxis=dict(tickangle=-45, showgrid=False),
+            yaxis=dict(rangemode="tozero", showgrid=True, gridcolor="#e5edf4"),
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 with c2:
     with st.container(border=True):
@@ -2609,20 +2621,20 @@ with c2:
         for name, val in gauges:
             c = pct_color(val)
             fig = go.Figure(go.Pie(
-                values=[min(100,max(0,val)), max(0,100-min(100,max(0,val)))],
-                labels=["Complete","Remaining"],
+                values=[min(100, max(0, val)), max(0, 100 - min(100, max(0, val)))],
+                labels=["Complete", "Remaining"],
                 hole=.72,
                 textinfo="none",
-                marker=dict(colors=[c,"#e9eff4"]),
+                marker=dict(colors=[c, "#e9eff4"]),
                 sort=False,
             ))
             fig.update_layout(
-                height=78, margin=dict(l=0,r=0,t=0,b=0),
+                height=78, margin=dict(l=0, r=0, t=0, b=0),
                 showlegend=False, paper_bgcolor="rgba(0,0,0,0)",
-                annotations=[dict(text=f"<b>{val:.0f}%</b>",x=.5,y=.5,
-                                   showarrow=False,font=dict(size=18,color="#173f70"))],
+                annotations=[dict(text=f"<b>{val:.0f}%</b>", x=.5, y=.5,
+                                  showarrow=False, font=dict(size=18, color="#173f70"))],
             )
-            gc1,gc2 = st.columns([.55,1.45], gap="small")
+            gc1, gc2 = st.columns([.55, 1.45], gap="small")
             with gc1:
                 st.plotly_chart(
                     fig,
@@ -2650,32 +2662,32 @@ with t1:
 
         if not soc_df.empty:
             month_col = find_col(soc_df, ["Month"])
-            soc_col = find_col(soc_df, ["SOC Deviation","SOC Deviation Nos.","SOC Deviation No.","SOC"])
-            sol_col = find_col(soc_df, ["SOL Deviation","SOL Deviation Nos.","SOL Deviation No.","SOL"])
+            soc_col = find_col(soc_df, ["SOC Deviation", "SOC Deviation Nos.", "SOC Deviation No.", "SOC"])
+            sol_col = find_col(soc_df, ["SOL Deviation", "SOL Deviation Nos.", "SOL Deviation No.", "SOL"])
             if month_col and soc_col and sol_col:
                 temp = pd.DataFrame({
                     "Month": soc_df[month_col].astype(str).str.strip(),
                     "SOC": exec_num(soc_df[soc_col]),
                     "SOL": exec_num(soc_df[sol_col]),
                 })
-                temp = temp.groupby("Month", as_index=False)[["SOC","SOL"]].sum()
+                temp = temp.groupby("Month", as_index=False)[["SOC", "SOL"]].sum()
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=temp["Month"],y=temp["SOC"],mode="lines+markers+text",
+                fig.add_trace(go.Scatter(x=temp["Month"], y=temp["SOC"], mode="lines+markers+text",
                                          text=[str(int(v)) if v else "" for v in temp["SOC"]],
-                                         textposition="top center",name="SOC Deviation",line=dict(width=3)))
-                fig.add_trace(go.Scatter(x=temp["Month"],y=temp["SOL"],mode="lines+markers+text",
+                                         textposition="top center", name="SOC Deviation", line=dict(width=3)))
+                fig.add_trace(go.Scatter(x=temp["Month"], y=temp["SOL"], mode="lines+markers+text",
                                          text=[str(int(v)) if v else "" for v in temp["SOL"]],
-                                         textposition="top center",name="SOL Deviation",line=dict(width=3)))
+                                         textposition="top center", name="SOL Deviation", line=dict(width=3)))
                 fig.update_layout(
-                    height=250, margin=dict(l=40,r=20,t=10,b=50),
-                    plot_bgcolor="rgba(0,0,0,0)",paper_bgcolor="rgba(0,0,0,0)",
-                    font=dict(size=8,color="#173f70"),
-                    xaxis=dict(showgrid=False,tickangle=-35),
-                    yaxis=dict(rangemode="tozero",showgrid=True,gridcolor="#e5edf4"),
-                    legend=dict(orientation="h",y=1.08,x=0,font=dict(size=8)),
+                    height=250, margin=dict(l=40, r=20, t=10, b=50),
+                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(size=8, color="#173f70"),
+                    xaxis=dict(showgrid=False, tickangle=-35),
+                    yaxis=dict(rangemode="tozero", showgrid=True, gridcolor="#e5edf4"),
+                    legend=dict(orientation="h", y=1.08, x=0, font=dict(size=8)),
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.info("SOC / SOL columns not available.")
         else:
@@ -2688,15 +2700,15 @@ with t2:
         critical_rows = []
         if not pssr_df.empty:
             x = status_counts(pssr_df, [
-                "Overdue/Pending/Completed","Overdue / Pending / Completed",
-                "Overdue Pending Completed","Status","Current Status"
+                "Overdue/Pending/Completed", "Overdue / Pending / Completed",
+                "Overdue Pending Completed", "Status", "Current Status"
             ])
             critical_rows.append(("PSSR overdue", x["overdue"]))
             critical_rows.append(("PSSR pending", x["pending"]))
         if not rec_df.empty:
             x = status_counts(rec_df, [
-                "Status (Open/Close)","Status Open Close","Open/Close Status",
-                "Recommendation Status","Status"
+                "Status (Open/Close)", "Status Open Close", "Open/Close Status",
+                "Recommendation Status", "Status"
             ])
             critical_rows.append(("PHA recommendations open", x["open"]))
         if not moc_df.empty:
@@ -2708,7 +2720,7 @@ with t2:
             ("Audit pending", audit_pending),
         ])
 
-        critical_df = pd.DataFrame(critical_rows, columns=["Register","Open"]).sort_values("Open",ascending=False)
+        critical_df = pd.DataFrame(critical_rows, columns=["Register", "Open"]).sort_values("Open", ascending=False)
         critical_df = critical_df[critical_df["Open"] > 0].head(8)
 
         if critical_df.empty:
@@ -2721,7 +2733,7 @@ with t2:
                 height=300,
                 column_config={
                     "Register": st.column_config.TextColumn("Register"),
-                    "Open": st.column_config.NumberColumn("Open",format="%d"),
+                    "Open": st.column_config.NumberColumn("Open", format="%d"),
                 }
             )
 
@@ -2735,7 +2747,6 @@ left_section, right_section = st.columns(
 )
 
 with left_section:
-
     # ============================================================
     # PSM LEADING vs LAGGING INDICATORS MATRIX
     # ============================================================
@@ -2901,7 +2912,6 @@ with left_section:
     matrix_failure = filter_selected_department(failure_data, selected_department)
     matrix_audit = filter_selected_department(audit, selected_department)
 
-
     # ---- 1. PHA recommendation closure ----
     pha_rec_actual = _matrix_status_pct(
         matrix_rec,
@@ -3011,6 +3021,7 @@ with left_section:
     # ---- 9. Major equipment failure events ----
     failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
 
+
     # ---- 10–14: derive only where the incident source has an explicit field ----
     def _incident_event_count(df, candidates):
         if df is None or df.empty:
@@ -3084,7 +3095,6 @@ with left_section:
             "Production Loss Due to Incident",
         ],
     )
-
 
     matrix_rows = [
         (
@@ -3204,7 +3214,23 @@ with left_section:
 
     def _matrix_display(actual, kind):
         if actual is None:
-            return "N/A", "N/A", "matrix-na"
+            # Show 0 instead of N/A
+            if kind == "pct":
+                return "0.0%", "CRITICAL", "matrix-critical"
+
+            # Zero-target KPI
+            return "0", "ON TRACK", "matrix-ok"
+
+        if kind == "pct":
+            status, cls = _matrix_zero_or_pct(actual, "pct")
+            return f"{actual:.1f}%", status, cls
+
+        status, cls = _matrix_zero_or_pct(actual, "zero")
+
+        if isinstance(actual, float) and actual.is_integer():
+            actual = int(actual)
+
+        return f"{actual:,}", status, cls
 
         if kind == "pct":
             status, cls = _matrix_zero_or_pct(actual, "pct")
@@ -3246,7 +3272,7 @@ with left_section:
     <div class="psm-matrix-wrap">
         <div class="psm-matrix-head">
             <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
-           
+
         </div>
         <table class="psm-matrix-table">
             <thead>
@@ -3278,10 +3304,10 @@ with left_section:
     matrix_html += """
             </tbody>
         </table>
-        <div class="matrix-note">
-            Actual values follow the Executive Department filter. N/A is shown where the current source
-            does not contain a direct field for that KPI; no value is assumed or hard-coded.
-        </div>
+      <div class="matrix-note">
+    Actual values follow the Executive Department filter. Where the source field is unavailable,
+    the dashboard displays 0.
+</div>
     </div>
     </body>
     </html>
@@ -3295,8 +3321,6 @@ with left_section:
         height=500,
         scrolling=False
     )
-
-
 
 # ============================================================
 # DEPARTMENT-WISE KPI & DATA PERFORMANCE RANKING
@@ -3338,15 +3362,18 @@ MATRIX_KPIS = [
     ("Production loss due to PSM incident", 0.0, "zero"),
 ]
 
+
 def _dept_df(df, dept):
     if df is None:
         return pd.DataFrame()
     return filter_selected_department(df, dept)
 
+
 def _pct_status(df, candidates):
     if df is None or df.empty:
         return None
     return _matrix_status_pct(df, candidates)
+
 
 def _active_interlocks(df):
     if df is None or df.empty:
@@ -3362,6 +3389,7 @@ def _active_interlocks(df):
         r"active|normalization\s*pending|due\s*for\s*normalization",
         regex=True, na=False
     ).sum())
+
 
 def _training_actual(df):
     if df is None or df.empty:
@@ -3389,6 +3417,7 @@ def _training_actual(df):
         "Status", "Current Status", "Training Status", "Completion Status"
     ])
 
+
 def _barrier_actual(df):
     if df is None or df.empty:
         return None
@@ -3402,6 +3431,7 @@ def _barrier_actual(df):
     assessed = float(exec_num(df[a]).sum())
     unacceptable = float(exec_num(df[u]).sum())
     return (assessed - unacceptable) / assessed * 100 if assessed else None
+
 
 def _event_field_count(df, candidates):
     # None = source/field unavailable; 0 = field exists and confirms zero events.
@@ -3419,6 +3449,7 @@ def _event_field_count(df, candidates):
     return float(s.str.lower().isin([
         "yes", "y", "true", "1", "occurred", "applicable"
     ]).sum())
+
 
 def _matrix_actuals(dept):
     rec_d = _dept_df(rec, dept)
@@ -3485,14 +3516,22 @@ def _matrix_actuals(dept):
         "Production Loss", "Production Loss (MT)"
     ])
 
-    return [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
+    # Keep the existing dashboard format unchanged.
+    # Only the calculation is changed: unavailable/N/A KPI values = 0.
+    return [
+        0.0 if value is None else value
+        for value in [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14]
+    ]
+
 
 def _score(actual, target, kind):
+    # N/A / unavailable actual value is treated as 0.
     if actual is None:
-        return None
+        actual = 0.0
     if kind == "zero":
         return 100.0 if float(actual) == 0 else 0.0
     return max(0.0, min(100.0, float(actual) / target * 100.0))
+
 
 ranking_departments = (
     ALL_DEPARTMENTS[1:] if selected_department == "All Departments"
@@ -3525,7 +3564,6 @@ if not ranking_df.empty:
     ranking_df["Rank"] = range(1, len(ranking_df) + 1)
 
 with right_section:
-
     if ranking_df.empty:
         rank_table_html = """<div style="padding:20px;text-align:center;color:#738595;font-size:10px;">No department data available for ranking.</div>"""
     else:
@@ -3863,7 +3901,6 @@ div[data-testid="column"] {
 </style>
 """, unsafe_allow_html=True)
 
-
 # ============================================================
 # NAVIGATION HEADER
 # ============================================================
@@ -3939,14 +3976,12 @@ nav1, nav2, nav3, nav4, nav5, nav6, nav7, nav8 = st.columns(
     gap="small"
 )
 
-
 with nav1:
     st.page_link(
         "pages/09_PT.py",
         label="PT",
         icon="📋"
     )
-
 
 with nav2:
     st.page_link(
@@ -3955,14 +3990,12 @@ with nav2:
         icon="⚠️"
     )
 
-
 with nav3:
     st.page_link(
         "pages/11_MOC.py",
         label="MOC",
         icon="🔄"
     )
-
 
 with nav4:
     st.page_link(
@@ -3971,14 +4004,12 @@ with nav4:
         icon="🚀"
     )
 
-
 with nav5:
     st.page_link(
         "pages/13_Training.py",
         label="TRAINING",
         icon="🎓"
     )
-
 
 with nav6:
     st.page_link(
@@ -3987,14 +4018,12 @@ with nav6:
         icon="🚨"
     )
 
-
 with nav7:
     st.page_link(
         "pages/19_ALARM_&_INTERLOCK_MANAGEMENT.py",
         label="INTERLOCK",
         icon="⚙️"
     )
-
 
 with nav8:
     st.page_link(
