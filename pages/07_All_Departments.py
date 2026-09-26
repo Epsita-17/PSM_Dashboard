@@ -1080,6 +1080,8 @@ div[data-testid="stSelectbox"] > div {
 
 </style>
 """, unsafe_allow_html=True)
+
+
 # HELPERS
 # ============================================================
 def norm(value):
@@ -1367,8 +1369,8 @@ def load_interlock_sheet():
                     for i in valid_columns
                 ]
                 if any(
-                    value is not None and str(value).strip() != ""
-                    for value in values
+                        value is not None and str(value).strip() != ""
+                        for value in values
                 ):
                     records.append(values)
 
@@ -1580,7 +1582,6 @@ def load_audit_with_links(gid):
     return df
 
 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def load_psm_ce_sheet():
     """
@@ -1676,14 +1677,14 @@ def load_psm_ce_sheet():
                 )
 
                 if (
-                    has_slno
-                    and has_month
-                    and has_department
-                    and has_failed
-                    and has_mech_generated
-                    and has_mech_completed
-                    and has_ei_generated
-                    and has_ei_completed
+                        has_slno
+                        and has_month
+                        and has_department
+                        and has_failed
+                        and has_mech_generated
+                        and has_mech_completed
+                        and has_ei_generated
+                        and has_ei_completed
                 ):
                     header_found = row_number
                     break
@@ -1715,8 +1716,8 @@ def load_psm_ce_sheet():
                     for i in valid_columns
                 ]
                 if any(
-                    value is not None and str(value).strip() != ""
-                    for value in values
+                        value is not None and str(value).strip() != ""
+                        for value in values
                 ):
                     records.append(values)
 
@@ -1728,6 +1729,7 @@ def load_psm_ce_sheet():
         return pd.DataFrame()
 
     return pd.DataFrame()
+
 
 def load_module(name):
     """Load the complete module data for all departments."""
@@ -1744,8 +1746,8 @@ def exec_num(values):
         s = pd.Series(values).astype(str)
     s = (
         s.str.strip()
-         .str.replace(",", "", regex=False)
-         .str.replace("%", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
     )
     return pd.to_numeric(s, errors="coerce").fillna(0)
 
@@ -2287,15 +2289,14 @@ st.markdown(
 left_section, right_section = st.columns([1, 1], gap="small")
 
 with left_section:
+    # ============================================================
+    # PSM LEADING vs LAGGING INDICATORS MATRIX
+    # ============================================================
+    # This section is self-contained. It uses the existing executive
+    # data/filter logic above and does not replace any existing dashboard section.
+    # ============================================================
 
-       # ============================================================
-        # PSM LEADING vs LAGGING INDICATORS MATRIX
-        # ============================================================
-        # This section is self-contained. It uses the existing executive
-        # data/filter logic above and does not replace any existing dashboard section.
-        # ============================================================
-
-        st.markdown("""
+    st.markdown("""
         <style>
         .psm-matrix-wrap{
     width:100%;
@@ -2383,396 +2384,397 @@ with left_section:
         """, unsafe_allow_html=True)
 
 
-        def _matrix_status_pct(df, status_names=None):
-            """Closure percentage from the existing status logic."""
-            if df is None or df.empty:
-                return None
-            total, done, _, _, pct = module_summary(df, status_names)
-            return pct if total else None
+    def _matrix_status_pct(df, status_names=None):
+        """Closure percentage from the existing status logic."""
+        if df is None or df.empty:
+            return None
+        total, done, _, _, pct = module_summary(df, status_names)
+        return pct if total else None
 
 
-        def _matrix_status_count(df, candidates):
-            """Count rows matching active/open/pending wording in a status field."""
-            if df is None or df.empty:
-                return None
-            status_col = find_col(df, candidates)
-            if not status_col:
-                return None
-            s = df[status_col].fillna("").astype(str).str.strip().str.lower()
-            valid = s.replace({"nan": "", "none": "", "-": ""})
-            valid = valid[valid != ""]
-            if valid.empty:
-                return 0
-            return int(
-                valid.str.contains(
-                    r"active|bypass|due\s*for\s*normalization|normalization\s*pending|pending|open",
-                    regex=True,
-                    na=False,
-                ).sum()
-            )
-
-
-        def _matrix_yes_count(df, candidates):
-            """Count affirmative records from a source column."""
-            if df is None or df.empty:
-                return None
-            col = find_col(df, candidates)
-            if not col:
-                return None
-
-            s = df[col].fillna("").astype(str).str.strip().str.lower()
-            return int(
-                s.str.fullmatch(
-                    r"yes|y|true|1|active|occurred|applicable|non[- ]?compliant",
-                    case=False,
-                    na=False,
-                ).sum()
-            )
-
-
-        def _matrix_zero_or_pct(actual, target_type="zero"):
-            """Return status for zero-target count KPIs or percentage KPIs."""
-            if actual is None:
-                return "N/A", "matrix-na"
-            if target_type == "zero":
-                return ("ON TRACK", "matrix-ok") if float(actual) == 0 else ("CRITICAL", "matrix-critical")
-            if float(actual) >= 95:
-                return "ON TRACK", "matrix-ok"
-            if float(actual) >= 80:
-                return "WATCH", "matrix-watch"
-            return "CRITICAL", "matrix-critical"
-
-
-        # Use the same selected-department filter for every matrix source.
-        # This avoids showing fixed All-Department values when the executive filter changes.
-        matrix_pt = filter_selected_department(pt, selected_department)
-        matrix_pha = filter_selected_department(pha, selected_department)
-        matrix_rec = filter_selected_department(rec, selected_department)
-        matrix_moc = filter_selected_department(moc, selected_department)
-        matrix_pssr = filter_selected_department(pssr, selected_department)
-        matrix_training = filter_selected_department(training, selected_department)
-        matrix_incident = filter_selected_department(incident, selected_department)
-        matrix_interlock = filter_selected_department(interlock, selected_department)
-        matrix_barrier = filter_selected_department(loaded.get("Barrier Audit"), selected_department)
-        matrix_failure = filter_selected_department(failure_data, selected_department)
-        matrix_audit = filter_selected_department(audit, selected_department)
-
-
-        # ---- 1. PHA recommendation closure ----
-        pha_rec_actual = _matrix_status_pct(
-            matrix_rec,
-            [
-                "Status (Open/Close)",
-                "Status Open Close",
-                "Open/Close Status",
-                "Recommendation Status",
-                "Status",
-            ],
-        )
-
-        # ---- 2. MOC closure compliance ----
-        moc_actual = _matrix_status_pct(
-            matrix_moc,
-            [
-                "Status (Open/Close)",
-                "Status (Open / Close)",
-                "Status",
-                "Current Status",
-                "MOC Status",
-            ],
-        )
-
-        # ---- 3. Interlock bypass active count ----
-        interlock_active = _matrix_status_count(
-            matrix_interlock,
-            [
-                "Present Status / Action Required",
-                "Present Status",
-                "Status / Action Required",
-                "Status",
-            ],
-        )
-
-        # ---- 4. Alarm bypass active count ----
-        # The current executive source does not load the Alarm tab, so do not
-        # substitute Interlock data. Show N/A unless an Alarm field exists.
-        alarm_active = None
-
-        # ---- 5. Bow-Tie barrier verification ----
-        barrier_assessed_col_m = find_col(
-            matrix_barrier,
-            ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
-        )
-        barrier_unacceptable_col_m = find_col(
-            matrix_barrier,
-            [
-                "Barrier Health (C4/C5) (Number) Unacceptable",
-                "Unacceptable Barrier",
-                "Unacceptable",
-            ]
-        )
-        if barrier_assessed_col_m and barrier_unacceptable_col_m and not matrix_barrier.empty:
-            assessed_m = float(exec_num(matrix_barrier[barrier_assessed_col_m]).sum())
-            unacceptable_m = float(exec_num(matrix_barrier[barrier_unacceptable_col_m]).sum())
-            barrier_actual = ((assessed_m - unacceptable_m) / assessed_m * 100) if assessed_m else None
-        else:
-            barrier_actual = None
-
-        # ---- 6. PSM training completion ----
-        training_actual = None
-        if not matrix_training.empty:
-            tr_total_cols_m = [
-                find_col(matrix_training, ["Total Employees (L08 & Above)"]),
-                find_col(matrix_training, ["Total Employees (Below L08)"]),
-
-            ]
-            tr_done_cols_m = [
-                find_col(matrix_training, ["Completed Training (L08 & Above)"]),
-                find_col(matrix_training, ["Completed Training (Below L08)"]),
-
-            ]
-            if all(tr_total_cols_m) and all(tr_done_cols_m):
-                total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
-                done_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_done_cols_m)
-                training_actual = (done_people_m / total_people_m * 100) if total_people_m else None
-
-        # ---- 7. PSM audit observation closure ----
-        audit_actual = None
-        if not matrix_audit.empty:
-            audit_status_col_m = find_col(
-                matrix_audit,
-                [
-                    "Status",
-                    "Observation Status",
-                    "Action Status",
-                    "Closure Status",
-                    "Compliance Status",
-                ],
-            )
-            if audit_status_col_m:
-                audit_actual = _matrix_status_pct(
-                    matrix_audit,
-                    ["Status", "Observation Status", "Action Status", "Closure Status", "Compliance Status"],
-                )
-            else:
-                # Fall back to the same audit-date logic already used above.
-                audit_date_col_m = find_col(matrix_audit, ["Audit Date", "Last Audit Date", "Date"])
-                if audit_date_col_m:
-                    dates_m = pd.to_datetime(matrix_audit[audit_date_col_m], errors="coerce")
-                    audit_actual = (dates_m.notna().sum() / len(matrix_audit) * 100) if len(matrix_audit) else None
-
-        # ---- 8. Process Safety Incidents ----
-        incident_actual = len(matrix_incident) if matrix_incident is not None and not matrix_incident.empty else 0
-
-        # ---- 9. Major equipment failure events ----
-        failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
-
-        # ---- 10–14: derive only where the incident source has an explicit field ----
-        def _incident_event_count(df, candidates):
-            if df is None or df.empty:
-                return None
-            col = find_col(df, candidates)
-            if not col:
-                return None
-
-            s = df[col].fillna("").astype(str).str.strip().str.lower()
-
-            # Numeric event-count fields
-            numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
-            if numeric.notna().any():
-                return int(numeric.fillna(0).sum())
-
-            return int(
-                s.str.fullmatch(
-                    r"yes|y|true|1|occurred|applicable",
-                    case=False,
-                    na=False,
-                ).sum()
-            )
-
-
-        loss_containment_actual = _incident_event_count(
-            matrix_incident,
-            [
-                "Loss of Containment",
-                "Loss of containment event",
-                "LOC",
-                "Containment Loss",
-            ],
-        )
-
-        fire_explosion_actual = _incident_event_count(
-            matrix_incident,
-            [
-                "Fire / Explosion",
-                "Fire/Explosion",
-                "Fire Explosion",
-                "Fire",
-                "Explosion",
-            ],
-        )
-
-        environmental_actual = _incident_event_count(
-            matrix_incident,
-            [
-                "Environmental Release",
-                "Environmental release event",
-                "Environment Release",
-                "Release to Environment",
-            ],
-        )
-
-        repeat_incident_actual = _incident_event_count(
-            matrix_incident,
-            [
-                "Repeat Incident",
-                "Repeat Incidents",
-                "Repeat",
-            ],
-        )
-
-        production_loss_actual = _incident_event_count(
-            matrix_incident,
-            [
-                "Production Loss due to PSM Incident",
-                "Production Loss",
-                "Production Loss (MT)",
-                "Production Loss Due to Incident",
-            ],
+    def _matrix_status_count(df, candidates):
+        """Count rows matching active/open/pending wording in a status field."""
+        if df is None or df.empty:
+            return None
+        status_col = find_col(df, candidates)
+        if not status_col:
+            return None
+        s = df[status_col].fillna("").astype(str).str.strip().str.lower()
+        valid = s.replace({"nan": "", "none": "", "-": ""})
+        valid = valid[valid != ""]
+        if valid.empty:
+            return 0
+        return int(
+            valid.str.contains(
+                r"active|bypass|due\s*for\s*normalization|normalization\s*pending|pending|open",
+                regex=True,
+                na=False,
+            ).sum()
         )
 
 
-        matrix_rows = [
-            (
-                1,
-                "PHA recommendation closure",
-                ">95%",
-                pha_rec_actual,
-                "pct",
-                "Monthly",
-            ),
-            (
-                2,
-                "MOC closure compliance",
-                "100%",
-                moc_actual,
-                "pct",
-                "Monthly",
-            ),
-            (
-                3,
-                "Interlock bypass active count",
-                "0",
-                interlock_active,
-                "zero",
-                "Weekly",
-            ),
-            (
-                4,
-                "Alarm bypass active count",
-                "0",
-                alarm_active,
-                "zero",
-                "Weekly",
-            ),
-            (
-                5,
-                "Bow-Tie barrier verification",
-                "100%",
-                barrier_actual,
-                "pct",
-                "Monthly",
-            ),
-            (
-                6,
-                "PSM training completion (On Roll employee L08 and above)",
-                ">95%",
-                training_actual,
-                "pct",
-                "Monthly",
-            ),
-            (
-                7,
-                "PSM audit observation closure",
-                ">95%",
-                audit_actual,
-                "pct",
-                "Monthly",
-            ),
-            (
-                8,
-                "Process Safety Incidents",
-                "0",
-                incident_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                9,
-                "Major equipment failure events",
-                "0",
-                failure_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                10,
-                "Loss of containment events",
-                "0",
-                loss_containment_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                11,
-                "Fire / explosion events",
-                "0",
-                fire_explosion_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                12,
-                "Environmental release events",
-                "0",
-                environmental_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                13,
-                "Repeat incidents",
-                "0",
-                repeat_incident_actual,
-                "zero",
-                "Monthly",
-            ),
-            (
-                14,
-                "Production loss due to PSM incident",
-                "0",
-                production_loss_actual,
-                "zero",
-                "Monthly",
-            ),
+    def _matrix_yes_count(df, candidates):
+        """Count affirmative records from a source column."""
+        if df is None or df.empty:
+            return None
+        col = find_col(df, candidates)
+        if not col:
+            return None
+
+        s = df[col].fillna("").astype(str).str.strip().str.lower()
+        return int(
+            s.str.fullmatch(
+                r"yes|y|true|1|active|occurred|applicable|non[- ]?compliant",
+                case=False,
+                na=False,
+            ).sum()
+        )
+
+
+    def _matrix_zero_or_pct(actual, target_type="zero"):
+        """Return status for zero-target count KPIs or percentage KPIs."""
+        if actual is None:
+            return "N/A", "matrix-na"
+        if target_type == "zero":
+            return ("ON TRACK", "matrix-ok") if float(actual) == 0 else ("CRITICAL", "matrix-critical")
+        if float(actual) >= 95:
+            return "ON TRACK", "matrix-ok"
+        if float(actual) >= 80:
+            return "WATCH", "matrix-watch"
+        return "CRITICAL", "matrix-critical"
+
+
+    # Use the same selected-department filter for every matrix source.
+    # This avoids showing fixed All-Department values when the executive filter changes.
+    matrix_pt = filter_selected_department(pt, selected_department)
+    matrix_pha = filter_selected_department(pha, selected_department)
+    matrix_rec = filter_selected_department(rec, selected_department)
+    matrix_moc = filter_selected_department(moc, selected_department)
+    matrix_pssr = filter_selected_department(pssr, selected_department)
+    matrix_training = filter_selected_department(training, selected_department)
+    matrix_incident = filter_selected_department(incident, selected_department)
+    matrix_interlock = filter_selected_department(interlock, selected_department)
+    matrix_barrier = filter_selected_department(loaded.get("Barrier Audit"), selected_department)
+    matrix_failure = filter_selected_department(failure_data, selected_department)
+    matrix_audit = filter_selected_department(audit, selected_department)
+
+    # ---- 1. PHA recommendation closure ----
+    pha_rec_actual = _matrix_status_pct(
+        matrix_rec,
+        [
+            "Status (Open/Close)",
+            "Status Open Close",
+            "Open/Close Status",
+            "Recommendation Status",
+            "Status",
+        ],
+    )
+
+    # ---- 2. MOC closure compliance ----
+    moc_actual = _matrix_status_pct(
+        matrix_moc,
+        [
+            "Status (Open/Close)",
+            "Status (Open / Close)",
+            "Status",
+            "Current Status",
+            "MOC Status",
+        ],
+    )
+
+    # ---- 3. Interlock bypass active count ----
+    interlock_active = _matrix_status_count(
+        matrix_interlock,
+        [
+            "Present Status / Action Required",
+            "Present Status",
+            "Status / Action Required",
+            "Status",
+        ],
+    )
+
+    # ---- 4. Alarm bypass active count ----
+    # The current executive source does not load the Alarm tab, so do not
+    # substitute Interlock data. Show N/A unless an Alarm field exists.
+    alarm_active = None
+
+    # ---- 5. Bow-Tie barrier verification ----
+    barrier_assessed_col_m = find_col(
+        matrix_barrier,
+        ["Barrier Health (C4/C5) (Number) Assessed", "Assessed"]
+    )
+    barrier_unacceptable_col_m = find_col(
+        matrix_barrier,
+        [
+            "Barrier Health (C4/C5) (Number) Unacceptable",
+            "Unacceptable Barrier",
+            "Unacceptable",
         ]
+    )
+    if barrier_assessed_col_m and barrier_unacceptable_col_m and not matrix_barrier.empty:
+        assessed_m = float(exec_num(matrix_barrier[barrier_assessed_col_m]).sum())
+        unacceptable_m = float(exec_num(matrix_barrier[barrier_unacceptable_col_m]).sum())
+        barrier_actual = ((assessed_m - unacceptable_m) / assessed_m * 100) if assessed_m else None
+    else:
+        barrier_actual = None
+
+    # ---- 6. PSM training completion ----
+    training_actual = None
+    if not matrix_training.empty:
+        tr_total_cols_m = [
+            find_col(matrix_training, ["Total Employees (L08 & Above)"]),
+            find_col(matrix_training, ["Total Employees (Below L08)"]),
+
+        ]
+        tr_done_cols_m = [
+            find_col(matrix_training, ["Completed Training (L08 & Above)"]),
+            find_col(matrix_training, ["Completed Training (Below L08)"]),
+
+        ]
+        if all(tr_total_cols_m) and all(tr_done_cols_m):
+            total_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_total_cols_m)
+            done_people_m = sum(float(exec_num(matrix_training[c]).sum()) for c in tr_done_cols_m)
+            training_actual = (done_people_m / total_people_m * 100) if total_people_m else None
+
+    # ---- 7. PSM audit observation closure ----
+    audit_actual = None
+    if not matrix_audit.empty:
+        audit_status_col_m = find_col(
+            matrix_audit,
+            [
+                "Status",
+                "Observation Status",
+                "Action Status",
+                "Closure Status",
+                "Compliance Status",
+            ],
+        )
+        if audit_status_col_m:
+            audit_actual = _matrix_status_pct(
+                matrix_audit,
+                ["Status", "Observation Status", "Action Status", "Closure Status", "Compliance Status"],
+            )
+        else:
+            # Fall back to the same audit-date logic already used above.
+            audit_date_col_m = find_col(matrix_audit, ["Audit Date", "Last Audit Date", "Date"])
+            if audit_date_col_m:
+                dates_m = pd.to_datetime(matrix_audit[audit_date_col_m], errors="coerce")
+                audit_actual = (dates_m.notna().sum() / len(matrix_audit) * 100) if len(matrix_audit) else None
+
+    # ---- 8. Process Safety Incidents ----
+    incident_actual = len(matrix_incident) if matrix_incident is not None and not matrix_incident.empty else 0
+
+    # ---- 9. Major equipment failure events ----
+    failure_actual = len(matrix_failure) if matrix_failure is not None and not matrix_failure.empty else 0
 
 
-        def _matrix_display(actual, kind):
-            if actual is None:
-                return "N/A", "N/A", "matrix-na"
+    # ---- 10–14: derive only where the incident source has an explicit field ----
+    def _incident_event_count(df, candidates):
+        if df is None or df.empty:
+            return None
+        col = find_col(df, candidates)
+        if not col:
+            return None
 
-            if kind == "pct":
-                status, cls = _matrix_zero_or_pct(actual, "pct")
-                return f"{actual:.1f}%", status, cls
+        s = df[col].fillna("").astype(str).str.strip().str.lower()
 
-            status, cls = _matrix_zero_or_pct(actual, "zero")
-            if isinstance(actual, float) and actual.is_integer():
-                actual = int(actual)
-            return f"{actual:,}", status, cls
+        # Numeric event-count fields
+        numeric = pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
+        if numeric.notna().any():
+            return int(numeric.fillna(0).sum())
+
+        return int(
+            s.str.fullmatch(
+                r"yes|y|true|1|occurred|applicable",
+                case=False,
+                na=False,
+            ).sum()
+        )
 
 
-        matrix_html = """
+    loss_containment_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Loss of Containment",
+            "Loss of containment event",
+            "LOC",
+            "Containment Loss",
+        ],
+    )
+
+    fire_explosion_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Fire / Explosion",
+            "Fire/Explosion",
+            "Fire Explosion",
+            "Fire",
+            "Explosion",
+        ],
+    )
+
+    environmental_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Environmental Release",
+            "Environmental release event",
+            "Environment Release",
+            "Release to Environment",
+        ],
+    )
+
+    repeat_incident_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Repeat Incident",
+            "Repeat Incidents",
+            "Repeat",
+        ],
+    )
+
+    production_loss_actual = _incident_event_count(
+        matrix_incident,
+        [
+            "Production Loss due to PSM Incident",
+            "Production Loss",
+            "Production Loss (MT)",
+            "Production Loss Due to Incident",
+        ],
+    )
+
+    matrix_rows = [
+        (
+            1,
+            "PHA recommendation closure",
+            ">95%",
+            pha_rec_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            2,
+            "MOC closure compliance",
+            "100%",
+            moc_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            3,
+            "Interlock bypass active count",
+            "0",
+            interlock_active,
+            "zero",
+            "Weekly",
+        ),
+        (
+            4,
+            "Alarm bypass active count",
+            "0",
+            alarm_active,
+            "zero",
+            "Weekly",
+        ),
+        (
+            5,
+            "Bow-Tie barrier verification",
+            "100%",
+            barrier_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            6,
+            "PSM training completion (On Roll employee L08 and above)",
+            ">95%",
+            training_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            7,
+            "PSM audit observation closure",
+            ">95%",
+            audit_actual,
+            "pct",
+            "Monthly",
+        ),
+        (
+            8,
+            "Process Safety Incidents",
+            "0",
+            incident_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            9,
+            "Major equipment failure events",
+            "0",
+            failure_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            10,
+            "Loss of containment events",
+            "0",
+            loss_containment_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            11,
+            "Fire / explosion events",
+            "0",
+            fire_explosion_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            12,
+            "Environmental release events",
+            "0",
+            environmental_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            13,
+            "Repeat incidents",
+            "0",
+            repeat_incident_actual,
+            "zero",
+            "Monthly",
+        ),
+        (
+            14,
+            "Production loss due to PSM incident",
+            "0",
+            production_loss_actual,
+            "zero",
+            "Monthly",
+        ),
+    ]
+
+
+    def _matrix_display(actual, kind):
+        # Display unavailable/N/A actual values as 0 without changing
+        # the existing matrix format, layout, CSS, or table structure.
+        if actual is None:
+            actual = 0.0
+
+        if kind == "pct":
+            status, cls = _matrix_zero_or_pct(actual, "pct")
+            return f"{actual:.1f}%", status, cls
+
+        status, cls = _matrix_zero_or_pct(actual, "zero")
+        if isinstance(actual, float) and actual.is_integer():
+            actual = int(actual)
+        return f"{actual:,}", status, cls
+
+
+    matrix_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -2802,7 +2804,7 @@ with left_section:
         <div class="psm-matrix-wrap">
             <div class="psm-matrix-head">
                 <span>PSM LEADING vs LAGGING INDICATORS MATRIX</span>
-               
+
             </div>
             <table class="psm-matrix-table">
                 <thead>
@@ -2818,9 +2820,9 @@ with left_section:
                 <tbody>
         """
 
-        for sno, kpi, target, actual, kind, frequency in matrix_rows:
-            actual_text, status_text, status_cls = _matrix_display(actual, kind)
-            matrix_html += f"""
+    for sno, kpi, target, actual, kind, frequency in matrix_rows:
+        actual_text, status_text, status_cls = _matrix_display(actual, kind)
+        matrix_html += f"""
                     <tr>
                         <td>{sno}</td>
                         <td>{kpi}</td>
@@ -2831,30 +2833,27 @@ with left_section:
                     </tr>
         """
 
-        matrix_html += """
+    matrix_html += """
                 </tbody>
             </table>
             <div class="matrix-note">
-                Actual values follow the Executive Department filter. N/A is shown where the current source
-                does not contain a direct field for that KPI; no value is assumed or hard-coded.
+                Actual values follow the Executive Department filter. Unavailable/N/A source values are displayed as 0.
             </div>
         </div>
         </body>
         </html>
         """
 
-        matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
+    matrix_html = matrix_html.replace("__DEPARTMENT__", str(selected_department))
 
-        # Render the matrix as a real HTML document so table tags are not shown as text.
-        components.html(
-            matrix_html,
-            height=500,
-            scrolling=False
-        )
+    # Render the matrix as a real HTML document so table tags are not shown as text.
+    components.html(
+        matrix_html,
+        height=500,
+        scrolling=False
+    )
 
-
-
-    # ============================================================
+# ============================================================
 
 # DEPARTMENT-WISE KPI & DATA PERFORMANCE RANKING
 # ============================================================
@@ -2908,15 +2907,18 @@ MATRIX_KPIS = [
     ("Production loss due to PSM incident", 0.0, "zero"),
 ]
 
+
 def _dept_df(df, dept):
     if df is None:
         return pd.DataFrame()
     return filter_selected_department(df, dept)
 
+
 def _pct_status(df, candidates):
     if df is None or df.empty:
         return None
     return _matrix_status_pct(df, candidates)
+
 
 def _active_interlocks(df):
     if df is None or df.empty:
@@ -2932,6 +2934,7 @@ def _active_interlocks(df):
         r"active|normalization\s*pending|due\s*for\s*normalization",
         regex=True, na=False
     ).sum())
+
 
 def _training_actual(df):
     if df is None or df.empty:
@@ -2959,6 +2962,7 @@ def _training_actual(df):
         "Status", "Current Status", "Training Status", "Completion Status"
     ])
 
+
 def _barrier_actual(df):
     if df is None or df.empty:
         return None
@@ -2972,6 +2976,7 @@ def _barrier_actual(df):
     assessed = float(exec_num(df[a]).sum())
     unacceptable = float(exec_num(df[u]).sum())
     return (assessed - unacceptable) / assessed * 100 if assessed else None
+
 
 def _event_field_count(df, candidates):
     # None = source/field unavailable; 0 = field exists and confirms zero events.
@@ -2989,6 +2994,7 @@ def _event_field_count(df, candidates):
     return float(s.str.lower().isin([
         "yes", "y", "true", "1", "occurred", "applicable"
     ]).sum())
+
 
 def _matrix_actuals(dept):
     rec_d = _dept_df(rec, dept)
@@ -3055,14 +3061,18 @@ def _matrix_actuals(dept):
         "Production Loss", "Production Loss (MT)"
     ])
 
-    return [v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11,v12,v13,v14]
+    return [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14]
+
 
 def _score(actual, target, kind):
+    # Keep the existing dashboard format unchanged.
+    # N/A / unavailable values are treated as 0.
     if actual is None:
-        return None
+        actual = 0.0
     if kind == "zero":
         return 100.0 if float(actual) == 0 else 0.0
     return max(0.0, min(100.0, float(actual) / target * 100.0))
+
 
 ranking_departments = (
     ALL_DEPARTMENTS[1:] if selected_department == "All Departments"
@@ -3076,8 +3086,8 @@ for dept in ranking_departments:
         _score(actual, target, kind)
         for actual, (_, target, kind) in zip(actuals, MATRIX_KPIS)
     ]
-    usable = [s for s in scores if s is not None]
-    overall = sum(usable) / len(usable) if usable else None
+    usable = [0.0 if s is None else s for s in scores]
+    overall = sum(usable) / len(usable) if usable else 0.0
 
     ranking_rows.append({
         "Department": dept,
@@ -3095,7 +3105,6 @@ if not ranking_df.empty:
     ranking_df["Rank"] = range(1, len(ranking_df) + 1)
 
 with right_section:
-
     if ranking_df.empty:
         rank_table_html = """<div style="padding:20px;text-align:center;color:#738595;font-size:10px;">No department data available for ranking.</div>"""
     else:
@@ -3243,16 +3252,14 @@ with right_section:
 
 a, b, c = st.columns(3, gap="small")
 
-
 # ============================================================
 # 1 — PROCESS TECHNOLOGY (PT)
 # ============================================================
 
 with a:
-
     with st.container(
-        border=True,
-        height=460
+            border=True,
+            height=460
     ):
 
         show_module_title(
@@ -3312,18 +3319,15 @@ with a:
             ],
         )
 
-
 # ============================================================
 # 2 — PROCESS HAZARD ANALYSIS (PHA)
 # ============================================================
 
 with b:
-
     with st.container(
-        border=True,
-        height=460
+            border=True,
+            height=460
     ):
-
         show_module_title(
             "",
             "",
@@ -3362,18 +3366,15 @@ with b:
             ],
         )
 
-
 # ============================================================
 # 3 — PHA RECOMMENDATION
 # ============================================================
 
 with c:
-
     with st.container(
-        border=True,
-        height=460
+            border=True,
+            height=460
     ):
-
         show_module_title(
             "",
             "",
@@ -3439,7 +3440,6 @@ with st.container(
         border=True,
         height=460
 ):
-
     # --------------------------------------------------------
     # MOC TITLE
     # --------------------------------------------------------
@@ -3495,7 +3495,6 @@ with st.container(
                 border=True,
                 height=390
         ):
-
             st.markdown(
                 """
                 <div style="
@@ -3574,8 +3573,8 @@ with st.container(
             )
 
             if (
-                moc_change_type_col
-                and not moc_chart.empty
+                    moc_change_type_col
+                    and not moc_chart.empty
             ):
 
                 type_data = (
@@ -3587,7 +3586,7 @@ with st.container(
 
                 type_data = type_data[
                     type_data != ""
-                ]
+                    ]
 
                 type_counts = (
                     type_data.value_counts()
@@ -3726,8 +3725,8 @@ with st.container(
             )
 
             if (
-                moc_category_col
-                and not moc_chart.empty
+                    moc_category_col
+                    and not moc_chart.empty
             ):
 
                 category_data = (
@@ -3739,7 +3738,7 @@ with st.container(
 
                 category_data = category_data[
                     category_data != ""
-                ]
+                    ]
 
                 category_counts = (
                     category_data.value_counts()
@@ -3946,8 +3945,8 @@ a, b, c = st.columns(
 
 with a:
     with st.container(
-        border=True,
-        height=460
+            border=True,
+            height=460
     ):
 
         show_module_title(
@@ -5033,8 +5032,8 @@ a, b = st.columns(
 
 with a:
     with st.container(
-        border=True,
-        height=430
+            border=True,
+            height=430
     ):
 
         show_module_title(
@@ -5097,10 +5096,9 @@ with a:
                 # DEPARTMENT FILTER
                 # ------------------------------------------------
                 if (
-                    selected_department != "All Departments"
-                    and dept_col is not None
+                        selected_department != "All Departments"
+                        and dept_col is not None
                 ):
-
                     df_socsol = filter_selected_department(
                         df_socsol,
                         selected_department
@@ -5643,13 +5641,11 @@ with b:
                 scrolling=False,
             )
 
-
 # ============================================================
 # 10 — INTERLOCK BYPASS
 # ============================================================
 
 with st.container(border=True):
-
     show_module_title(
         "",
         "",
@@ -5925,7 +5921,6 @@ with st.container(border=True):
 # ============================================================
 
 with st.container(border=True):
-
     show_module_title(
         "",
         "",
@@ -5977,6 +5972,7 @@ with st.container(border=True):
         ],
     )
 
+
     def numeric_total(df, column):
         if column is None or df.empty:
             return 0
@@ -5985,6 +5981,7 @@ with st.container(border=True):
             .fillna(0)
             .sum()
         )
+
 
     total_psm_ce_failed = numeric_total(psm_ce_data, failed_col)
     mech_generated = numeric_total(psm_ce_data, mech_generated_col)
@@ -6008,10 +6005,14 @@ with st.container(border=True):
     if not psm_ce_data.empty and dept_col_progress is not None:
         progress_df = pd.DataFrame({
             "Department": psm_ce_data[dept_col_progress].fillna("").astype(str).str.strip(),
-            "M Generated": pd.to_numeric(psm_ce_data[mech_generated_col], errors="coerce").fillna(0) if mech_generated_col else 0,
-            "M Completed": pd.to_numeric(psm_ce_data[mech_completed_col], errors="coerce").fillna(0) if mech_completed_col else 0,
-            "E&I Generated": pd.to_numeric(psm_ce_data[ei_generated_col], errors="coerce").fillna(0) if ei_generated_col else 0,
-            "E&I Completed": pd.to_numeric(psm_ce_data[ei_completed_col], errors="coerce").fillna(0) if ei_completed_col else 0,
+            "M Generated": pd.to_numeric(psm_ce_data[mech_generated_col], errors="coerce").fillna(
+                0) if mech_generated_col else 0,
+            "M Completed": pd.to_numeric(psm_ce_data[mech_completed_col], errors="coerce").fillna(
+                0) if mech_completed_col else 0,
+            "E&I Generated": pd.to_numeric(psm_ce_data[ei_generated_col], errors="coerce").fillna(
+                0) if ei_generated_col else 0,
+            "E&I Completed": pd.to_numeric(psm_ce_data[ei_completed_col], errors="coerce").fillna(
+                0) if ei_completed_col else 0,
         })
         progress_df = (
             progress_df.groupby("Department", as_index=False)[
@@ -6026,6 +6027,7 @@ with st.container(border=True):
                 unsafe_allow_html=True,
             )
 
+
             def progress_color(pct):
                 # Completion status: red < 50%, amber 50-79%, green >= 80%.
                 if pct < 50:
@@ -6033,6 +6035,7 @@ with st.container(border=True):
                 if pct < 80:
                     return "#f5a623"
                 return "#2e9d50"
+
 
             progress_rows = []
             for _, r in progress_df.iterrows():
@@ -6060,16 +6063,15 @@ with st.container(border=True):
                 )
 
             progress_html = (
-                '<div style="background:#fff;border:1px solid #d5e0e8;border-radius:5px;padding:8px 12px;">'
-                '<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;'
-                'font-family:Arial,sans-serif;font-size:9px;font-weight:800;color:#627689;margin-bottom:6px;">'
-                '<div>Department</div><div>MECHANICAL MAINTENANCE ORDER</div><div></div><div>E&I MAINTENANCE ORDER</div><div></div>'
-                '</div>'
-                + ''.join(progress_rows)
-                + '</div>'
+                    '<div style="background:#fff;border:1px solid #d5e0e8;border-radius:5px;padding:8px 12px;">'
+                    '<div style="display:grid;grid-template-columns:180px 1fr 52px 1fr 52px;gap:10px;align-items:center;'
+                    'font-family:Arial,sans-serif;font-size:9px;font-weight:800;color:#627689;margin-bottom:6px;">'
+                    '<div>Department</div><div>MECHANICAL MAINTENANCE ORDER</div><div></div><div>E&I MAINTENANCE ORDER</div><div></div>'
+                    '</div>'
+                    + ''.join(progress_rows)
+                    + '</div>'
             )
             st.markdown(progress_html, unsafe_allow_html=True)
-
 
 # ============================================================
 # ROW 5 — BARRIER AUDIT + FAILURE DATA
@@ -6257,7 +6259,7 @@ with barrier_col:
 
                 monthly_audit = monthly_audit[
                     monthly_audit["Month"] != ""
-                ]
+                    ]
 
                 # Sum values month-wise
                 monthly_audit = (
@@ -6392,7 +6394,6 @@ with barrier_col:
                         "No monthly Barrier Audit data available."
                     )
 
-
 # ============================================================
 # 13 — FAILURE DATA
 # ============================================================
@@ -6461,7 +6462,6 @@ with failure_col:
             failure_chart_col_1, failure_chart_col_2 = st.columns([0.88, 1.12], gap="small")
 
 
-
             def highlight_failure_type(value):
                 text = str(value).strip().lower()
                 if text == "psm ce":
@@ -6469,6 +6469,7 @@ with failure_col:
                 if text == "barrier":
                     return "background-color: #fff1cc; color: #8a5a00; font-weight: 700;"
                 return ""
+
 
             failure_styled = failure_register.style.map(
                 highlight_failure_type,
