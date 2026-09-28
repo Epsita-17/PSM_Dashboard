@@ -148,12 +148,36 @@ current_time = now.strftime(
 # ============================================================
 
 GOOGLE_SHEET_ID = "1--X0TT5Ts92EKAxrhV-fQgqeTHBX3rDVc1Egg74MewM"
-SHEET_NAME = "PT"
+
+# ============================================================
+# PT MAIN SOURCE
+# GID 1997330551
+# Used for:
+# TOTAL / APPROVED / PENDING FOR APPROVAL /
+# COMPLETED / ONGOING
+# ============================================================
+
+PT_GID = "1997330551"
 
 GOOGLE_SHEET_URL = (
     f"https://docs.google.com/spreadsheets/d/"
     f"{GOOGLE_SHEET_ID}/gviz/tq?"
-    f"tqx=out:csv&sheet={SHEET_NAME}"
+    f"tqx=out:csv&gid={PT_GID}"
+)
+
+# ============================================================
+# PT IDENTIFIED SOURCE
+# GID 742532495
+# Used ONLY for IDENTIFIED KPI
+# Columns: Department | PT Name | Status
+# ============================================================
+
+PT_IDENTIFIED_GID = "742532495"
+
+PT_IDENTIFIED_URL = (
+    f"https://docs.google.com/spreadsheets/d/"
+    f"{GOOGLE_SHEET_ID}/gviz/tq?"
+    f"tqx=out:csv&gid={PT_IDENTIFIED_GID}"
 )
 
 #=============================================================
@@ -225,13 +249,13 @@ st.markdown(
         padding-top: 0 !important;
     }
 
-    iframe {
-        display: block !important;
-        margin-top: -20px !important;
-        margin-bottom: -70px !important;
-        padding-top: 0 !important;
-        border: 0 !important;
-    }
+ iframe {
+    display: block !important;
+    margin-top: 0 !important;
+    margin-bottom: -24px !important;
+    padding-top: 0 !important;
+    border: 0 !important;
+}
 
     </style>
     """,
@@ -1345,7 +1369,7 @@ div[data-testid="stTextInput"] input:focus {
 # LOAD DATA
 # ============================================================
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=0)
 def load_data():
 
     try:
@@ -1383,6 +1407,54 @@ def load_data():
                 )
 
         return df, None
+
+    except Exception as e:
+        return pd.DataFrame(), str(e)
+
+
+# ============================================================
+# LOAD PT IDENTIFIED DATA
+# Source: Google Sheet GID 742532495
+# ============================================================
+
+@st.cache_data(ttl=0)
+def load_pt_identified_data():
+
+    try:
+        response = requests.get(
+            PT_IDENTIFIED_URL,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        identified_df = pd.read_csv(
+            StringIO(response.text)
+        )
+
+        if identified_df.empty:
+            return pd.DataFrame(), None
+
+        identified_df = identified_df.dropna(
+            axis=1,
+            how="all"
+        )
+
+        identified_df.columns = [
+            str(col).strip()
+            for col in identified_df.columns
+        ]
+
+        for col in identified_df.columns:
+            if identified_df[col].dtype == "object":
+                identified_df[col] = (
+                    identified_df[col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+
+        return identified_df, None
 
     except Exception as e:
         return pd.DataFrame(), str(e)
@@ -1476,6 +1548,10 @@ def percentage(value, total):
 # ============================================================
 
 df, error = load_data()
+
+# Load PT identified records from separate Google Sheet tab.
+# Failure here does not stop the existing PT dashboard.
+pt_identified_df, identified_error = load_pt_identified_data()
 
 if error:
 
@@ -1662,13 +1738,115 @@ if (
     and department_col
 ):
 
-    filtered_df = filtered_df[
+    selected_dept_normalized = (
+        str(selected_department)
+        .strip()
+        .upper()
+        .replace(".", "")
+        .replace("-", " ")
+        .replace("_", " ")
+    )
+
+    main_dept_normalized = (
         filtered_df[department_col]
+        .fillna("")
         .astype(str)
         .str.strip()
-        == selected_department
+        .str.upper()
+        .str.replace(".", "", regex=False)
+        .str.replace("-", " ", regex=False)
+        .str.replace("_", " ", regex=False)
+        .str.replace(r"\s+", " ", regex=True)
+    )
+
+    selected_dept_normalized = re.sub(
+        r"\s+",
+        " ",
+        selected_dept_normalized
+    ).strip()
+
+    filtered_df = filtered_df[
+        main_dept_normalized == selected_dept_normalized
     ]
 
+
+# ============================================================
+# PT IDENTIFIED COUNT
+# Source: Google Sheet GID 742532495
+# Columns: Department | PT Name | Status
+# ============================================================
+
+identified_filtered_df = pt_identified_df.copy()
+
+identified_department_col = find_column(
+    identified_filtered_df,
+    [
+        "Department",
+        "Dept",
+        "Department Name"
+    ]
+)
+
+identified_pt_name_col = find_column(
+    identified_filtered_df,
+    [
+        "PT Name",
+        "Name of PT"
+    ]
+)
+
+# ============================================================
+# DEPARTMENT FILTER
+# ============================================================
+
+if (
+    selected_department != "All Departments"
+    and identified_department_col
+):
+
+    selected_dept_normalized = (
+        str(selected_department)
+        .strip()
+        .upper()
+        .replace("-", " ")
+        .replace("_", " ")
+    )
+
+    identified_dept_normalized = (
+        identified_filtered_df[identified_department_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .str.replace("-", " ", regex=False)
+        .str.replace("_", " ", regex=False)
+        .str.replace(r"\s+", " ", regex=True)
+    )
+
+    identified_filtered_df = identified_filtered_df[
+        identified_dept_normalized
+        == selected_dept_normalized
+    ]
+
+# ============================================================
+# COUNT IDENTIFIED PT
+# ============================================================
+
+if identified_pt_name_col:
+
+    identified_pt = (
+        identified_filtered_df[identified_pt_name_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .shape[0]
+    )
+
+else:
+
+    identified_pt = 0
 
 # ============================================================
 # KPI CALCULATIONS
@@ -1796,11 +1974,26 @@ with st.container(border=True):
         '<div class="section-title">PROCESS TECHNOLOGY DOCUMENTATION</div>',
         unsafe_allow_html=True
     )
-    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(
-        5,
+    kpi0, kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(
+        6,
         gap="small"
     )
+    # ========================================================
+    # PT IDENTIFIED
+    # ========================================================
 
+    with kpi0:
+
+        st.markdown(
+            f"""
+            <div class="kpi-card" style="--accent:#17477d;">
+                <div class="kpi-label">IDENTIFIED</div>
+                <div class="kpi-value">{identified_pt}</div>
+                <div class="kpi-subtitle">Identified PT records</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     with kpi1:
 
@@ -2111,4 +2304,348 @@ with st.container(border=True):
         st.markdown(
             table_html,
             unsafe_allow_html=True
+        )
+
+# ============================================================
+# SECTION 3
+# IDENTIFIED PT REGISTER
+# Source: GID 742532495
+# ============================================================
+
+with st.container(border=True):
+
+    st.markdown(
+        '<div class="register-title">IDENTIFIED PT LIST</div>',
+        unsafe_allow_html=True
+    )
+
+    # ========================================================
+    # SEARCH IDENTIFIED PT
+    # ========================================================
+
+    identified_search = st.text_input(
+        "Search Identified PT",
+        placeholder="Search PT Name, Department, Status...",
+        label_visibility="collapsed",
+        key="identified_pt_search"
+    )
+
+    # ========================================================
+    # IDENTIFIED REGISTER DATA
+    # ========================================================
+
+    identified_display_df = identified_filtered_df.copy()
+
+    if identified_search.strip():
+
+        search_value = identified_search.strip().lower()
+
+        search_mask = pd.Series(
+            False,
+            index=identified_display_df.index
+        )
+
+        for column in identified_display_df.columns:
+
+            try:
+
+                search_mask = (
+                    search_mask
+                    |
+                    identified_display_df[column]
+                    .astype(str)
+                    .str.lower()
+                    .str.contains(
+                        search_value,
+                        na=False,
+                        regex=False
+                    )
+                )
+
+            except Exception:
+                pass
+
+        identified_display_df = identified_display_df[
+            search_mask
+        ]
+
+    # ========================================================
+    # IDENTIFIED COLUMNS
+    # ========================================================
+
+    identified_dept_col = find_column(
+        identified_display_df,
+        [
+            "Department",
+            "Dept",
+            "Department Name"
+        ]
+    )
+
+    identified_name_col = find_column(
+        identified_display_df,
+        [
+            "PT Name",
+            "Name of PT"
+        ]
+    )
+
+    identified_status_col = find_column(
+        identified_display_df,
+        [
+            "Status",
+            "PT Status",
+            "Current Status"
+        ]
+    )
+
+    # ========================================================
+    # TABLE
+    # ========================================================
+
+    if identified_display_df.empty:
+
+        st.markdown(
+            """
+            <div class="empty-state">
+                No identified PT records found.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    else:
+
+        identified_table_html = """
+        <div class="table-scroll">
+
+        <table class="pt-table">
+
+        <thead>
+        <tr>
+            <th class="sr-col">Sr No.</th>
+            <th class="dept-col">Department</th>
+            <th class="name-col">Name of PT</th>
+            <th class="status-col">Status</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        """
+
+        # ====================================================
+        # ROWS
+        # ====================================================
+
+        for index, (_, row) in enumerate(
+            identified_display_df.iterrows(),
+            start=1
+        ):
+
+            department = (
+                clean_value(row[identified_dept_col])
+                if identified_dept_col
+                and identified_dept_col in row
+                else ""
+            )
+
+            pt_name = (
+                clean_value(row[identified_name_col])
+                if identified_name_col
+                and identified_name_col in row
+                else ""
+            )
+
+            status = (
+                clean_value(row[identified_status_col])
+                if identified_status_col
+                and identified_status_col in row
+                else ""
+            )
+
+            department_safe = html.escape(
+                department
+            )
+
+            pt_name_safe = html.escape(
+                pt_name
+            )
+
+            status_safe = html.escape(
+                status
+            )
+
+            # =================================================
+            # STATUS BADGE
+            # =================================================
+
+            badge_class = get_status_class(
+                status
+            )
+
+            if status:
+
+                status_html = (
+                    f'<span class="status-badge '
+                    f'{badge_class}">'
+                    f'{status_safe.upper()}'
+                    f'</span>'
+                )
+
+            else:
+
+                status_html = "—"
+
+            # =================================================
+            # ADD ROW
+            # =================================================
+
+            identified_table_html += f"""
+            <tr>
+                <td class="sr-col">{index}</td>
+                <td>{department_safe}</td>
+                <td>{pt_name_safe}</td>
+                <td class="status-col">{status_html}</td>
+            </tr>
+            """
+
+        identified_table_html += """
+        </tbody>
+        </table>
+
+        </div>
+        """
+
+        components.html(
+            f"""
+            <html>
+            <head>
+            <style>
+
+            body {{
+                margin: 0;
+                padding: 0;
+                background: #ffffff;
+                font-family: "Segoe UI", Arial, sans-serif;
+            }}
+
+            .table-scroll {{
+                height: 552px;
+                overflow-y: auto;
+                overflow-x: auto;
+                border: 1px solid #ccd8e5;
+                border-radius: 5px;
+                background: #ffffff;
+            }}
+
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                background: #ffffff;
+            }}
+
+            th {{
+                position: sticky;
+                top: 0;
+                z-index: 5;
+                background: #17477d;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 750;
+                padding: 12px 10px;
+                text-align: left;
+                border-right: 1px solid rgba(255,255,255,0.25);
+                border-bottom: 1px solid #17477d;
+            }}
+
+            td {{
+                color: #173f70;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 11px 10px;
+                border-right: 1px solid #d9e2ec;
+                border-bottom: 1px solid #d9e2ec;
+                background: #ffffff;
+            }}
+
+            tr:nth-child(even) td {{
+                background: #f8fbfe;
+            }}
+
+            tr:hover td {{
+                background: #eef5fb;
+            }}
+
+            .sr-col {{
+                width: 8%;
+                text-align: center;
+            }}
+
+            .dept-col {{
+                width: 30%;
+            }}
+
+            .name-col {{
+                width: 42%;
+            }}
+
+            .status-col {{
+                width: 20%;
+                text-align: center;
+            }}
+
+            .status-badge {{
+                display: inline-block;
+                min-width: 82px;
+                padding: 4px 9px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: center;
+                border: 1px solid transparent;
+            }}
+
+            .status-completed {{
+                color: #13834a;
+                background: #eef9f2;
+                border-color: #8ed0aa;
+            }}
+
+            .status-pending {{
+                color: #9a6500;
+                background: #fff9e8;
+                border-color: #e3bc55;
+            }}
+
+            .status-ongoing {{
+                color: #b77a00;
+                background: #fff9e8;
+                border-color: #e3bc55;
+            }}
+
+            .status-approved {{
+                color: #1768a9;
+                background: #edf5fc;
+                border-color: #9bc2e2;
+            }}
+
+            .status-default {{
+                color: #5d6874;
+                background: #f3f5f7;
+                border-color: #cbd3db;
+            }}
+
+            </style>
+            </head>
+
+            <body>
+
+            {identified_table_html}
+
+            </body>
+            </html>
+            """,
+            height=600,
+            scrolling=False
         )
