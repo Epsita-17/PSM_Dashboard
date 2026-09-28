@@ -2800,13 +2800,13 @@ with left_section:
         color:#173f70;
     }
     .psm-matrix-table th{
-        background:#dcecf3;
-        color:#173f70;
-        font-weight:950;
-        text-align:left;
-        padding:7px 6px;
-        border:1px solid #b7c8d3;
-    }
+    background:#07518b;
+    color:#ffffff;
+    font-weight:950;
+    text-align:left;
+    padding:7px 6px;
+    border:1px solid #07518b;
+}
     .psm-matrix-table td{
         background:#ffffff;
         padding:6px;
@@ -3253,7 +3253,7 @@ with left_section:
     .psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
     .psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
     .psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
-    .psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
+    .psm-matrix-table th{background:#07518b;color:#ffffff;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #07518b;}
     .psm-matrix-table td{background:#ffffff;padding:6px;border:1px solid #d3dee6;vertical-align:middle;}
     .psm-matrix-table th:nth-child(1),.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
     .psm-matrix-table th:nth-child(2),.psm-matrix-table td:nth-child(2){width:34%;}
@@ -3337,7 +3337,7 @@ st.markdown("""
 .psm-rank-head{background:linear-gradient(90deg,#073f78,#0b6096);color:#fff;border-radius:7px;padding:10px 12px;font-size:12px;font-weight:950;}
 .psm-rank-note{color:#667b8d;font-size:9px;margin:7px 2px;line-height:1.45;}
 .psm-rank-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:#173f70;}
-.psm-rank-table th{background:#073f78;color:#fff;font-weight:950;padding:8px 6px;border:1px solid #073f78;}
+.psm-rank-table th{background:#07518b;color:#fff;font-weight:950;padding:8px 6px;border:1px solid #073f78;}
 .psm-rank-table td{padding:8px 6px;border:1px solid #d3dee6;background:#fff;text-align:center;}
 .psm-rank-table td.dept{text-align:left;font-weight:800;}
 .rank-good{color:#159447;font-weight:900}.rank-watch{color:#e5a400;font-weight:900}.rank-critical{color:#d71920;font-weight:900}.rank-na{color:#8a99a8;font-weight:800;}
@@ -3665,7 +3665,7 @@ with right_section:
         line-height:1.25;
     }}
     .psm-rank-table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}}
-    .psm-rank-table th{{background:#073f78;color:#ffffff;font-weight:950;padding:6px 5px;border:1px solid #073f78;height:24px;}}
+    .psm-rank-table th{{background:#07518b;color:#ffffff;font-weight:950;padding:6px 5px;border:1px solid #073f78;height:24px;}}
     .psm-rank-table td{{padding:5px 5px;border:1px solid #d3dee6;background:#ffffff;text-align:center;height:22px;}}
     .psm-rank-table td.dept{{text-align:left;font-weight:800;}}
     .rank-good{{color:#159447;font-weight:900;}}
