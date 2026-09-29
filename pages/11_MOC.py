@@ -1218,7 +1218,7 @@ header_html = """
 
     width: 100%;
 
-    height: 9px;
+    height: 12px;
 
     background: #f28c00;
 
