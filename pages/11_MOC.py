@@ -1399,8 +1399,37 @@ header_html = header_html.replace(
 
 components.html(
     header_html,
-    height=114,
+    height=90,
     scrolling=False
+)
+
+# ============================================================
+# REMOVE BLANK SPACE BETWEEN HEADER AND FIRST FILTER ROW
+# ============================================================
+st.markdown(
+    """
+<style>
+/* The header is a Streamlit custom-component iframe.
+   Remove its default vertical footprint after the 90px header. */
+div[data-testid="stCustomComponentV1"] {
+    height: 90px !important;
+    min-height: 90px !important;
+    max-height: 90px !important;
+    margin: 0 0 -78px 0 !important;
+    padding: 0 !important;
+}
+
+div[data-testid="stCustomComponentV1"] iframe {
+    height: 90px !important;
+    min-height: 90px !important;
+    max-height: 90px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+}
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
 # ============================================================
@@ -1955,6 +1984,34 @@ html, body, [class*="st-"], button, input, textarea, select {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
+}
+
+.change-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 78px;
+    padding: 4px 9px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.change-type-permanent {
+    color: #137dcc;
+    background: #eaf4ff;
+}
+
+.change-type-temporary {
+    color: #b76a00;
+    background: #fff4dd;
+}
+
+.change-type-emergency {
+    color: #c62828;
+    background: #fdecec;
 }
 
 .moc-table th {
@@ -2680,8 +2737,33 @@ def render_dashboard():
         department = clean_text(row["Department"])
         section = clean_text(row["Section"])
 
-        # Blank Requestor Name remains blank.
-        requestor = clean_text(row["Requestor Name"])
+        # Use Google Sheet H-column value in place of Requestor Name.
+        # H column = Change Type (Permanent/Temporary/Emergency).
+        change_type = clean_text(
+            row["Change Type (Permanent/Temporary/Emergency)"]
+        )
+        change_type_lower = change_type.strip().lower()
+
+        if change_type_lower == "permanent":
+            change_type_html = (
+                '<span class="change-type change-type-permanent">'
+                f"{html.escape(change_type)}"
+                "</span>"
+            )
+        elif change_type_lower == "temporary":
+            change_type_html = (
+                '<span class="change-type change-type-temporary">'
+                f"{html.escape(change_type)}"
+                "</span>"
+            )
+        elif change_type_lower == "emergency":
+            change_type_html = (
+                '<span class="change-type change-type-emergency">'
+                f"{html.escape(change_type)}"
+                "</span>"
+            )
+        else:
+            change_type_html = html.escape(change_type) if change_type else "—"
 
         description = clean_text(
             row["Description of Change"]
@@ -2743,7 +2825,7 @@ def render_dashboard():
             f'<td class="moc-no">{html.escape(moc_no)}</td>'
             f"<td>{html.escape(department)}</td>"
             f"<td>{html.escape(section)}</td>"
-            f"<td>{html.escape(requestor)}</td>"
+            f"<td>{change_type_html}</td>"
             f"<td>{html.escape(description)}</td>"
             f"<td>{status_html}</td>"
             f"<td>{document_html}</td>"
@@ -2786,7 +2868,7 @@ def render_dashboard():
         "<th>MOC No.</th>"
         "<th>Department</th>"
         "<th>Section</th>"
-        "<th>Requestor Name</th>"
+        "<th>Change Type</th>"
         "<th>Description of Change</th>"
         "<th>Status</th>"
         "<th>MOC Document</th>"
@@ -2872,6 +2954,549 @@ def render_dashboard():
                     page_number + 1,
                 )
                 st.rerun()
+
+
+    # --------------------------------------------------------
+    # SECOND REGISTER — MOC NO. + COMPLETION CHECKLIST
+    # --------------------------------------------------------
+    # Uses the SAME filtered MOC dataframe as the main register.
+    # Therefore Department / Search / Status filters automatically
+    # apply to this register as well.
+    #
+    # U  = MOC No.
+    # V:AK = 16 checklist columns from the Google Sheet.
+    # Blank checklist cell  -> X
+    # Any available value   -> green Tick
+    # --------------------------------------------------------
+
+    st.markdown(
+        """
+        <div class="section-heading moc-detail-heading">
+            <div class="section-title">MOC COMPLETION CHECKLIST REGISTER</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    checklist_columns = [
+        ("Engineering completed", ["Engineering completed"]),
+        ("Mechanical completion", ["Mechanical completion"]),
+        ("Documentation updated", ["Documentation updated"]),
+        ("SOP revised", ["SOP revised"]),
+        ("Drawings updated", ["Drawings updated"]),
+        ("P&ID updated", ["P&ID updated", "P&amp;ID updated"]),
+        ("Risk assessment closed", ["Risk assessment closed"]),
+        ("PSSR completed", ["PSSR completed"]),
+        ("Startup authorized", ["Startup authorized"]),
+        ("Operator training completed", ["Operator training completed"]),
+        ("Maintenance training completed", ["Maintenance training completed"]),
+        ("Performance verified", ["Performance verified"]),
+        ("Lessons learned documented", ["Lessons learned documented"]),
+        ("Final approval obtained", ["Final approval obtained"]),
+        ("All action items closed", ["All action items closed"]),
+        ("Records archived", ["Records archived"]),
+    ]
+
+    # Default Description of Change width; users can resize columns directly by dragging.
+    _description_width = 320
+
+    def _normalized_column_map(columns):
+        mapping = {}
+        for column in columns:
+            key = re.sub(
+                r"\s+",
+                " ",
+                clean_text(column),
+            ).strip().lower()
+            mapping[key] = column
+        return mapping
+
+    def _find_checklist_column(columns, aliases):
+        mapping = _normalized_column_map(columns)
+        for alias in aliases:
+            key = re.sub(
+                r"\s+",
+                " ",
+                clean_text(alias),
+            ).strip().lower()
+            if key in mapping:
+                return mapping[key]
+        return None
+
+    # The existing display_df is already filtered by:
+    # Department + Search + Status. Do NOT use the paginated dataframe here.
+    checklist_df = display_df.copy()
+
+    if checklist_df.empty:
+        st.markdown(
+            """
+            <div class="moc-checklist-empty">
+                No MOC records found for the selected filters.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        checklist_headers = [
+            _find_checklist_column(
+                checklist_df.columns,
+                aliases,
+            )
+            for _, aliases in checklist_columns
+        ]
+
+        # Build the table: one row per MOC, one column per checklist item.
+        checklist_rows = []
+
+        for _, moc_row in checklist_df.iterrows():
+            moc_no = clean_text(
+                moc_row.get("MOC No", "")
+            ) or "—"
+
+            row_html = (
+                "<tr>"
+                f'<td class="moc-check-mocno">'
+                f'{html.escape(moc_no)}'
+                "</td>"
+            )
+
+            department_name = clean_text(moc_row.get("Department", "")) or "—"
+            row_html += (
+                '<td class="moc-check-dept">'
+                f'{html.escape(department_name)}'
+                '</td>'
+            )
+
+            description = clean_text(moc_row.get("Description of Change", ""))
+            if not description:
+                for desc_col in [
+                    "Description",
+                    "Change Description",
+                    "Description Of Change",
+                ]:
+                    description = clean_text(moc_row.get(desc_col, ""))
+                    if description:
+                        break
+            description = description or "—"
+
+            row_html += (
+                '<td class="moc-check-description">'
+                f'{html.escape(description)}'
+                '</td>'
+            )
+
+            for header_column in checklist_headers:
+                if header_column is None:
+                    has_data = False
+                else:
+                    value = clean_text(
+                        moc_row.get(header_column, "")
+                    )
+
+                # Read the actual checklist status from the source sheet.
+                # YES/available -> green tick; NO -> red cross; blank -> red cross.
+                value_upper = clean_text(value).strip().upper() if header_column is not None else ""
+                is_yes = value_upper in {"YES", "Y", "TRUE", "1", "COMPLETED", "COMPLETE", "DONE", "CLOSED"}
+
+                if is_yes:
+                    row_html += (
+                        '<td class="moc-check-cell moc-check-done">'
+                        '<span class="moc-check-mark">✓</span>'
+                        "</td>"
+                    )
+                else:
+                    row_html += (
+                        '<td class="moc-check-cell moc-check-blank">'
+                        '<span class="moc-cross-mark">✕</span>'
+                        "</td>"
+                    )
+
+            row_html += "</tr>"
+            checklist_rows.append(row_html)
+
+        checklist_header_html = "".join(
+            f'<th>{html.escape(label)}</th>'
+            for label, _ in checklist_columns
+        )
+
+        checklist_table_html = (
+            '<div class="moc-checklist-table-shell">'
+            '<table class="moc-checklist-table">'
+            '<thead>'
+            '<tr>'
+            '<th class="moc-check-mocno-head">MOC No.</th>'
+            '<th class="moc-check-dept-head">Department</th>'
+            '<th class="moc-check-description-head">Description of Change</th>'
+            f'{checklist_header_html}'
+            '</tr>'
+            '</thead>'
+            '<tbody>'
+            f'{"".join(checklist_rows)}'
+            '</tbody>'
+            '</table>'
+            '</div>'
+        )
+
+        # Excel-like interactive register: drag any column boundary to resize.
+        checklist_widget_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+        * {{ box-sizing:border-box; }}
+        html, body {{
+            margin:0;
+            padding:0;
+            width:100%;
+            height:100%;
+            background:transparent;
+            font-family:Arial, Helvetica, sans-serif;
+        }}
+        .excel-shell {{
+            width:100%;
+            height:410px;
+            overflow:auto;
+            background:#fff;
+            border:1px solid #cbdce8;
+            border-radius:8px;
+            scrollbar-width:thin;
+            scrollbar-color:#8fa8bb #eef4f8;
+        }}
+        table.moc-checklist-table {{
+            border-collapse:collapse;
+            table-layout:fixed;
+            width:max-content;
+            min-width:1950px;
+            color:#173f70;
+            font-size:11px;
+        }}
+        table.moc-checklist-table th {{
+            position:relative;
+            background:#07518b;
+            color:#fff;
+            font-weight:850;
+            text-align:center;
+            vertical-align:middle;
+            padding:5px 4px;
+            border:1px solid #073f78;
+            line-height:1.05;
+            white-space:normal;
+            overflow-wrap:anywhere;
+            user-select:none;
+        }}
+        table.moc-checklist-table td {{
+            height:29px;
+            padding:4px 4px;
+            border:1px solid #d3dee6;
+            background:#fff;
+            text-align:center;
+            vertical-align:middle;
+            font-size:11px;
+            color:#173f70;
+        }}
+        table.moc-checklist-table td.moc-check-mocno {{
+            text-align:left;
+            font-weight:800;
+            font-size:10.5px;
+            white-space:normal;
+            overflow-wrap:anywhere;
+        }}
+        table.moc-checklist-table td.moc-check-dept {{
+            color:#173f70;
+            white-space:normal;
+            overflow-wrap:anywhere;
+        }}
+        table.moc-checklist-table td.moc-check-description {{
+            text-align:left;
+            color:#173f70;
+            white-space:normal;
+            overflow-wrap:anywhere;
+            font-size:10.5px;
+            line-height:1.25;
+        }}
+        .moc-check-done {{ background:#f7fff9 !important; }}
+        .moc-check-blank {{ background:#fffafa !important; }}
+        .moc-check-mark {{
+            color:#16a34a;
+            font-size:15px;
+            line-height:1;
+            font-weight:950;
+        }}
+        .moc-cross-mark {{
+            color:#d71920;
+            font-size:14px;
+            line-height:1;
+            font-weight:900;
+        }}
+        .resize-handle {{
+            position:absolute;
+            top:0;
+            right:-3px;
+            width:7px;
+            height:100%;
+            cursor:col-resize;
+            z-index:20;
+        }}
+        .resize-handle:hover, .resize-handle.dragging {{
+            background:rgba(255,255,255,.55);
+        }}
+        .excel-shell.resizing, .excel-shell.resizing * {{
+            cursor:col-resize !important;
+            user-select:none !important;
+        }}
+        .moc-checklist-table th:first-child,
+        .moc-checklist-table td:first-child {{
+            position:sticky;
+            left:0;
+            z-index:10;
+        }}
+        .moc-checklist-table th:first-child {{
+            z-index:12;
+            background:#07518b;
+        }}
+        .moc-checklist-table td:first-child {{
+            background:#fff;
+            box-shadow:2px 0 3px rgba(15,60,90,.10);
+        }}
+        .moc-checklist-table tbody td.moc-check-dept {{
+            background:#fff;
+        }}
+        .moc-checklist-table th:nth-child(1),
+        .moc-checklist-table td:nth-child(1) {{ width:170px; min-width:170px; }}
+        .moc-checklist-table th:nth-child(2),
+        .moc-checklist-table td:nth-child(2) {{ width:120px; min-width:120px; }}
+        .moc-checklist-table th:nth-child(3),
+        .moc-checklist-table td:nth-child(3) {{ width:{_description_width}px; min-width:{_description_width}px; }}
+        </style>
+        </head>
+        <body>
+        <div class="excel-shell" id="excelShell">
+            {checklist_table_html}
+        </div>
+        <script>
+        (function() {{
+            const shell = document.getElementById('excelShell');
+            const table = shell.querySelector('table');
+            if (!table) return;
+
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const cols = headers.map(() => document.createElement('col'));
+            const colgroup = document.createElement('colgroup');
+            cols.forEach(c => colgroup.appendChild(c));
+            table.insertBefore(colgroup, table.firstChild);
+
+            function syncWidths() {{
+                headers.forEach((th, i) => {{
+                    const w = Math.max(60, Math.round(th.getBoundingClientRect().width));
+                    cols[i].style.width = w + 'px';
+                }});
+            }}
+
+            headers.forEach((th, index) => {{
+                const handle = document.createElement('span');
+                handle.className = 'resize-handle';
+                th.appendChild(handle);
+
+                handle.addEventListener('mousedown', function(e) {{
+                    e.preventDefault();
+                    e.stopPropagation();
+                    shell.classList.add('resizing');
+                    handle.classList.add('dragging');
+                    const startX = e.clientX;
+                    const startWidth = th.getBoundingClientRect().width;
+
+                    function move(ev) {{
+                        const newWidth = Math.max(60, startWidth + (ev.clientX - startX));
+                        cols[index].style.width = newWidth + 'px';
+                        th.style.width = newWidth + 'px';
+                        th.style.minWidth = newWidth + 'px';
+                        table.style.width = 'max-content';
+                    }}
+
+                    function stop() {{
+                        shell.classList.remove('resizing');
+                        handle.classList.remove('dragging');
+                        document.removeEventListener('mousemove', move);
+                        document.removeEventListener('mouseup', stop);
+                    }}
+
+                    document.addEventListener('mousemove', move);
+                    document.addEventListener('mouseup', stop);
+                }});
+            }});
+
+            syncWidths();
+            window.addEventListener('resize', syncWidths);
+        }})();
+        </script>
+        </body>
+        </html>
+        """
+
+        components.html(
+            checklist_widget_html,
+            height=425,
+            scrolling=False,
+        )
+
+
+
+# Keep the checklist column definitions available for the dynamic width CSS.
+# This is intentionally defined at module scope so it is available even when
+# the filtered checklist dataframe is empty.
+checklist_columns = [
+    ("Engineering completed", ["Engineering completed"]),
+    ("Mechanical completion", ["Mechanical completion"]),
+    ("Documentation updated", ["Documentation updated"]),
+    ("SOP revised", ["SOP revised"]),
+    ("Drawings updated", ["Drawings updated"]),
+    ("P&ID updated", ["P&ID updated", "P&amp;ID updated"]),
+    ("Risk assessment closed", ["Risk assessment closed"]),
+    ("PSSR completed", ["PSSR completed"]),
+    ("Startup authorized", ["Startup authorized"]),
+    ("Operator training completed", ["Operator training completed"]),
+    ("Maintenance training completed", ["Maintenance training completed"]),
+    ("Performance verified", ["Performance verified"]),
+    ("Lessons learned documented", ["Lessons learned documented"]),
+    ("Final approval obtained", ["Final approval obtained"]),
+    ("All action items closed", ["All action items closed"]),
+    ("Records archived", ["Records archived"]),
+]
+
+
+st.markdown(
+    """
+    <style>
+    .moc-checklist-table-shell {
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #8fa8bb #eef4f8;
+        max-height: 430px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        margin-top: var(--major-row-gap);
+        box-shadow: 0 3px 10px rgba(23,59,115,.055);
+    }
+
+    .moc-checklist-table {
+        width: 100%;
+        width: max-content;
+        min-width: 1950px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 9px;
+        color: #173f70;
+    }
+
+    .moc-checklist-table th {
+        background: #07518b;
+        color: #ffffff;
+        font-weight: 850;
+        text-align: center;
+        vertical-align: middle;
+        padding: 5px 3px;
+        border: 1px solid #073f78;
+        line-height: 1.05;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .moc-checklist-table .moc-check-mocno-head {
+        position: sticky;
+        left: 0;
+        z-index: 5;
+    }
+
+    .moc-checklist-table td.moc-check-description {
+        text-align: left;
+        vertical-align: middle;
+        padding: 4px 7px;
+        color: #173f70;
+        font-size: 9px;
+        line-height: 1.2;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    /* Keep MOC No. visible while the checklist is horizontally scrolled. */
+    .moc-checklist-table th.moc-check-mocno-head,
+    .moc-checklist-table td.moc-check-mocno {
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        background: #ffffff;
+        box-shadow: 2px 0 3px rgba(15,60,90,.10);
+    }
+
+    .moc-checklist-table th.moc-check-mocno-head {
+        background: #07518b;
+        z-index: 6;
+    }
+
+    .moc-checklist-table td {
+        height: 27px;
+        padding: 3px 2px;
+        border: 1px solid #d3dee6;
+        background: #ffffff;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .moc-checklist-table td.moc-check-mocno {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        text-align: left;
+        padding-left: 7px;
+        padding-right: 7px;
+        color: #173f70;
+        font-weight: 800;
+        white-space: nowrap;
+        font-size: 8.5px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+    }
+
+    .moc-check-mark {
+        color: #16a34a;
+        font-size: 14px;
+        line-height: 1;
+        font-weight: 950;
+    }
+
+    .moc-cross-mark {
+        color: #d71920;
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 900;
+    }
+
+    .moc-check-done {
+        background: #f7fff9 !important;
+    }
+
+    .moc-check-blank {
+        background: #fffafa !important;
+    }
+
+    .moc-checklist-empty {
+        margin-top: var(--major-row-gap);
+        padding: 24px;
+        text-align: center;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        color: #8a98a9;
+        font-size: 11px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 
@@ -3145,6 +3770,138 @@ st.markdown(
         margin-top: var(--major-row-gap) !important;
     }
 
+    .moc-detail-heading {
+        margin-top: var(--major-row-gap) !important;
+        margin-bottom: 12px !important;
+        min-height: 42px !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 2 !important;
+    }
+
+    /* Keep the checklist iframe below the heading instead of overlapping it. */
+    .element-container:has(.moc-detail-heading) {
+        margin-bottom: 12px !important;
+    }
+
+    .moc-detail-shell {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: var(--major-row-gap);
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 14px 16px 16px;
+        box-shadow: 0 3px 10px rgba(23,59,115,.055);
+    }
+
+    .moc-detail-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e6edf3;
+    }
+
+    .moc-detail-title,
+    .moc-checklist-title {
+        color: var(--navy);
+        font-size: 13px;
+        font-weight: 750;
+        letter-spacing: .15px;
+    }
+
+    .moc-detail-number {
+        color: var(--blue-dark);
+        background: var(--blue-soft);
+        border-radius: 14px;
+        padding: 5px 11px;
+        font-size: 11px;
+        font-weight: 750;
+        white-space: nowrap;
+    }
+
+    .moc-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px 14px;
+        padding: 12px 0 14px;
+    }
+
+    .moc-detail-item {
+        min-width: 0;
+        padding: 7px 9px;
+        background: #f8fafc;
+        border: 1px solid #e7edf3;
+        border-radius: 6px;
+    }
+
+    .moc-detail-label {
+        color: #718199;
+        font-size: 9px;
+        line-height: 1.15;
+        font-weight: 650;
+        margin-bottom: 3px;
+        text-transform: uppercase;
+    }
+
+    .moc-detail-value {
+        color: #315071;
+        font-size: 10.5px;
+        line-height: 1.25;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .moc-checklist-title {
+        padding: 9px 0 8px;
+        border-top: 1px solid #e6edf3;
+    }
+
+    .moc-checklist-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 26px;
+    }
+
+    .moc-check-row {
+        display: grid;
+        grid-template-columns: 1fr 28px;
+        align-items: center;
+        min-height: 28px;
+        border-bottom: 1px solid #eef2f6;
+    }
+
+    .moc-check-item {
+        color: #333333;
+        font-size: 11px;
+        line-height: 1.2;
+        font-weight: 500;
+        padding: 4px 0;
+    }
+
+    .moc-check-status {
+        color: #8057e8;
+        font-size: 17px;
+        line-height: 1;
+        font-weight: 800;
+        text-align: center;
+    }
+
+    @media (max-width: 900px) {
+        .moc-detail-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 650px) {
+        .moc-detail-grid,
+        .moc-checklist-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
     .table-shell {
         margin-top: 0 !important;
     }
@@ -3197,6 +3954,3 @@ if hasattr(st, "fragment"):
     _moc_dashboard_fragment()
 else:
     render_dashboard()
-
-
-
