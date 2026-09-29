@@ -2288,6 +2288,94 @@ st.markdown(
 
 left_section, right_section = st.columns([1, 1], gap="small")
 
+st.markdown("""
+    <style>
+.psm-matrix-wrap{
+width:100%;
+height:500px;
+box-sizing:border-box;
+background:#ffffff;
+border:1px solid #cbdce8;
+border-radius:10px;
+padding:10px;
+margin:0 !important;
+box-shadow:0 2px 8px rgba(15,60,90,.06);
+overflow:hidden;
+}
+.psm-matrix-head{
+display:flex;
+align-items:center;
+justify-content:space-between;
+background:#07518b;
+color:#ffffff;
+border-radius:7px;
+padding:9px 12px;
+margin-bottom:8px;
+font-size:12px;
+font-weight:950;
+letter-spacing:.2px;
+}
+    .psm-matrix-sub{
+        color:#5f7385;
+        font-size:9px;
+        margin:3px 2px 8px 2px;
+    }
+    .psm-matrix-link{
+        display:inline-block;
+        background:#073f78;
+        color:#ffffff !important;
+        padding:6px 10px;
+        border-radius:5px;
+        text-decoration:none !important;
+        font-size:9px;
+        font-weight:900;
+    }
+    .psm-matrix-table{
+        width:100%;
+        border-collapse:collapse;
+        table-layout:fixed;
+        font-size:9px;
+        color:#173f70;
+    }
+   .psm-matrix-table th{
+background:#07518b;
+color:#ffffff;
+font-weight:950;
+text-align:left;
+padding:7px 6px;
+border:1px solid #07518b;
+}
+    }
+    .psm-matrix-table td{
+        background:#ffffff;
+        padding:6px;
+        border:1px solid #d3dee6;
+        vertical-align:middle;
+    }
+    .psm-matrix-table th:nth-child(1),
+    .psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
+    .psm-matrix-table th:nth-child(2),
+    .psm-matrix-table td:nth-child(2){width:34%;}
+    .psm-matrix-table th:nth-child(3),
+    .psm-matrix-table td:nth-child(3){width:12%;}
+    .psm-matrix-table th:nth-child(4),
+    .psm-matrix-table td:nth-child(4){width:13%;}
+    .psm-matrix-table th:nth-child(5),
+    .psm-matrix-table td:nth-child(5){width:16%;}
+    .psm-matrix-table th:nth-child(6),
+    .psm-matrix-table td:nth-child(6){width:20%;}
+    .matrix-ok{color:#159447;font-weight:900;}
+    .matrix-watch{color:#e5a400;font-weight:900;}
+    .matrix-critical{color:#d71920;font-weight:900;}
+    .matrix-na{color:#8a99a8;font-weight:800;}
+    .matrix-note{
+        font-size:8px;
+        color:#738595;
+        margin-top:6px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 with left_section:
     # ============================================================
     # PSM LEADING vs LAGGING INDICATORS MATRIX
@@ -2296,92 +2384,7 @@ with left_section:
     # data/filter logic above and does not replace any existing dashboard section.
     # ============================================================
 
-    st.markdown("""
-        <style>
-        .psm-matrix-wrap{
-    width:100%;
-    height:500px;
-    box-sizing:border-box;
-    background:#ffffff;
-    border:1px solid #cbdce8;
-    border-radius:10px;
-    padding:10px;
-    margin:0 !important;
-    box-shadow:0 2px 8px rgba(15,60,90,.06);
-    overflow:hidden;
-}
-        .psm-matrix-head{
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            background:linear-gradient(90deg,#073f78,#0b6096);
-            color:#ffffff;
-            border-radius:7px;
-            padding:9px 12px;
-            margin-bottom:8px;
-            font-size:12px;
-            font-weight:950;
-            letter-spacing:.2px;
-        }
-        .psm-matrix-sub{
-            color:#5f7385;
-            font-size:9px;
-            margin:3px 2px 8px 2px;
-        }
-        .psm-matrix-link{
-            display:inline-block;
-            background:#073f78;
-            color:#ffffff !important;
-            padding:6px 10px;
-            border-radius:5px;
-            text-decoration:none !important;
-            font-size:9px;
-            font-weight:900;
-        }
-        .psm-matrix-table{
-            width:100%;
-            border-collapse:collapse;
-            table-layout:fixed;
-            font-size:9px;
-            color:#173f70;
-        }
-        .psm-matrix-table th{
-            background:#dcecf3;
-            color:#173f70;
-            font-weight:950;
-            text-align:left;
-            padding:7px 6px;
-            border:1px solid #b7c8d3;
-        }
-        .psm-matrix-table td{
-            background:#ffffff;
-            padding:6px;
-            border:1px solid #d3dee6;
-            vertical-align:middle;
-        }
-        .psm-matrix-table th:nth-child(1),
-        .psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
-        .psm-matrix-table th:nth-child(2),
-        .psm-matrix-table td:nth-child(2){width:34%;}
-        .psm-matrix-table th:nth-child(3),
-        .psm-matrix-table td:nth-child(3){width:12%;}
-        .psm-matrix-table th:nth-child(4),
-        .psm-matrix-table td:nth-child(4){width:13%;}
-        .psm-matrix-table th:nth-child(5),
-        .psm-matrix-table td:nth-child(5){width:16%;}
-        .psm-matrix-table th:nth-child(6),
-        .psm-matrix-table td:nth-child(6){width:20%;}
-        .matrix-ok{color:#159447;font-weight:900;}
-        .matrix-watch{color:#e5a400;font-weight:900;}
-        .matrix-critical{color:#d71920;font-weight:900;}
-        .matrix-na{color:#8a99a8;font-weight:800;}
-        .matrix-note{
-            font-size:8px;
-            color:#738595;
-            margin-top:6px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+
 
 
     def _matrix_status_pct(df, status_names=None):
@@ -2781,11 +2784,23 @@ with left_section:
         <meta charset="utf-8">
         <style>
         html, body { margin:0; padding:0; background:transparent; font-family:Arial, Helvetica, sans-serif; }
-        .psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;}
-        .psm-matrix-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#073f78,#0b6096);color:#ffffff;border-radius:7px;padding:9px 12px;margin-bottom:8px;font-size:12px;font-weight:950;letter-spacing:.2px;}
+        .psm-matrix-wrap{background:#ffffff;border:1px solid #cbdce8;border-radius:10px;padding:10px 10px 8px 10px;margin:0;box-shadow:0 2px 8px rgba(15,60,90,.06);box-sizing:border-box;height:500px;}
+        .psm-matrix-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:#07518b;
+    color:#ffffff;
+    border-radius:7px;
+    padding:9px 12px;
+    margin-bottom:8px;
+    font-size:12px;
+    font-weight:950;
+    letter-spacing:.2px;
+}
         .psm-matrix-sub{color:#5f7385;font-size:9px;margin:3px 2px 8px 2px;}
         .psm-matrix-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}
-        .psm-matrix-table th{background:#dcecf3;color:#173f70;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #b7c8d3;}
+        .psm-matrix-table th{background:#07518b;color:#ffffff;font-weight:950;text-align:left;padding:7px 6px;border:1px solid #07518b;}
         .psm-matrix-table td{background:#ffffff;padding:6px;border:1px solid #d3dee6;vertical-align:middle;}
         .psm-matrix-table th:nth-child(1),.psm-matrix-table td:nth-child(1){width:5%;text-align:center;}
         .psm-matrix-table th:nth-child(2),.psm-matrix-table td:nth-child(2){width:34%;}
@@ -2882,7 +2897,7 @@ st.markdown("""
 .psm-rank-head{background:linear-gradient(90deg,#073f78,#0b6096);color:#fff;border-radius:7px;padding:10px 12px;font-size:12px;font-weight:950;}
 .psm-rank-note{color:#667b8d;font-size:9px;margin:7px 2px;line-height:1.45;}
 .psm-rank-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:#173f70;}
-.psm-rank-table th{background:#073f78;color:#fff;font-weight:950;padding:8px 6px;border:1px solid #073f78;}
+.psm-rank-table th{background:#07518b;color:#fff;font-weight:950;padding:8px 6px;border:1px solid #073f78;}
 .psm-rank-table td{padding:8px 6px;border:1px solid #d3dee6;background:#fff;text-align:center;}
 .psm-rank-table td.dept{text-align:left;font-weight:800;}
 .rank-good{color:#159447;font-weight:900}.rank-watch{color:#e5a400;font-weight:900}.rank-critical{color:#d71920;font-weight:900}.rank-na{color:#8a99a8;font-weight:800;}
@@ -3216,7 +3231,7 @@ with right_section:
         line-height:1.25;
     }}
     .psm-rank-table{{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9px;color:#173f70;}}
-    .psm-rank-table th{{background:#073f78;color:#ffffff;font-weight:950;padding:6px 5px;border:1px solid #073f78;height:24px;}}
+    .psm-rank-table th{{background:#07518b;color:#ffffff;font-weight:950;padding:6px 5px;border:1px solid #073f78;height:24px;}}
     .psm-rank-table td{{padding:5px 5px;border:1px solid #d3dee6;background:#ffffff;text-align:center;height:22px;}}
     .psm-rank-table td.dept{{text-align:left;font-weight:800;}}
     .rank-good{{color:#159447;font-weight:900;}}
@@ -3930,6 +3945,8 @@ with st.container(
                         ),
                     },
                 )
+
+
 # ============================================================
 # ROW 2 — PSSR / INCIDENT / TRAINING
 # ============================================================
@@ -6498,5 +6515,3 @@ with failure_col:
                     "Reason of Failure": st.column_config.TextColumn("Reason of Failure"),
                 },
             )
-
-
