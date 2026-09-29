@@ -357,6 +357,137 @@ for month in months:
         """
 
 # ============================================================
+# JOURNEY PLAN FY25-26
+# ============================================================
+
+# 44 weeks: May-25 to Mar-26, 4 weeks per month.
+# This section is independent from the existing Roadmap FY25-26.
+
+journey25_plan_data = {
+    "PT": [(3, 10, "1st PT")],
+    "PHA": [(13, 24, "1st PHA")],
+    "LOPA": [(25, 4, "LOPA Training")],
+    "BOW TIE": [(33, 4, "Bowtie Training")],
+    "OP": [(44, 1, "OP Training")],
+    "MOC": [],
+    "PSSR": [],
+    "MIQA": [],
+    "Incident Investigation": [],
+    "Emergency Plan": [],
+}
+
+# Actual bars shown in green, matching the supplied reference.
+# Update these tuples later when the actual dates change.
+journey25_actual_data = {
+    "PT": [(3, 10, "")],
+    "PHA": [(13, 28, "")],
+    "LOPA": [(25, 4, "")],
+    "BOW TIE": [(33, 4, "")],
+    "OP": [(44, 1, "")],
+    "MOC": [],
+    "PSSR": [],
+    "MIQA": [],
+    "Incident Investigation": [],
+    "Emergency Plan": [],
+}
+
+journey25_activities = [
+    "PT",
+    "PHA",
+    "LOPA",
+    "BOW TIE",
+    "OP",
+    "MOC",
+    "PSSR",
+    "MIQA",
+    "Incident Investigation",
+    "Emergency Plan",
+]
+
+
+def create_journey25_rows():
+    rows = ""
+
+    for activity in journey25_activities:
+
+        # ----------------------------------------------------
+        # PLAN ROW
+        # ----------------------------------------------------
+        rows += f"""
+        <tr>
+            <td class="activity-name-fy25" rowspan="2">{activity}</td>
+            <td class="plan-actual-cell-fy25">Plan</td>
+        """
+
+        current_week = 1
+
+        for start, duration, label in journey25_plan_data.get(activity, []):
+
+            while current_week < start:
+                rows += '<td class="roadmap-week-fy25 empty"></td>'
+                current_week += 1
+
+            rows += f"""
+                <td class="roadmap-week-fy25 journey-plan-bar-fy25" colspan="{duration}">
+                    {label}
+                </td>
+            """
+            current_week += duration
+
+        while current_week <= 44:
+            rows += '<td class="roadmap-week-fy25 empty"></td>'
+            current_week += 1
+
+        rows += "</tr>"
+
+        # ----------------------------------------------------
+        # ACTUAL ROW
+        # ----------------------------------------------------
+        rows += """
+        <tr>
+            <td class="plan-actual-cell-fy25">Actual</td>
+        """
+
+        current_week = 1
+
+        for start, duration, label in journey25_actual_data.get(activity, []):
+
+            while current_week < start:
+                rows += '<td class="roadmap-week-fy25 empty"></td>'
+                current_week += 1
+
+            rows += f"""
+                <td class="roadmap-week-fy25 journey-actual-bar-fy25" colspan="{duration}">
+                    {label}
+                </td>
+            """
+            current_week += duration
+
+        while current_week <= 44:
+            rows += '<td class="roadmap-week-fy25 empty"></td>'
+            current_week += 1
+
+        rows += "</tr>"
+
+    return rows
+
+
+journey25_roadmap_rows = create_journey25_rows()
+
+journey25_month_header = ""
+for month in months_25:
+    journey25_month_header += f"""
+        <th class="month-header-fy25" colspan="4">{month}</th>
+    """
+
+journey25_week_header = ""
+for month in months_25:
+    for week in range(1, 5):
+        journey25_week_header += f"""
+            <th class="week-header-fy25">{week}</th>
+        """
+
+# ============================================================
 # COMPLETE DASHBOARD HTML
 # ============================================================
 
@@ -1051,6 +1182,39 @@ body {{
 }}
 
 
+
+
+/* ============================================================
+   JOURNEY PLAN FY25-26 - PLAN / ACTUAL COLORS
+   ============================================================ */
+
+.journey-plan-bar-fy25 {{
+    background: #315b9b !important;
+    color: #ffffff !important;
+    border: 1px solid #000000 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+.journey-actual-bar-fy25 {{
+    background: #00b050 !important;
+    color: #ffffff !important;
+    border: 1px solid #000000 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+
 /* ============================================================
    1400px AND BELOW
    ============================================================ */
@@ -1429,7 +1593,6 @@ body {{
 
 <!-- ============================================================
      SECTION 5 - JOURNEY PLAN FY25-26
-     SAME DESIGN AS ROADMAP (FY25-26)
 ============================================================= -->
 
 <div class="section-gap"></div>
@@ -1454,15 +1617,15 @@ body {{
                 Status
             </th>
 
-            {fy25_month_header}
+            {journey25_month_header}
 
         </tr>
 
         <tr>
-            {fy25_week_header}
+            {journey25_week_header}
         </tr>
 
-        {fy25_roadmap_rows}
+        {journey25_roadmap_rows}
 
     </table>
 
