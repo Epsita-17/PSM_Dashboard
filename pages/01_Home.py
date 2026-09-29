@@ -1426,6 +1426,48 @@ body {{
 </div>
 
 
+
+<!-- ============================================================
+     SECTION 5 - JOURNEY PLAN FY25-26
+     SAME DESIGN AS ROADMAP (FY25-26)
+============================================================= -->
+
+<div class="section-gap"></div>
+
+<div class="roadmap-section-fy25">
+
+    <div class="roadmap-red-line-fy25"></div>
+
+    <div class="roadmap-title-fy25">
+        Journey Plan (FY25-26)
+    </div>
+
+    <table class="roadmap-table-fy25">
+
+        <tr>
+
+            <th class="activities-header-fy25" rowspan="2">
+                Activities
+            </th>
+
+            <th class="plan-header-fy25" rowspan="2">
+                Status
+            </th>
+
+            {fy25_month_header}
+
+        </tr>
+
+        <tr>
+            {fy25_week_header}
+        </tr>
+
+        {fy25_roadmap_rows}
+
+    </table>
+
+</div>
+
 </body>
 
 </html>
@@ -1441,4 +1483,3 @@ components.html(
     height=3100,
     scrolling=False
 )
-
