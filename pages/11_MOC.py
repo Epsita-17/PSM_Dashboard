@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from datetime import date
 from zoneinfo import ZoneInfo
+
 # ============================================================
 # PAGE CONFIG
 # ============================================================
@@ -126,8 +127,8 @@ def parse_one_date(value):
         if 20000 <= float(value) <= 80000:
             try:
                 return (
-                    pd.Timestamp("1899-12-30")
-                    + pd.to_timedelta(float(value), unit="D")
+                        pd.Timestamp("1899-12-30")
+                        + pd.to_timedelta(float(value), unit="D")
                 ).normalize()
             except Exception:
                 pass
@@ -551,7 +552,6 @@ def calculate_pending_over_15(data):
     )
 
 
-
 def normalize_approval(value):
     """Normalize Approval Status values for KPI calculations."""
     return clean_text(value).strip().lower()
@@ -616,6 +616,80 @@ def build_donut_card(title, labels, values, colors):
     # IMPORTANT: keep the complete HTML as one continuous string.
     # Blank lines inside an HTML block can make Streamlit's Markdown
     # parser treat indented HTML as a code block.
+    definition_html = ""
+    if title == "CHANGE TYPE":
+        definition_html = (
+            '<div class="moc-full-inside-graph">'
+            '<div class="moc-inside-title">MOC CATEGORIES OF CHANGE</div>'
+            '<table class="moc-inside-table">'
+            '<tr>'
+            '<th class="moc-inside-category">Category</th>'
+            '<th class="moc-inside-permanent">Permanent Change</th>'
+            '<th class="moc-inside-temporary">Temporary Change</th>'
+            '<th class="moc-inside-emergency">Emergency Change</th>'
+            '</tr>'
+            '<tr>'
+            '<td class="moc-inside-label">Definition</td>'
+            '<td class="moc-inside-permanent-body">'
+            'Change intended to establish a new, lasting condition with no plan to revert to the original condition.'
+            '</td>'
+            '<td class="moc-inside-temporary-body">'
+            'Change required for a short, predefined period, after which the original condition must be restored or converted to permanent.'
+            '</td>'
+            '<td class="moc-inside-emergency-body">'
+            'Immediate change required to address critical safety, environmental, external threats, or severe economic loss where normal MOC procedure may cause unacceptable risk.'
+            '</td>'
+            '</tr>'
+            '<tr>'
+            '<td class="moc-inside-label">Timeline</td>'
+            '<td class="moc-inside-permanent-body">'
+            'Indefinite.<br>If MOC remains open for more than 2 years, review biennially (every 2 years).'
+            '</td>'
+            '<td class="moc-inside-temporary-body">'
+            '≤ 30 days, or maximum 90 / 180 / 360 days based on risk and complexity.<br>'
+            'One extension permitted up to 60 additional days with approval and risk reassessment.'
+            '</td>'
+            '<td class="moc-inside-emergency-body">'
+            'Immediate implementation permitted.<br>'
+            'Verification within 96 hours; formal MOC initiation within 24 hours after emergency resolution; '
+            'authorization stage within 7 days (168 hours).'
+            '</td>'
+            '</tr>'
+            '</table>'
+            '</div>'
+        )
+    elif title == "CATEGORY OF CHANGES":
+        definition_html = (
+            '<div class="moc-full-inside-graph">'
+            '<div class="moc-inside-title">MOC CATEGORIES OF CHANGE</div>'
+            '<table class="moc-inside-table">'
+            '<tr>'
+            '<th class="moc-inside-category">Category</th>'
+            '<th class="moc-inside-permanent">Technology</th>'
+            '<th class="moc-inside-temporary">Personnel</th>'
+            '<th class="moc-inside-emergency">Facility</th>'
+            '</tr>'
+            '<tr>'
+            '<td class="moc-inside-label">Definition</td>'
+            '<td class="moc-inside-permanent-body">'
+            'A modification that affects the company\'s hazards and risks, environmental aspects, '
+            'operation, or technical integrity of the company\'s assets (Control systems, equipment, '
+            'machinery, materials, substances, etc.) excluding the "Replacement in Kind."'
+            '</td>'
+            '<td class="moc-inside-temporary-body">'
+            'Any change in position or responsibility within an organization or any change to an '
+            'organizational policy or procedure that affects process safety, i.e., a permanent change '
+            'in an organizational structure or change in personnel with specific knowledge or experience.'
+            '</td>'
+            '<td class="moc-inside-emergency-body">'
+            'The management of facility changes within Process Safety Management (PSM) requires a '
+            'structured approach to ensure safety and mitigate risks associated with modifications to facilities.'
+            '</td>'
+            '</tr>'
+            '</table>'
+            '</div>'
+        )
+
     return (
         '<div class="donut-card">'
         f'<div class="donut-title">{html.escape(title)}</div>'
@@ -628,17 +702,19 @@ def build_donut_card(title, labels, values, colors):
         '</div>'
         f'<div class="donut-legend">{legend_html}</div>'
         '</div>'
+        f'{definition_html}'
         '</div>'
     )
-#=============================================================
-#HEADER CODE
-#=============================================================
+
+
+# =============================================================
+# HEADER CODE
+# =============================================================
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
 from pathlib import Path
 from datetime import datetime
-
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -650,7 +726,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
 
 # ============================================================
 # REMOVE STREAMLIT TOP SPACE
@@ -711,7 +786,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 # ============================================================
 # BASE DIRECTORY
 # ============================================================
@@ -724,7 +798,6 @@ BASE_DIR = Path(__file__).resolve().parent
 # ============================================================
 
 def image_to_base64(file_path):
-
     file_path = Path(file_path)
 
     if not file_path.exists():
@@ -751,18 +824,15 @@ logo_path = BASE_DIR / "jsw_jfe_logo.jpg"
 
 logo_base64 = image_to_base64(logo_path)
 
-
 # ============================================================
 # FILE CHECK
 # ============================================================
 
 if not logo_base64:
-
     st.error(
         "jsw_jfe_logo.jpg not found. "
         "Keep jsw_jfe_logo.jpg in the same folder as this Python file."
     )
-
 
 # ============================================================
 # DATE AND TIME
@@ -777,7 +847,6 @@ current_date = now.strftime(
 current_time = now.strftime(
     "%I:%M %p"
 )
-
 
 # ============================================================
 # HEADER HTML
@@ -804,7 +873,7 @@ header_html = """
     position: relative;
     width: calc(100% + 10px);
     margin-left: -5px;
-    height: 90px;
+    height: 120px;
 
     overflow: hidden;
 
@@ -840,7 +909,7 @@ header_html = """
 
     width: 100%;
 
-    height: 95px;
+    height: 105px;
 
     display: flex;
 
@@ -866,7 +935,7 @@ header_html = """
 
     width: 195px;
 
-    height: 68px;
+    height: 76px;
 
     background: #ffffff;
 
@@ -924,7 +993,7 @@ header_html = """
 
     width: 2px;
 
-    height: 83px;
+    height: 96px;
 
     background:
         rgba(255,255,255,0.65);
@@ -950,7 +1019,7 @@ header_html = """
 
     top: 0;
 
-    height: 95px;
+    height: 105px;
 
     display: flex;
 
@@ -1082,7 +1151,7 @@ header_html = """
 
     width: 15%;
 
-    height: 95px;
+    height: 105px;
 
     display: flex;
 
@@ -1121,7 +1190,7 @@ header_html = """
 
     width: 2px;
 
-    height: 83px;
+    height: 96px;
 
     background:
         rgba(255,255,255,0.65);
@@ -1218,7 +1287,7 @@ header_html = """
 
     width: 100%;
 
-    height: 12px;
+    height: 14px;
 
     background: #f28c00;
 
@@ -1362,7 +1431,6 @@ header_html = """
 
 """
 
-
 # ============================================================
 # INSERT LOGO
 # ============================================================
@@ -1371,7 +1439,6 @@ header_html = header_html.replace(
     "LOGO_IMAGE_BASE64",
     logo_base64
 )
-
 
 # ============================================================
 # INSERT DATE
@@ -1382,7 +1449,6 @@ header_html = header_html.replace(
     current_date
 )
 
-
 # ============================================================
 # INSERT TIME
 # ============================================================
@@ -1392,14 +1458,13 @@ header_html = header_html.replace(
     current_time
 )
 
-
 # ============================================================
 # DISPLAY HEADER
 # ============================================================
 
 components.html(
     header_html,
-    height=90,
+    height=120,
     scrolling=False
 )
 
@@ -1409,24 +1474,68 @@ components.html(
 st.markdown(
     """
 <style>
-/* The header is a Streamlit custom-component iframe.
-   Remove its default vertical footprint after the 90px header. */
+
+/* ============================================================
+   HEADER + FILTER GAP — FINAL
+   The blank area is created by the Streamlit custom-component
+   iframe footprint. Reduce that footprint directly.
+   ============================================================ */
+
 div[data-testid="stCustomComponentV1"] {
-    height: 90px !important;
-    min-height: 90px !important;
-    max-height: 90px !important;
-    margin: 0 0 -78px 0 !important;
+    height: 120px !important;
+    min-height: 120px !important;
+    max-height: 120px !important;
+
+    margin-top: 0 !important;
+    margin-bottom: -105px !important;
+
     padding: 0 !important;
+    overflow: visible !important;
 }
 
 div[data-testid="stCustomComponentV1"] iframe {
-    height: 90px !important;
-    min-height: 90px !important;
-    max-height: 90px !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    width: 100% !important;
+
+    height: 120px !important;
+    min-height: 120px !important;
+    max-height: 120px !important;
+
     display: block !important;
+
+    margin: 0 0 -105px 0 !important;
+    padding: 0 !important;
+
+    border: 0 !important;
 }
+
+/* Remove vertical spacing from the immediate Streamlit element
+   containing the header component. */
+div[data-testid="stElementContainer"]:has(
+    div[data-testid="stCustomComponentV1"]
+) {
+    margin-top: 0 !important;
+    margin-bottom: -105px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* Keep the main page itself at the top. */
+.block-container {
+    padding-top: 0 !important;
+}
+
+
+/* ============================================================
+   FILTER ROW POSITION
+   Pull the actual filter container upward into the unused
+   space below the header.
+   ============================================================ */
+.st-key-moc_filters {
+    margin-top: -82px !important;
+    padding-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -1475,7 +1584,7 @@ html, body, .stApp,
 [data-testid="stAppViewBlockContainer"] {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 24px 36px 32px !important;
+    padding: 8px 36px 32px !important;
     margin: 0 !important;
 }
 
@@ -1916,13 +2025,6 @@ html, body, [class*="st-"], button, input, textarea, select {
     margin-top: var(--dashboard-row-gap) !important;
 }
 
-/* Table → pagination */
-.pagination-spacer {
-    height: var(--dashboard-row-gap) !important;
-    min-height: var(--dashboard-row-gap) !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
 
 /* Protect filter labels. */
 .filter-label {
@@ -1968,7 +2070,7 @@ html, body, [class*="st-"], button, input, textarea, select {
 }
 
 /* ============================================================
-   TABLE
+   TABLE — SAME SCROLLING STYLE AS BOTTOM REGISTER
    ============================================================ */
 .table-shell {
     width: 100%;
@@ -1978,6 +2080,42 @@ html, body, [class*="st-"], button, input, textarea, select {
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(23,59,115,.045);
+}
+
+/* Top MOC Register: same compact scrollable behavior as the
+   MOC Completion Checklist Register below. */
+.table-shell.moc-register-scroll {
+    width: 100%;
+    height: 410px !important;
+    max-height: 410px !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: #8fa8bb #eef4f8;
+    border: 1px solid #cbdce8;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.table-shell.moc-register-scroll::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+.table-shell.moc-register-scroll::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: #8fa8bb;
+}
+
+.table-shell.moc-register-scroll::-webkit-scrollbar-track {
+    border-radius: 8px;
+    background: #eef4f8;
+}
+
+/* Keep the table itself at its natural height so the outer shell
+   provides the scrolling viewport. */
+.table-shell.moc-register-scroll .moc-table {
+    margin: 0;
 }
 
 .moc-table {
@@ -2108,80 +2246,6 @@ html, body, [class*="st-"], button, input, textarea, select {
     color: #9aa8b7;
 }
 
-/* ============================================================
-   PAGINATION
-   ============================================================ */
-.pagination-spacer {
-    width: 100%;
-    height: 15px;
-}
-
-.st-key-moc_pagination [data-testid="stHorizontalBlock"] {
-    align-items: center !important;
-}
-
-.pagination-info {
-    color: #64768c;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 32px;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    height: 32px;
-    text-align: right;
-    padding: 0 12px 0 0 !important;
-    margin: 0 !important;
-}
-
-.pagination-info strong {
-    color: var(--navy);
-    font-weight: 750;
-}
-
-.pagination-buttons {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.st-key-moc_pagination .pagination-buttons div.stButton > button,
-.st-key-moc_pagination div.stButton > button {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    max-width: 32px !important;
-    max-height: 32px !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    border-radius: 7px !important;
-    background: #ffffff !important;
-    border: 1px solid #d0dce8 !important;
-    color: var(--navy) !important;
-    font-size: 15px !important;
-    line-height: 30px !important;
-}
-
-.st-key-moc_pagination .pagination-buttons div.stButton > button:disabled,
-.st-key-moc_pagination div.stButton > button:disabled {
-    opacity: .38 !important;
-}
-
-.st-key-moc_pagination [data-testid="stHorizontalBlock"] {
-    align-items: center !important;
-    gap: 8px !important;
-}
-
-/* Remove accidental widget label spacing */
-div[data-testid="stButton"] > div {
-    margin: 0 !important;
-}
-
 @media (max-width: 1050px) {
     .block-container {
         padding-left: 18px !important;
@@ -2248,100 +2312,101 @@ def render_dashboard():
     # --------------------------------------------------------
     # Top filters
     # --------------------------------------------------------
-    fy_col, month_col, dept_col, reset_col = st.columns(
-        [1, 1, 1, 0.27],
-        gap="small",
-    )
-
-    with fy_col:
-        st.markdown(
-            "<div class='filter-label'>Financial Year</div>",
-            unsafe_allow_html=True,
+    with st.container(key="moc_filters"):
+        fy_col, month_col, dept_col, reset_col = st.columns(
+            [1, 1, 1, 0.27],
+            gap="small",
         )
 
-        selected_year = st.selectbox(
-            "Financial Year",
-            year_options,
-            key="moc_year",
-            on_change=reset_dependent_filters,
-            label_visibility="collapsed",
+        with fy_col:
+            st.markdown(
+                "<div class='filter-label'>Financial Year</div>",
+                unsafe_allow_html=True,
+            )
+
+            selected_year = st.selectbox(
+                "Financial Year",
+                year_options,
+                key="moc_year",
+                on_change=reset_dependent_filters,
+                label_visibility="collapsed",
+            )
+
+        fy_df = df[df["Financial Year"] == selected_year].copy()
+
+        month_rows = (
+            fy_df[["Month Key", "Month Display"]]
+            .dropna(subset=["Month Key"])
+            .drop_duplicates()
+            .sort_values("Month Key", ascending=False)
         )
 
-    fy_df = df[df["Financial Year"] == selected_year].copy()
+        month_options = ["All Months"] + month_rows["Month Display"].tolist()
 
-    month_rows = (
-        fy_df[["Month Key", "Month Display"]]
-        .dropna(subset=["Month Key"])
-        .drop_duplicates()
-        .sort_values("Month Key", ascending=False)
-    )
+        if st.session_state["moc_month"] not in month_options:
+            st.session_state["moc_month"] = "All Months"
 
-    month_options = ["All Months"] + month_rows["Month Display"].tolist()
+        with month_col:
+            st.markdown(
+                "<div class='filter-label'>Month</div>",
+                unsafe_allow_html=True,
+            )
 
-    if st.session_state["moc_month"] not in month_options:
-        st.session_state["moc_month"] = "All Months"
+            selected_month = st.selectbox(
+                "Month",
+                month_options,
+                key="moc_month",
+                on_change=reset_page,
+                label_visibility="collapsed",
+            )
 
-    with month_col:
-        st.markdown(
-            "<div class='filter-label'>Month</div>",
-            unsafe_allow_html=True,
+        dept_source = fy_df.copy()
+
+        if selected_month != "All Months":
+            dept_source = dept_source[
+                dept_source["Month Display"] == selected_month
+                ]
+
+        department_values = sorted(
+            {
+                clean_text(value)
+                for value in dept_source["Department"].dropna()
+                if clean_text(value)
+            },
+            key=str.lower,
         )
 
-        selected_month = st.selectbox(
-            "Month",
-            month_options,
-            key="moc_month",
-            on_change=reset_page,
-            label_visibility="collapsed",
-        )
+        department_options = ["All Departments"] + department_values
 
-    dept_source = fy_df.copy()
+        if st.session_state["moc_department"] not in department_options:
+            st.session_state["moc_department"] = "All Departments"
 
-    if selected_month != "All Months":
-        dept_source = dept_source[
-            dept_source["Month Display"] == selected_month
-        ]
+        with dept_col:
+            st.markdown(
+                "<div class='filter-label'>Department</div>",
+                unsafe_allow_html=True,
+            )
 
-    department_values = sorted(
-        {
-            clean_text(value)
-            for value in dept_source["Department"].dropna()
-            if clean_text(value)
-        },
-        key=str.lower,
-    )
+            selected_department = st.selectbox(
+                "Department",
+                department_options,
+                key="moc_department",
+                on_change=reset_page,
+                label_visibility="collapsed",
+            )
 
-    department_options = ["All Departments"] + department_values
-
-    if st.session_state["moc_department"] not in department_options:
-        st.session_state["moc_department"] = "All Departments"
-
-    with dept_col:
-        st.markdown(
-            "<div class='filter-label'>Department</div>",
-            unsafe_allow_html=True,
-        )
-
-        selected_department = st.selectbox(
-            "Department",
-            department_options,
-            key="moc_department",
-            on_change=reset_page,
-            label_visibility="collapsed",
-        )
-
-    with reset_col:
-        st.markdown(
-            "<div class='top-reset-spacer'></div>",
-            unsafe_allow_html=True,
-        )
-        st.button(
-            "↻",
-            use_container_width=True,
-            key="reset_moc_filters",
-            help="Reset all MOC filters",
-            on_click=reset_moc_filters,
-        )
+        with reset_col:
+            st.markdown(
+                "<div class='top-reset-spacer'></div>",
+                unsafe_allow_html=True,
+            )
+            st.button(
+                "↻",
+                use_container_width=True,
+                key="reset_moc_filters",
+                help="Reset all MOC filters",
+                on_click=reset_moc_filters,
+            )
 
     # --------------------------------------------------------
     # Apply filters
@@ -2351,13 +2416,13 @@ def render_dashboard():
     if selected_month != "All Months":
         filtered_df = filtered_df[
             filtered_df["Month Display"] == selected_month
-        ].copy()
+            ].copy()
 
     if selected_department != "All Departments":
         filtered_df = filtered_df[
             filtered_df["Department"].map(clean_text)
             == selected_department
-        ].copy()
+            ].copy()
 
     # --------------------------------------------------------
     # KPI
@@ -2427,8 +2492,8 @@ def render_dashboard():
     ]
 
     for column, (label, value, sub, accent) in zip(
-        first_row_columns,
-        first_row_cards,
+            first_row_columns,
+            first_row_cards,
     ):
         with column:
             st.markdown(
@@ -2479,8 +2544,8 @@ def render_dashboard():
         ]
 
         for column, (label, value, sub, accent) in zip(
-            second_row_columns,
-            second_row_cards,
+                second_row_columns,
+                second_row_cards,
         ):
             with column:
                 st.markdown(
@@ -2495,6 +2560,12 @@ def render_dashboard():
                     """,
                     unsafe_allow_html=True,
                 )
+
+    # ============================================================
+    # MOC CATEGORIES OF CHANGE
+    # Placed immediately below the existing header and above
+    # the Financial Year / Month / Department filters.
+    # ============================================================
 
     # --------------------------------------------------------
     # MOC CHANGE ANALYSIS - DONUT CHARTS
@@ -2613,9 +2684,9 @@ def render_dashboard():
 
         with all_col:
             if st.button(
-                "All",
-                use_container_width=True,
-                key="moc_all",
+                    "All",
+                    use_container_width=True,
+                    key="moc_all",
             ):
                 st.session_state["moc_status_filter"] = "All"
                 st.session_state["moc_page"] = 1
@@ -2623,9 +2694,9 @@ def render_dashboard():
 
         with closed_col:
             if st.button(
-                "Closed",
-                use_container_width=True,
-                key="moc_closed",
+                    "Closed",
+                    use_container_width=True,
+                    key="moc_closed",
             ):
                 st.session_state["moc_status_filter"] = "Closed"
                 st.session_state["moc_page"] = 1
@@ -2633,9 +2704,9 @@ def render_dashboard():
 
         with open_col:
             if st.button(
-                "Open",
-                use_container_width=True,
-                key="moc_open",
+                    "Open",
+                    use_container_width=True,
+                    key="moc_open",
             ):
                 st.session_state["moc_status_filter"] = "Open"
                 st.session_state["moc_page"] = 1
@@ -2643,10 +2714,10 @@ def render_dashboard():
 
         with refresh_col:
             if st.button(
-                "↻",
-                use_container_width=True,
-                key="moc_refresh",
-                help="Refresh data from Google Sheet",
+                    "↻",
+                    use_container_width=True,
+                    key="moc_refresh",
+                    help="Refresh data from Google Sheet",
             ):
                 get_moc_data.clear()
                 st.session_state["moc_page"] = 1
@@ -2702,30 +2773,12 @@ def render_dashboard():
         ].copy()
 
     # --------------------------------------------------------
-    # Pagination
+    # SCROLLABLE REGISTER
+    # Show all filtered MOC records in one scrollable register,
+    # matching the bottom MOC Completion Checklist Register.
     # --------------------------------------------------------
     total_entries = len(display_df)
-
-    total_pages = max(
-        1,
-        (total_entries + ROWS_PER_PAGE - 1)
-        // ROWS_PER_PAGE,
-    )
-
-    if st.session_state["moc_page"] > total_pages:
-        st.session_state["moc_page"] = total_pages
-
-    page_number = st.session_state["moc_page"]
-
-    start_index = (
-        page_number - 1
-    ) * ROWS_PER_PAGE
-
-    end_index = start_index + ROWS_PER_PAGE
-
-    page_df = display_df.iloc[
-        start_index:end_index
-    ].copy()
+    page_df = display_df.copy()
 
     # --------------------------------------------------------
     # HTML table
@@ -2852,7 +2905,7 @@ def render_dashboard():
     # The HTML is emitted as one compact string. This prevents
     # Streamlit from rendering tags such as <thead>/<tr> as text.
     table_html = (
-        '<div class="table-shell">'
+        '<div class="table-shell moc-register-scroll">'
         '<table class="moc-table">'
         "<colgroup>"
         '<col style="width:11%;">'
@@ -2885,76 +2938,6 @@ def render_dashboard():
         table_html,
         unsafe_allow_html=True,
     )
-
-    # --------------------------------------------------------
-    # Bottom-right pagination
-    # --------------------------------------------------------
-    page_to = min(
-        end_index,
-        total_entries,
-    )
-
-    if total_entries:
-        records_text = (
-            f"{page_to} of {total_entries} records"
-        )
-    else:
-        records_text = "0 of 0 records"
-
-    with st.container(key="moc_pagination"):
-        # Extra breathing room keeps navigation visually separated
-        # from the table. The controls share one horizontal baseline.
-        st.markdown(
-            '<div class="pagination-spacer"></div>',
-            unsafe_allow_html=True,
-        )
-
-        p_spacer, p_info, p_prev, p_next = st.columns(
-            [7.55, 2.15, 0.42, 0.42],
-            gap="small",
-        )
-
-        with p_info:
-            st.markdown(
-                f"""
-                <div class=\"pagination-info\">
-                    <strong>{records_text}</strong>
-                    &nbsp;&nbsp;·&nbsp;&nbsp;
-                    Page&nbsp;<strong>{page_number}</strong>
-                    &nbsp;of&nbsp;<strong>{total_pages}</strong>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with p_prev:
-            if st.button(
-                "‹",
-                use_container_width=True,
-                key="moc_previous",
-                disabled=(page_number <= 1),
-                help="Previous page",
-            ):
-                st.session_state["moc_page"] = max(
-                    1,
-                    page_number - 1,
-                )
-                st.rerun()
-
-        with p_next:
-            if st.button(
-                "›",
-                use_container_width=True,
-                key="moc_next",
-                disabled=(page_number >= total_pages),
-                help="Next page",
-            ):
-                st.session_state["moc_page"] = min(
-                    total_pages,
-                    page_number + 1,
-                )
-                st.rerun()
-
 
     # --------------------------------------------------------
     # SECOND REGISTER — MOC NO. + COMPLETION CHECKLIST
@@ -3172,33 +3155,56 @@ def render_dashboard():
             font-size:11px;
         }}
         table.moc-checklist-table th {{
-            position:relative;
-            background:#07518b;
-            color:#fff;
-            font-weight:850;
-            text-align:center;
+            position:sticky;
+            top:0;
+            z-index:11;
+            background:#eaf3fb;
+            color:#173f70;
+            font-weight:750;
+            text-align:left;
             vertical-align:middle;
-            padding:5px 4px;
-            border:1px solid #073f78;
-            line-height:1.05;
+            padding:11px 10px;
+            border-right:1px solid #d7e3ee;
+            border-bottom:1px solid #cbd9e6;
+            border-top:0;
+            border-left:0;
+            font-size:12px;
+            line-height:1.28;
             white-space:normal;
             overflow-wrap:anywhere;
             user-select:none;
         }}
         table.moc-checklist-table td {{
-            height:29px;
-            padding:4px 4px;
-            border:1px solid #d3dee6;
+            height:40px;
+            min-height:40px;
+            padding:5px 8px;
+            border-right:1px solid #e1e8ef;
+            border-bottom:1px solid #e3e9ef;
+            border-top:0;
+            border-left:0;
             background:#fff;
             text-align:center;
             vertical-align:middle;
-            font-size:11px;
-            color:#173f70;
+            box-sizing:border-box;
+            font-size:11.5px;
+            font-weight:500;
+            color:#315071;
+            line-height:1.28;
+            overflow-wrap:anywhere;
+        }}
+
+        table.moc-checklist-table tbody tr {{
+            height:40px;
+        }}
+
+        table.moc-checklist-table tbody tr:nth-child(even) td {{
+            background:#fbfcfe;
         }}
         table.moc-checklist-table td.moc-check-mocno {{
             text-align:left;
-            font-weight:800;
-            font-size:10.5px;
+            font-weight:650;
+            font-size:11.5px;
+            color:#173f70;
             white-space:normal;
             overflow-wrap:anywhere;
         }}
@@ -3209,23 +3215,24 @@ def render_dashboard():
         }}
         table.moc-checklist-table td.moc-check-description {{
             text-align:left;
-            color:#173f70;
+            color:#315071;
             white-space:normal;
             overflow-wrap:anywhere;
-            font-size:10.5px;
-            line-height:1.25;
+            font-size:11.5px;
+            font-weight:500;
+            line-height:1.15;
         }}
         .moc-check-done {{ background:#f7fff9 !important; }}
         .moc-check-blank {{ background:#fffafa !important; }}
         .moc-check-mark {{
             color:#16a34a;
-            font-size:15px;
+            font-size:16px;
             line-height:1;
             font-weight:950;
         }}
         .moc-cross-mark {{
             color:#d71920;
-            font-size:14px;
+            font-size:15px;
             line-height:1;
             font-weight:900;
         }}
@@ -3252,8 +3259,12 @@ def render_dashboard():
             z-index:10;
         }}
         .moc-checklist-table th:first-child {{
-            z-index:12;
-            background:#07518b;
+            position:sticky;
+            top:0;
+            left:0;
+            z-index:20;
+            background:#eaf3fb;
+            color:#173f70;
         }}
         .moc-checklist-table td:first-child {{
             background:#fff;
@@ -3341,7 +3352,6 @@ def render_dashboard():
         )
 
 
-
 # Keep the checklist column definitions available for the dynamic width CSS.
 # This is intentionally defined at module scope so it is available even when
 # the filtered checklist dataframe is empty.
@@ -3363,7 +3373,6 @@ checklist_columns = [
     ("All action items closed", ["All action items closed"]),
     ("Records archived", ["Records archived"]),
 ]
-
 
 st.markdown(
     """
@@ -3393,7 +3402,7 @@ st.markdown(
     }
 
     .moc-checklist-table th {
-        background: #07518b;
+        background: #073b63;
         color: #ffffff;
         font-weight: 850;
         text-align: center;
@@ -3493,12 +3502,12 @@ st.markdown(
         color: #8a98a9;
         font-size: 11px;
     }
+
+
     </style>
     """,
     unsafe_allow_html=True,
 )
-
-
 
 st.markdown(
     '''
@@ -3551,7 +3560,140 @@ st.markdown(
         margin-top: 14px !important;
     }
 
-    .donut-card {
+
+.moc-full-inside-graph {
+    min-height: 130px;
+    margin: 7px 8px 8px 8px;
+    padding-top: 6px;
+    border-top: 1px solid #dbe4ef;
+}
+
+.moc-inside-title {
+    font-size: 10px;
+    font-weight: 800;
+    color: #173f70;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+
+.moc-inside-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-family: Arial, sans-serif;
+}
+
+.moc-inside-table th,
+.moc-inside-table td {
+    border: 1px solid #344054;
+    padding: 5px 6px;
+    vertical-align: middle;
+    overflow-wrap: break-word;
+}
+
+.moc-inside-table th {
+    height: 29px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.moc-inside-table td {
+    font-size: 8px;
+    line-height: 1.25;
+}
+
+.moc-inside-table th:nth-child(1),
+.moc-inside-table td:nth-child(1) {
+    width: 13%;
+}
+
+.moc-inside-table th:nth-child(2),
+.moc-inside-table td:nth-child(2),
+.moc-inside-table th:nth-child(3),
+.moc-inside-table td:nth-child(3),
+.moc-inside-table th:nth-child(4),
+.moc-inside-table td:nth-child(4) {
+    width: 29%;
+}
+
+.moc-inside-label {
+    background: #E6E9ED !important;
+    text-align: center;
+    font-weight: 700;
+    font-size: 9px !important;
+}
+
+.moc-inside-permanent {
+    background: #B9DFFA !important;
+}
+
+.moc-inside-temporary {
+    background: #FFF0A8 !important;
+}
+
+.moc-inside-emergency {
+    background: #F8C5CC !important;
+}
+
+.moc-inside-permanent-body {
+    background: #E3F2FC !important;
+}
+
+.moc-inside-temporary-body {
+    background: #FFF8D9 !important;
+}
+
+.moc-inside-emergency-body {
+    background: #FCE5E8 !important;
+}
+
+
+.moc-category-reference {
+    min-height: 130px;
+    margin: 7px 8px 8px 8px;
+    padding: 7px 8px 8px 8px;
+    border-top: 1px solid #dbe4ef;
+    color: #172033;
+    font-family: Arial, sans-serif;
+}
+
+.moc-category-reference-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #173f70;
+    margin-bottom: 6px;
+}
+
+.moc-category-reference-item {
+    margin-bottom: 6px;
+}
+
+.moc-category-reference-heading {
+    font-size: 9.5px;
+    line-height: 1.25;
+    font-weight: 800;
+    color: #172033;
+    margin-bottom: 2px;
+}
+
+.moc-category-reference-text {
+    font-size: 8.5px;
+    line-height: 1.28;
+    color: #26384d;
+    text-align: left;
+}
+
+.moc-category-reference-item:last-child {
+    margin-bottom: 0;
+}
+
+.donut-card {
+    height: 430px;
+    min-height: 430px;
+    max-height: 430px;
+    overflow: hidden;
+
         width: 100%;
         min-height: 235px;
         box-sizing: border-box;
@@ -3572,6 +3714,8 @@ st.markdown(
     }
 
     .donut-content {
+    min-height: 210px;
+    height: 210px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3933,7 +4077,299 @@ st.markdown(
     .kpi-card {
         transform: none !important;
     }
-    </style>
+
+
+/* ============================================================
+   MOC CATEGORIES OF CHANGE - REFERENCE TABLE
+   ============================================================ */
+
+.moc-category-section {
+    display: block;
+    width: 100%;
+    border: 2px solid #3978B8;
+    border-radius: 16px;
+    padding: 6px;
+    margin: 0 auto 6px auto;
+    background: #FFFFFF;
+    overflow: hidden;
+}
+
+.moc-category-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+    padding: 0;
+}
+
+.moc-category-table th,
+.moc-category-table td {
+    border: 1.5px solid #344054;
+    padding: 8px 9px;
+    vertical-align: middle;
+    font-size: 13px;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+}
+
+.moc-category-table th:nth-child(1),
+.moc-category-table td:nth-child(1) {
+    width: 18%;
+}
+
+.moc-category-table th:nth-child(2),
+.moc-category-table td:nth-child(2) {
+    width: 27.33%;
+}
+
+.moc-category-table th:nth-child(3),
+.moc-category-table td:nth-child(3) {
+    width: 27.33%;
+}
+
+.moc-category-table th:nth-child(4),
+.moc-category-table td:nth-child(4) {
+    width: 27.34%;
+}
+
+.moc-category-table th {
+    height: 52px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.moc-category-table td:first-child {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.moc-header-category,
+.moc-definition-label,
+.moc-timeline-label {
+    background: #E6E9ED !important;
+}
+
+.moc-header-permanent {
+    background: #B9DFFA !important;
+}
+
+.moc-permanent-definition,
+.moc-permanent-timeline {
+    background: #E3F2FC !important;
+}
+
+.moc-header-temporary {
+    background: #FFF0A8 !important;
+}
+
+.moc-temporary-definition,
+.moc-temporary-timeline {
+    background: #FFF8D9 !important;
+}
+
+.moc-header-emergency {
+    background: #F8C5CC !important;
+}
+
+.moc-emergency-definition,
+.moc-emergency-timeline {
+    background: #FCE5E8 !important;
+}
+
+@media screen and (max-width: 1000px) {
+    .moc-category-section {
+        padding: 8px;
+    }
+
+    .moc-category-table th,
+    .moc-category-table td {
+        font-size: 14px;
+        padding: 10px 8px;
+    }
+
+    .moc-category-table th {
+        font-size: 16px;
+    }
+
+    .moc-category-table td:first-child {
+        font-size: 16px;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .moc-category-section {
+        padding: 5px;
+        border-radius: 10px;
+    }
+
+    .moc-category-table th,
+    .moc-category-table td {
+        font-size: 11px;
+        padding: 6px 4px;
+        line-height: 1.4;
+    }
+
+    .moc-category-table th {
+        font-size: 12px;
+    }
+
+    .moc-category-table td:first-child {
+        font-size: 12px;
+    }
+}
+
+
+/* Prevent MOC category section from overlapping the KPI cards */
+.moc-category-section {
+    position: relative !important;
+    display: block !important;
+    clear: both !important;
+    margin-top: 18px !important;
+    margin-bottom: 18px !important;
+    z-index: 1 !important;
+}
+
+
+
+
+/* ============================================================
+   MOC REGISTER — FINAL PAGINATION POSITION
+   Keep pagination below the table. Reduce only the space after it.
+   ============================================================ */
+
+.st-key-moc_pagination {
+    margin-top: 0 !important;
+    margin-bottom: -8px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.st-key-moc_pagination [data-testid="stHorizontalBlock"] {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.st-key-moc_pagination .pagination-spacer {
+    height: 8px !important;
+    min-height: 8px !important;
+    max-height: 8px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.block-container {
+    padding-bottom: 0 !important;
+}
+
+
+
+
+
+
+/* Apply scrolling directly to the MOC Register table shell. */
+.table-shell.moc-register-scroll {
+    max-height: 360px !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+}
+
+
+/* ============================================================
+   FINAL REGISTER TITLE + TEXT SIZE OVERRIDES
+   ============================================================ */
+
+/* Section title bars — both register headings */
+.section-heading,
+.section-heading.moc-detail-heading {
+    background: #073b63 !important;
+    color: #ffffff !important;
+    border-color: #073b63 !important;
+}
+
+/* Actual title text inside both heading bars */
+.section-heading .section-title {
+    color: #ffffff !important;
+    font-size: 20px !important;
+    line-height: 1.15 !important;
+    font-weight: 750 !important;
+}
+
+/* Top MOC Register — reduce table text */
+table.moc-table th,
+table.moc-table td {
+    font-size: 10.5px !important;
+    line-height: 1.15 !important;
+}
+
+table.moc-table th {
+    font-size: 10.5px !important;
+    padding: 7px 8px !important;
+}
+
+/* Bottom Checklist Register — reduce table text */
+table.moc-checklist-table th,
+table.moc-checklist-table td {
+    font-size: 10.5px !important;
+    line-height: 1.12 !important;
+}
+
+table.moc-checklist-table th {
+    font-size: 10.5px !important;
+    padding: 7px 8px !important;
+}
+
+table.moc-checklist-table td.moc-check-mocno {
+    font-size: 10.5px !important;
+}
+
+table.moc-checklist-table td.moc-check-description {
+    font-size: 10.5px !important;
+    line-height: 1.12 !important;
+}
+
+
+/* ============================================================
+   TOP MOC REGISTER — STICKY SUB-HEADER
+   The table scrolls inside .moc-register-scroll, so keep the
+   column header fixed while the rows move underneath it.
+   ============================================================ */
+
+.table-shell.moc-register-scroll {
+    position: relative !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+}
+
+/* Keep TOP MOC Register column headers fixed during vertical scroll */
+.table-shell.moc-register-scroll table.moc-table thead th,
+.table-shell.moc-register-scroll table.moc-table tr:first-child th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    background: #eaf3fb !important;
+    color: #173f70 !important;
+}
+
+/* Make the header visually opaque so table rows cannot show through */
+.table-shell.moc-register-scroll table.moc-table thead th::after,
+.table-shell.moc-register-scroll table.moc-table tr:first-child th::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: -1 !important;
+    background: #eaf3fb !important;
+}
+
+/* Preserve the table's horizontal scrolling */
+.table-shell.moc-register-scroll table.moc-table {
+    position: relative !important;
+}
+
+</style>
     ''',
     unsafe_allow_html=True,
 )
@@ -3950,6 +4386,7 @@ if hasattr(st, "fragment"):
     @st.fragment(run_every=f"{DATA_REFRESH_SECONDS}s")
     def _moc_dashboard_fragment():
         render_dashboard()
+
 
     _moc_dashboard_fragment()
 else:
