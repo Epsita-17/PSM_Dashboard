@@ -1,3 +1,4 @@
+
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
@@ -486,6 +487,154 @@ for month in months_25:
         journey25_week_header += f"""
             <th class="week-header-fy25">{week}</th>
         """
+
+# ============================================================
+# FY26-27 JOURNEY PLAN - SAME FORMAT AS FY25-26
+# Source: supplied FY26-27 Journey Plan image
+# ============================================================
+
+# 48 weeks: Apr-26 to Mar-27, 4 weeks per month.
+fy26_activities = [
+    "PT",
+    "PHA",
+    "LOPA",
+    "Bow Tie",
+    "OP",
+    "MOC",
+    "PSSR",
+    "MIQA",
+    "Incident Investigation",
+    "EPRP",
+]
+
+# Plan bars: blue
+fy26_plan_data = {
+    "PT": [(1, 4, "2nd PT"), (17, 4, "3rd PT"), (33, 4, "4th PT")],
+    "PHA": [(5, 12, "2nd PHA"), (21, 12, "3rd PHA"), (37, 12, "4th PHA")],
+    "LOPA": [(13, 4, "For 2nd PHA"), (29, 4, "For 3rd PHA"), (45, 4, "For 4th PHA")],
+    "Bow Tie": [(13, 4, "For 2nd PHA"), (29, 4, "For 3rd PHA"), (45, 4, "For 4th PHA")],
+    "OP": [(1, 4, "1st OP"), (33, 4, "2nd OP")],
+    "MOC": [(1, 8, "MOC Training")],
+    "PSSR": [(1, 4, "PSSR Training")],
+    "MIQA": [(21, 16, "MIQA Training")],
+    "Incident Investigation": [(37, 12, "")],
+    "EPRP": [(37, 12, "")],
+}
+
+# Actual bars reproduced from the supplied image.
+# Green = completed/actual green blocks.
+fy26_actual_green_data = {
+    "PT": [(1, 4, ""),],
+    "OP": [(1, 4, ""),],
+    "MOC": [(1, 8, ""),],
+    "PSSR": [(1, 4, ""),],
+    "MIQA": [(21, 4, ""),],
+}
+
+# Yellow actual blocks shown in the supplied image.
+fy26_actual_yellow_data = {
+    "PT": [(17, 4, ""),],
+    "PHA": [(5, 12, ""), (21, 12, "")],
+    "LOPA": [(13, 4, ""), (29, 4, "")],
+    "Bow Tie": [(13, 4, ""), (29, 4, "")],
+}
+
+def _fy26_cells(activity, bars, bar_class):
+    html = ""
+    current_week = 1
+
+    for start, duration, label in bars:
+        while current_week < start:
+            html += '<td class="roadmap-week-fy26 empty"></td>'
+            current_week += 1
+
+        html += f"""
+            <td class="roadmap-week-fy26 {bar_class}" colspan="{duration}">
+                {label}
+            </td>
+        """
+        current_week += duration
+
+    while current_week <= 48:
+        html += '<td class="roadmap-week-fy26 empty"></td>'
+        current_week += 1
+
+    return html
+
+def create_fy26_roadmap_rows():
+    rows = ""
+
+    for activity in fy26_activities:
+
+        # PLAN
+        rows += f"""
+        <tr>
+            <td class="activity-name-fy26" rowspan="2">{activity}</td>
+            <td class="plan-actual-cell-fy26">Plan</td>
+        """
+        rows += _fy26_cells(
+            activity,
+            fy26_plan_data.get(activity, []),
+            "journey-plan-bar-fy26"
+        )
+        rows += "</tr>"
+
+        # ACTUAL
+        rows += """
+        <tr>
+            <td class="plan-actual-cell-fy26">Actual</td>
+        """
+
+        green = fy26_actual_green_data.get(activity, [])
+        yellow = fy26_actual_yellow_data.get(activity, [])
+
+        # Build actual row week-by-week so green/yellow bars can coexist.
+        current_week = 1
+        actual_bars = []
+
+        for start, duration, label in green:
+            actual_bars.append((start, duration, label, "journey-actual-green-fy26"))
+
+        for start, duration, label in yellow:
+            actual_bars.append((start, duration, label, "journey-actual-yellow-fy26"))
+
+        actual_bars.sort(key=lambda x: x[0])
+
+        for start, duration, label, cls in actual_bars:
+            while current_week < start:
+                rows += '<td class="roadmap-week-fy26 empty"></td>'
+                current_week += 1
+
+            rows += f"""
+                <td class="roadmap-week-fy26 {cls}" colspan="{duration}">
+                    {label}
+                </td>
+            """
+            current_week += duration
+
+        while current_week <= 48:
+            rows += '<td class="roadmap-week-fy26 empty"></td>'
+            current_week += 1
+
+        rows += "</tr>"
+
+    return rows
+
+fy26_roadmap_rows = create_fy26_roadmap_rows()
+
+fy26_month_header = ""
+for month in months:
+    fy26_month_header += f"""
+        <th class="month-header-fy26" colspan="4">{month}</th>
+    """
+
+fy26_week_header = ""
+for month in months:
+    for week in range(1, 5):
+        fy26_week_header += f"""
+            <th class="week-header-fy26">{week}</th>
+        """
+
 
 # ============================================================
 # COMPLETE DASHBOARD HTML
@@ -1036,6 +1185,150 @@ body {{
 
 
 /* ============================================================
+   FY26-27 JOURNEY PLAN - SAME FORMAT AS FY25-26
+   ============================================================ */
+
+.roadmap-table-fy26 {{
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin-top: 12px;
+}}
+
+.activities-header-fy26 {{
+    width: 12%;
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.plan-header-fy26 {{
+    width: 4%;
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.month-header-fy26 {{
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    height: 42px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+    white-space: nowrap;
+}}
+
+.week-header-fy26 {{
+    background: #b9dce9 !important;
+    border: 1px solid #000000;
+    color: #000000;
+    height: 25px;
+    font-size: 8px;
+    font-weight: 600;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.activity-name-fy26 {{
+    width: 12%;
+    height: 40px;
+    background: #ffffff;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0 2px;
+    white-space: nowrap;
+    overflow: hidden;
+}}
+
+.plan-actual-cell-fy26 {{
+    width: 4%;
+    height: 20px;
+    background: #ffffff;
+    border: 1px solid #000000;
+    color: #000000;
+    font-size: 9px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+}}
+
+.roadmap-week-fy26 {{
+    height: 20px;
+    border: 1px solid #000000;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    vertical-align: middle;
+    overflow: hidden;
+}}
+
+.roadmap-week-fy26.empty {{
+    background: #ffffff;
+}}
+
+.journey-plan-bar-fy26 {{
+    background: #17617e !important;
+    color: #ffffff !important;
+    border: 1px solid #000000 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+.journey-actual-green-fy26 {{
+    background: #00b050 !important;
+    color: #ffffff !important;
+    border: 1px solid #000000 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+.journey-actual-yellow-fy26 {{
+    background: #ffff00 !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 2px;
+}}
+
+
+/* ============================================================
    FY 25-26 ROADMAP
    ============================================================ */
 
@@ -1490,64 +1783,42 @@ body {{
 
 
 <!-- ============================================================
-     SECTION 3 - ROADMAP
+     SECTION 3 - ROADMAP FY26-27
+     Same table format as FY25-26 Journey Plan
 ============================================================= -->
 
 <div class="roadmap-section">
 
-
     <div class="roadmap-red-line"></div>
 
-
     <div class="roadmap-title">
-        Roadmap (FY26-27)
+        Journey Plan (FY26-27)
     </div>
 
-
-    <table class="roadmap-table">
-
-
-        <!-- ====================================================
-             MONTH HEADER
-        ===================================================== -->
+    <table class="roadmap-table-fy26">
 
         <tr>
-
-            <th
-                class="activities-header"
-                rowspan="2"
-            >
+            <th class="activities-header-fy26" rowspan="2">
                 Activities
             </th>
 
-            {month_header}
+            <th class="plan-header-fy26" rowspan="2">
+                Status
+            </th>
+
+            {fy26_month_header}
 
         </tr>
-
-
-        <!-- ====================================================
-             WEEK HEADER
-        ===================================================== -->
 
         <tr>
-
-            {week_header}
-
+            {fy26_week_header}
         </tr>
 
-
-        <!-- ====================================================
-             ROADMAP DATA
-        ===================================================== -->
-
-        {roadmap_rows}
-
+        {fy26_roadmap_rows}
 
     </table>
 
-
 </div>
-
 
 
 <!-- ============================================================
@@ -1605,3 +1876,4 @@ components.html(
     height=3100,
     scrolling=False
 )
+
