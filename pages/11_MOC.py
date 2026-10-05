@@ -3689,20 +3689,24 @@ st.markdown(
 }
 
 .donut-card {
-    height: 430px;
-    min-height: 430px;
-    max-height: 430px;
+    width: calc(100% + 8px);
+    margin-left: -4px;
+
+    height: 450px;
+    min-height: 450px;
+    max-height: 450px;
+
+    box-sizing: border-box;
     overflow: hidden;
 
-        width: 100%;
-        min-height: 235px;
-        box-sizing: border-box;
-        background: #ffffff;
-        border: 1px solid var(--border);
-        border-radius: 9px;
-        padding: 14px 18px;
-        box-shadow: 0 3px 10px rgba(23,59,115,.055);
-    }
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+
+    padding: 16px 20px;
+
+    box-shadow: 0 3px 10px rgba(23,59,115,.055);
+}
 
     .donut-title {
         color: var(--navy);
