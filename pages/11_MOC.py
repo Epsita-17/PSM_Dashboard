@@ -1541,6 +1541,7 @@ div[data-testid="stElementContainer"]:has(
     unsafe_allow_html=True,
 )
 
+
 # ============================================================
 # CSS
 # ============================================================
@@ -1576,16 +1577,36 @@ html, body, .stApp,
     font-family: "Segoe UI", Arial, sans-serif !important;
 }
 
-.stApp * {
-    font-family: "Segoe UI", Arial, sans-serif;
-}
+
 .block-container,
 [data-testid="stMainBlockContainer"],
 [data-testid="stAppViewBlockContainer"] {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 8px 36px 32px !important;
+    padding: 0 36px 32px !important;
     margin: 0 !important;
+}
+
+/* Move dashboard completely to the top */
+header[data-testid="stHeader"] {
+    display: none !important;
+    height: 0 !important;
+}
+/* Keep sidebar collapse arrow above dashboard header */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    position: relative !important;
+    z-index: 999999 !important;
+}
+[data-testid="stSidebar"] {
+    z-index: 999998 !important;
+}
+
+[data-testid="stSidebarCollapseButton"] {
+    z-index: 999999 !important;
+}
+[data-testid="stToolbar"] {
+    display: none !important;
 }
 
 [data-testid="stHorizontalBlock"] {
@@ -1901,7 +1922,7 @@ div[data-testid="stTextInput"] > div > div {
    REFERENCE TYPOGRAPHY
    Clean modern sans-serif matching the supplied reference.
    ============================================================ */
-html, body, [class*="st-"], button, input, textarea, select {
+html, body, button, input, textarea, select {
     font-family: "Segoe UI", Arial, sans-serif !important;
 }
 
