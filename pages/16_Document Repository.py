@@ -727,6 +727,22 @@ components.html(
     scrolling=False
 )
 
+st.markdown(
+    """
+    <style>
+
+    /* =========================================================
+       MOVE DOCUMENT REPOSITORY HEADER UP
+       ========================================================= */
+
+    div.element-container:has(iframe) {
+        margin-top: -35px !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # -----------------------------
@@ -771,11 +787,7 @@ st.markdown(
         zoom: 0.82;
     }
 
-    /* Hide sidebar completely */
-    [data-testid="stSidebar"] {
-        display: none;
-    }
-
+ 
     /* ---------- Horizontal year selector ---------- */
     .year-inline-label {
         font-size: 15px;
@@ -1215,6 +1227,7 @@ st.markdown(
         padding-top: 0 !important;
         padding-bottom: 0 !important;
     }
+    
     </style>
     """,
     unsafe_allow_html=True,
