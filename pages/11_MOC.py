@@ -2173,6 +2173,21 @@ html, body, button, input, textarea, select {
     background: #fdecec;
 }
 
+.moc-category {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.category-technology { color: #137dcc; background: #eaf4ff; }
+.category-personnel { color: #8057e8; background: #f1eaff; }
+.category-facility { color: #159447; background: #e8f7ee; }
+.category-other { color: #526477; background: #eef2f6; }
+
 .moc-table th {
     background: var(--blue-soft);
     color: var(--navy);
@@ -2757,6 +2772,8 @@ def render_dashboard():
             "Department",
             "Section",
             "Requestor Name",
+            "Change Type (Permanent/Temporary/Emergency)",
+            "Category of changes (Technology/Personnel/Facility)",
             "Description of Change",
             "Status",
         ]
@@ -2817,6 +2834,23 @@ def render_dashboard():
             row["Change Type (Permanent/Temporary/Emergency)"]
         )
         change_type_lower = change_type.strip().lower()
+
+        # Column I in the Google Sheet: Category of Changes.
+        category_of_changes = clean_text(
+            row["Category of changes (Technology/Personnel/Facility)"]
+        )
+        category_lower = category_of_changes.strip().lower()
+        category_class = {
+            "technology": "category-technology",
+            "personnel": "category-personnel",
+            "facility": "category-facility",
+        }.get(category_lower, "category-other")
+        category_html = (
+            f'<span class="moc-category {category_class}">'
+            f'{html.escape(category_of_changes)}'
+            '</span>'
+            if category_of_changes else "—"
+        )
 
         if change_type_lower == "permanent":
             change_type_html = (
@@ -2900,6 +2934,7 @@ def render_dashboard():
             f"<td>{html.escape(department)}</td>"
             f"<td>{html.escape(section)}</td>"
             f"<td>{change_type_html}</td>"
+            f"<td>{category_html}</td>"
             f"<td>{html.escape(description)}</td>"
             f"<td>{status_html}</td>"
             f"<td>{document_html}</td>"
@@ -2911,7 +2946,7 @@ def render_dashboard():
     else:
         table_rows_html = (
             "<tr>"
-            '<td colspan="7" style="'
+            '<td colspan="8" style="'
             "text-align:center;"
             "color:#8a98a9;"
             "padding:28px;"
@@ -2929,13 +2964,14 @@ def render_dashboard():
         '<div class="table-shell moc-register-scroll">'
         '<table class="moc-table">'
         "<colgroup>"
-        '<col style="width:11%;">'
         '<col style="width:10%;">'
         '<col style="width:9%;">'
-        '<col style="width:13%;">'
-        '<col style="width:36%;">'
-        '<col style="width:9%;">'
+        '<col style="width:8%;">'
         '<col style="width:12%;">'
+        '<col style="width:14%;">'
+        '<col style="width:30%;">'
+        '<col style="width:8%;">'
+        '<col style="width:9%;">'
         "</colgroup>"
         "<thead>"
         "<tr>"
@@ -2943,6 +2979,7 @@ def render_dashboard():
         "<th>Department</th>"
         "<th>Section</th>"
         "<th>Change Type</th>"
+        "<th>Category of Changes</th>"
         "<th>Description of Change</th>"
         "<th>Status</th>"
         "<th>MOC Document</th>"
