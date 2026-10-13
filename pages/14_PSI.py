@@ -204,12 +204,6 @@ from zoneinfo import ZoneInfo
 # PAGE CONFIGURATION
 # ============================================================
 
-st.set_page_config(
-    page_title="PSM Digital Dashboard",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
 
 
 # ============================================================
@@ -2266,13 +2260,22 @@ else:
 # INCIDENT LEVEL SECTION
 # ============================================================
 
+
 with st.container(border=True):
     st.markdown(
-        '<div class="section-title">'
-        'INCIDENT LEVEL DISTRIBUTION'
-        '</div>',
+        """
+        <style>
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.incident-level-section) {
+            padding: 4px !important;
+        }
+        </style>
+        <div class="section-title incident-level-section">
+            INCIDENT LEVEL DISTRIBUTION
+        </div>
+        """,
         unsafe_allow_html=True
     )
+
 
     if not level_data.empty:
 
@@ -2306,19 +2309,54 @@ with st.container(border=True):
         )
 
         # ----------------------------------------------------
-        # DONUT + LEVEL CARDS
+        # CLASSIFICATION IMAGE + DONUT + LEVEL CARDS
         # ----------------------------------------------------
 
-        donut_col, cards_col = (
-            st.columns(
-                [1, 3],
-                vertical_alignment="center"
-            )
+        # Locate the image even if this dashboard code is running from
+        # the project root, a pages/ folder, or an assets/ folder.
+
+
+
+
+        # ----------------------------------------------------
+        # CLASSIFICATION IMAGE PATH
+        # ----------------------------------------------------
+
+        image_filename = "process_safety_incident_classification.png"
+
+        classification_image = (
+            Path(__file__).resolve().parent
+            / "assets"
+            / image_filename
         )
+
+        image_col, distribution_col = st.columns(
+            [2.2, 3.8],
+            gap="medium",
+            vertical_alignment="center"
+        )
+
+        with image_col:
+            if classification_image.is_file():
+                st.image(
+                    str(classification_image),
+                    use_container_width=True
+                )
+                st.markdown(
+                    "**Process Safety Incident Classification**",
+                    text_alignment="center"
+                )
 
         # ----------------------------------------------------
         # DONUT
         # ----------------------------------------------------
+
+        with distribution_col:
+            donut_col, cards_col = st.columns(
+                [1.3, 2.7],
+                gap="small",
+                vertical_alignment="center"
+            )
 
         with donut_col:
 
@@ -2340,7 +2378,7 @@ with st.container(border=True):
                         values=level_data[
                             "Incidents"
                         ],
-                        hole=0.68,
+                        hole=0.62,
                         textinfo="none",
                         marker=dict(
                             colors=donut_colors,
@@ -2354,7 +2392,7 @@ with st.container(border=True):
             )
 
             donut.update_layout(
-                height=270,
+                height=300,
                 paper_bgcolor="white",
                 plot_bgcolor="white",
                 margin=dict(
@@ -2406,8 +2444,9 @@ with st.container(border=True):
 
         with cards_col:
 
-            card_1, card_2, card_3, card_4 = (
-                st.columns(4)
+            card_1, card_2, card_3, card_4 = st.columns(
+                [0.8, 0.8, 0.8, 0.8],
+                gap="small"
             )
 
             card_columns = [
@@ -2766,4 +2805,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
