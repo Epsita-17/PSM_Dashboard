@@ -19,7 +19,6 @@ BASE_DIR = Path(__file__).resolve().parent
 
 LOGO_PATH = BASE_DIR / "assets" / "jsw_jfe_logo.png"
 
-
 # ============================================================
 # GLOBAL CSS
 # ============================================================
@@ -42,7 +41,7 @@ st.markdown(
         padding-right: 1rem;
         max-width: 100%;
     }
-    
+
     /* ========================================================
        STREAMLIT HEADER
        DO NOT HIDE THIS HEADER
@@ -210,7 +209,6 @@ section[data-testid="stSidebar"] {
 # ============================================================
 
 with st.sidebar:
-
     st.markdown(
         '<div class="psm-sidebar-brand">',
         unsafe_allow_html=True
@@ -220,20 +218,19 @@ with st.sidebar:
     # LOGO
     # --------------------------------------------------------
 
-    #if LOGO_PATH.exists():
+    # if LOGO_PATH.exists():
 
-        #st.image(
-            #str(LOGO_PATH),
-            #width=185
-        #)
+    # st.image(
+    # str(LOGO_PATH),
+    # width=185
+    # )
 
-    #else:
+    # else:
 
-        #st.warning(
-            #"Logo file not found:\n"
-            #"assets/jsw_jfe_logo.png"
-       #)
-
+    # st.warning(
+    # "Logo file not found:\n"
+    # "assets/jsw_jfe_logo.png"
+    # )
 
     # --------------------------------------------------------
     # PSM HEADER
@@ -242,10 +239,15 @@ with st.sidebar:
     st.markdown(
         """
         <div class="psm-sidebar-title">
-            🛡️ PROCESS SAFETY MANAGEMENT
+            🛡️ PSM DASHBOARD
         </div>
+
         <div class="psm-sidebar-subtitle">
-                   DIGITAL VISION WALL
+            PROCESS SAFETY MANAGEMENT
+        </div>
+
+        <div class="psm-sidebar-subtitle">
+            DIGITAL VISION WALL
         </div>
         """,
         unsafe_allow_html=True
@@ -274,30 +276,35 @@ home_page = st.Page(
     default=True
 )
 
+# ------------------------------------------------------------
+# 02 JSAP AUDIT DASHBOARD
+# ------------------------------------------------------------
+
+JSAP_page = st.Page(
+    str(BASE_DIR / "pages" / "02_JSAP_Audit.py"),
+    title="JSAP AUDIT ",
+    icon="📊"
+)
 
 # ------------------------------------------------------------
-# 02 EXECUTIVE DASHBOARD
+# 03 EXECUTIVE DASHBOARD
 # ------------------------------------------------------------
 
 executive_page = st.Page(
-    str(BASE_DIR / "pages" / "02_Executive.py"),
+    str(BASE_DIR / "pages" / "03_Executive.py"),
     title="EXECUTIVE ",
     icon="📊"
 )
 
-
 # ------------------------------------------------------------
-# 03 APEX COMMITTEE
+# 04 APEX COMMITTEE
 # ------------------------------------------------------------
 
 apex_page = st.Page(
-    str(BASE_DIR / "pages" / "03_Apex_Committee.py"),
+    str(BASE_DIR / "pages" / "04_Apex_Committee.py"),
     title="APEX COMMITTEE",
     icon="📊"
 )
-
-
-
 
 # ------------------------------------------------------------
 # 05 PSM SC CHAIRMAN
@@ -309,7 +316,6 @@ PSM_SC_Chairman_page = st.Page(
     icon="📊"
 )
 
-
 # ------------------------------------------------------------
 # 06 PSM SC CONVENER DASHBOARD
 # ------------------------------------------------------------
@@ -320,7 +326,6 @@ psm_sc_convener_page = st.Page(
     icon="📊"
 )
 
-
 # ------------------------------------------------------------
 # 07 ALL DEPARTMENTS
 # ------------------------------------------------------------
@@ -330,7 +335,6 @@ all_departments_page = st.Page(
     title="ALL DEPARTMENTS",
     icon="🏭"
 )
-
 
 # ============================================================
 # INDIVIDUAL DEPARTMENT PAGES
@@ -346,7 +350,6 @@ blast_furnace_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # COKE OVEN
 # ------------------------------------------------------------
@@ -356,7 +359,6 @@ coke_oven_page = st.Page(
     title="COKE OVEN",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # SMS-1
@@ -368,7 +370,6 @@ sms_1_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # SMS-2
 # ------------------------------------------------------------
@@ -378,7 +379,6 @@ sms_2_page = st.Page(
     title="SMS-2",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # DRI
@@ -390,7 +390,6 @@ dri_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # CENTRAL UTILITY
 # ------------------------------------------------------------
@@ -400,7 +399,6 @@ cu_page = st.Page(
     title="CENTRAL UTILITY",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # CRM
@@ -412,7 +410,6 @@ crm_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # WRM
 # ------------------------------------------------------------
@@ -422,7 +419,6 @@ wrm_page = st.Page(
     title="WRM",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # CPP
@@ -434,7 +430,6 @@ cpp_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # SINTER
 # ------------------------------------------------------------
@@ -444,7 +439,6 @@ sinter_page = st.Page(
     title="SINTER",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # TUBE MILL
@@ -456,7 +450,6 @@ tube_mill_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # CSP
 # ------------------------------------------------------------
@@ -466,7 +459,6 @@ csp_page = st.Page(
     title="CSP",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # PELLET & BENEFICIATION
@@ -478,7 +470,6 @@ pellet_beneficiation_page = st.Page(
     icon="🏭"
 )
 
-
 # ------------------------------------------------------------
 # LCP
 # ------------------------------------------------------------
@@ -488,7 +479,6 @@ lcp_page = st.Page(
     title="LCP",
     icon="🏭"
 )
-
 
 # ------------------------------------------------------------
 # RMHS
@@ -510,8 +500,6 @@ projects_page = st.Page(
     icon="🏭"
 )
 
-
-
 # ============================================================
 # PSM MODULE PAGES
 # ============================================================
@@ -527,7 +515,6 @@ pt_page = st.Page(
     icon="🛡️"
 )
 
-
 # ------------------------------------------------------------
 # 10 PHA
 # ------------------------------------------------------------
@@ -537,7 +524,6 @@ pha_page = st.Page(
     title="PHA",
     icon="🛡️"
 )
-
 
 # ------------------------------------------------------------
 # 11 MOC
@@ -549,7 +535,6 @@ moc_page = st.Page(
     icon="🛡️"
 )
 
-
 # ------------------------------------------------------------
 # 12 PSSR
 # ------------------------------------------------------------
@@ -559,7 +544,6 @@ pssr_page = st.Page(
     title="PSSR",
     icon="🛡️"
 )
-
 
 # ------------------------------------------------------------
 # 13 TRAINING
@@ -571,7 +555,6 @@ training_page = st.Page(
     icon="🛡️"
 )
 
-
 # ------------------------------------------------------------
 # 15 OP
 # ------------------------------------------------------------
@@ -581,7 +564,6 @@ op_page = st.Page(
     title="OP",
     icon="🛡️"
 )
-
 
 # ------------------------------------------------------------
 # 14 PROCESS SAFETY INCIDENT
@@ -651,8 +633,6 @@ jsw_safety_standards_page = st.Page(
     icon="🛡️"
 )
 
-
-
 # ============================================================
 # REPORTS
 # ============================================================
@@ -663,7 +643,6 @@ reports_page = st.Page(
     icon="📄"
 )
 
-
 # ============================================================
 # NAVIGATION
 # ============================================================
@@ -672,6 +651,7 @@ pg = st.navigation(
     {
         "MAIN": [
             home_page,
+            JSAP_page,
             executive_page,
             apex_page,
             PSM_SC_Chairman_page,
@@ -702,30 +682,29 @@ pg = st.navigation(
         ],
 
         "PSM MODULES": [
-    pt_page,
-    pha_page,
-    moc_page,
-    pssr_page,
-    training_page,
-    op_page,
-    psi_page,
-    audit_page,
-    incident_library_page,
-    alarm_interlock_management_page,
-    psm_ce_barrier_health_page,
-    MIQA_page,
-    jsw_safety_standards_page
-],
+            pt_page,
+            pha_page,
+            moc_page,
+            pssr_page,
+            training_page,
+            op_page,
+            psi_page,
+            audit_page,
+            incident_library_page,
+            alarm_interlock_management_page,
+            psm_ce_barrier_health_page,
+            MIQA_page,
+            jsw_safety_standards_page
+        ],
         "REPORTING": [
             reports_page
         ]
     },
     position="sidebar"
 )
-
-
 # ============================================================
 # RUN APPLICATION
 # ============================================================
 
 pg.run()
+
