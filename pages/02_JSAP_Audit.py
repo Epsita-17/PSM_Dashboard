@@ -54,13 +54,15 @@ st.markdown(
         margin: 0 !important;
     }
 
-    .block-container {
+    
+.block-container {
     width: 100% !important;
     max-width: 1900px !important;
-    padding: 0.2rem 1.25rem 0.5rem 1.25rem !important;
-    margin-top: 0 !important;
+    padding: 0 1.25rem 0.5rem 1.25rem !important;
+    margin-top: -8px !important;
     overflow: visible !important;
 }
+
 
     .stApp {
         margin-top: 0 !important;
@@ -68,11 +70,11 @@ st.markdown(
     }
 
     iframe {
-        display: block !important;
-        margin-top: -10px !important;
-        padding-top: 0 !important;
-        border: 0 !important;
-    }
+    display: block !important;
+    margin-top: -10px !important;
+    padding-top: 0 !important;
+    border: 0 !important;
+}
 
     </style>
     """,
@@ -860,7 +862,7 @@ st.markdown(
 
     [data-testid="stMainBlockContainer"] {
         max-width: 100% !important;
-        padding: 8px 12px 16px !important;
+        padding: 0 12px 16px !important;
         margin-top: 0 !important;
     }
 
