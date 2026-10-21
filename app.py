@@ -643,6 +643,17 @@ reports_page = st.Page(
     icon="📄"
 )
 
+# ------------------------------------------------------------
+# DEFINITIONS & MATERIAL DATASHEET
+# ------------------------------------------------------------
+
+definitions_material_page = st.Page(
+    str(BASE_DIR / "pages" / "23_Definitions & Material Datasheet.py"),
+    title="DEFINITIONS & MATERIAL DATASHEET",
+    icon="📚"
+)
+
+
 # ============================================================
 # NAVIGATION
 # ============================================================
@@ -697,8 +708,9 @@ pg = st.navigation(
             jsw_safety_standards_page
         ],
         "REPORTING": [
-            reports_page
-        ]
+    reports_page,
+    definitions_material_page
+]
     },
     position="sidebar"
 )
