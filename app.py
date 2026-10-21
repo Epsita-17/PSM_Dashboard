@@ -650,7 +650,7 @@ reports_page = st.Page(
 definitions_material_page = st.Page(
     str(BASE_DIR / "pages" / "23_Definitions & Material Datasheet.py"),
     title="DEFINITIONS & MATERIAL DATASHEET",
-    icon="📚"
+    icon="📄"
 )
 
 
